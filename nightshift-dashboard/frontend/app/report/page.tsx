@@ -1,115 +1,113 @@
 "use client";
 
-// SHIFT REPORT: "End shift" pulls the summary from the backend.
+// HANDOVER REPORT: the sensor handoff plus what the operator uploaded from the iPhone. Print or export.
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useApp } from "@/components/AppProvider";
 import FlagCard from "@/components/FlagCard";
-import SourceTag from "@/components/SourceTag";
 import Stat from "@/components/Stat";
-import { formatTime, getReport } from "@/lib/api";
-import type { Report } from "@/lib/types";
+import { eventsUrl, facName, formatDate, formatDateTime, formatTime, getHandoff } from "@/lib/api";
+import { useReport } from "@/lib/hooks";
+import type { Handoff } from "@/lib/types";
 
-export default function ShiftReport() {
-  const [report, setReport] = useState<Report | null>(null);
-  const [live, setLive] = useState(false);
-  const [loading, setLoading] = useState(false);
+export default function Report() {
+  const { shift, dataset } = useApp();
+  const report = useReport(shift?.id);
+  const [hand, setHand] = useState<Handoff | null>(null);
 
-  async function endShift() {
-    setLoading(true);
-    const res = await getReport();
-    setReport(res.data);
-    setLive(res.live);
-    setLoading(false);
-  }
+  useEffect(() => {
+    if (!dataset) return;
+    getHandoff(dataset).then(setHand).catch(() => setHand(null));
+  }, [dataset]);
+
+  if (!shift || !report) return <div className="h-96 animate-pulse rounded-2xl bg-zinc-900" />;
 
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Shift report</h1>
-          <p className="mt-1 text-zinc-400">Written automatically from tonight&apos;s flags and voice notes</p>
+          <h1 className="text-4xl font-bold">Handover report: {formatDate(report.shift.date)} night</h1>
+          <p className="mt-1 text-lg text-zinc-400">
+            Operator {report.shift.operator} · {formatDateTime(report.shift.started_at)} to {formatDateTime(report.shift.ended_at)} · uploaded {formatDateTime(report.shift.uploaded_at)}
+          </p>
         </div>
-        <div className="no-print flex items-center gap-4">
-          {report && <SourceTag live={live} />}
-          {report && (
-            <button
-              onClick={() => window.print()}
-              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800"
-            >
-              Print
-            </button>
+        <div className="no-print flex gap-3">
+          {dataset && (
+            <a href={eventsUrl(dataset)} className="rounded-lg border border-zinc-700 px-5 py-2.5 text-base font-semibold text-zinc-200 hover:bg-zinc-800">
+              Export events.json
+            </a>
           )}
-          <button
-            onClick={endShift}
-            disabled={loading}
-            className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
-          >
-            {loading ? "Generating..." : report ? "Refresh report" : "End shift"}
+          <button onClick={() => window.print()} className="rounded-lg bg-amber-400 px-5 py-2.5 text-base font-semibold text-zinc-950 hover:bg-amber-300">
+            Print report
           </button>
         </div>
       </div>
 
-      {!report ? (
-        <div className="rounded-xl border border-dashed border-zinc-800 p-12 text-center text-zinc-500">
-          Hit <span className="font-semibold text-zinc-300">End shift</span> to generate tonight&apos;s report.
-        </div>
-      ) : (
-        <>
-          <p className="text-sm text-zinc-500">
-            Shift started {formatTime(report.shift_start)} · generated {formatTime(report.generated_at)}
+      {hand && (
+        <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <h2 className="text-2xl font-semibold">Sensor handoff: {hand.headline}</h2>
+          <p className="mb-3 text-sm text-zinc-500">
+            As of {formatDateTime(hand.as_of)} · written from the detection, countdown and cost tools
+            {hand.agent_mode ? ` · saved by the triage agent (${hand.agent_mode === "nemotron" ? "Nemotron" : "offline script"})` : ""}
           </p>
-
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Stat label="Total flags" value={report.totals.total} />
-            <Stat label="Confirmed" value={report.totals.confirmed} tone="text-red-400" />
-            <Stat label="Unreviewed" value={report.totals.pending} tone="text-amber-400" />
-            <Stat label="Dismissed" value={report.totals.dismissed} tone="text-zinc-400" />
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            {Object.entries(report.by_type).map(([type, n]) => (
-              <span key={type} className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm text-zinc-300">
-                {n} {type}
-              </span>
-            ))}
-          </div>
-
-          <section className="space-y-4">
-            <h2 className="text-xl font-semibold text-red-300">Confirmed issues</h2>
-            {report.confirmed.length ? (
-              report.confirmed.map((f) => <FlagCard key={f.id} flag={f} />)
-            ) : (
-              <p className="text-zinc-500">Nothing confirmed tonight.</p>
-            )}
-          </section>
-
-          <section className="space-y-4">
-            <h2 className="text-xl font-semibold text-amber-300">Unreviewed, carried to next shift</h2>
-            {report.pending.length ? (
-              report.pending.map((f) => <FlagCard key={f.id} flag={f} />)
-            ) : (
-              <p className="text-zinc-500">Everything was reviewed.</p>
-            )}
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-xl font-semibold">Operator notes</h2>
-            {report.notes.length ? (
-              <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900">
-                {report.notes.map((n, i) => (
-                  <li key={i} className="flex gap-4 px-5 py-3">
-                    <span className="w-20 shrink-0 text-sm text-zinc-500">{formatTime(n.timestamp)}</span>
-                    <span className="w-36 shrink-0 font-medium text-zinc-200">{n.location}</span>
-                    <span className="text-zinc-300">{n.note}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-zinc-500">No voice notes tonight.</p>
-            )}
-          </section>
-        </>
+          <ul className="space-y-1.5 text-lg text-zinc-200">
+            {hand.lines.map((l, i) => <li key={i}>{l}</li>)}
+          </ul>
+        </section>
       )}
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat label="Flags" value={report.totals.total} />
+        <Stat label="Confirmed issues" value={report.totals.confirmed} tone="text-red-400" />
+        <Stat label="Needs review" value={report.totals.pending} tone="text-amber-400" />
+        <Stat label="Dismissed" value={report.totals.dismissed} tone="text-zinc-400" />
+      </div>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-red-300">Confirmed issues</h2>
+        {report.confirmed.length ? report.confirmed.map((f) => <FlagCard key={f.id} flag={f} />) : <p className="text-lg text-zinc-500">The operator confirmed nothing this shift.</p>}
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-2xl font-semibold text-amber-300">Unreviewed flags, carried to the next shift</h2>
+          <p className="text-base text-zinc-500">Nobody has confirmed or dismissed these yet.</p>
+        </div>
+        {report.pending.length ? report.pending.map((f) => <FlagCard key={f.id} flag={f} />) : <p className="text-lg text-zinc-500">Everything was reviewed.</p>}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-2xl font-semibold">Notes</h2>
+        {report.notes.length ? (
+          <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900">
+            {report.notes.map((n, i) => (
+              <li key={i} className="flex flex-wrap gap-x-4 gap-y-1 px-5 py-3 text-lg">
+                <span className="w-24 shrink-0 text-zinc-500">{formatTime(n.timestamp)}</span>
+                <span className="w-40 shrink-0 font-medium text-zinc-200">{n.location}</span>
+                <span className={`w-32 shrink-0 ${n.author === "control" ? "text-sky-300" : "text-zinc-400"}`}>{n.author === "control" ? "Control room" : "Operator"}</span>
+                <span className="text-zinc-300">{n.note.replace(/^operator:\s*/i, "")}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-lg text-zinc-500">No notes this shift.</p>}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-2xl font-semibold">Stops checked: {report.stops_walked} of {report.stops_planned}</h2>
+        {report.missed_stops.length ? (
+          <>
+            <p className="text-base text-zinc-500">Planned but not checked. These get priority next shift.</p>
+            <ul className="flex flex-wrap gap-3">
+              {report.missed_stops.map((s) => (
+                <li key={s}>
+                  <Link href={`/facility/${s}`} className="inline-block rounded-lg border-2 border-dashed border-amber-400/60 px-4 py-2 text-lg font-medium text-amber-200 hover:bg-amber-400/10">{facName(s)}</Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : <p className="text-lg text-zinc-500">The operator walked the full route.</p>}
+      </section>
     </div>
   );
 }
