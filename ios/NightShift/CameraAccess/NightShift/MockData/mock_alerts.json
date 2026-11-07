@@ -1,0 +1,18 @@
+[
+  {
+    "id": "A-101",
+    "facility": "pad-7",
+    "system": "Injection pump P-2",
+    "type": "pump_failure",
+    "severity": "critical",
+    "spoken_text": "Critical. Pad 7, injection pump P 2 is failing. About three and a half hours to shutdown. Switch to standby pump P 3."
+  },
+  {
+    "id": "A-102",
+    "facility": "comp-2",
+    "system": "Separator inlet line",
+    "type": "leak",
+    "severity": 3,
+    "spoken_text": "High. Compressor Station 2, possible leak on the separator inlet line near valve V 14. Walk the line with a gas detector."
+  }
+]

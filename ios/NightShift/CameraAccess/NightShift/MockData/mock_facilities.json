@@ -1,0 +1,14 @@
+[
+  {
+    "id": "pad-7",
+    "name": "Pad 7",
+    "status": "degraded",
+    "spoken_text": "Pad 7 is degraded. Pump P 2 vibration is high."
+  },
+  {
+    "id": "comp-2",
+    "name": "Compressor Station 2",
+    "status": "watch",
+    "spoken_text": "Compressor Station 2 is on watch. Gas reading near valve V 14 is forty five P P M."
+  }
+]
