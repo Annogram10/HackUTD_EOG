@@ -58,7 +58,6 @@ bash
 export NVIDIA_API_KEY=nvapi-...
 ./start.sh
 
-Then open http://localhost:3000.
 
 Pick a dataset from the Dataset switcher (full week, snapshots, mock test, or test/)
 Without an API key, the agent runs an offline script and says so on the Agent trace page
