@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #09090b;
+  color: #f4f4f5;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* New flag pops in with an amber glow that fades out */
+@keyframes flag-flash {
+  0% {
+    transform: translateY(-6px);
+    box-shadow: 0 0 0 2px rgb(251 191 36);
+    background-color: rgb(120 53 15 / 0.45);
+  }
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 0 transparent;
+    background-color: rgb(24 24 27);
+  }
+}
+
+.flag-new {
+  animation: flag-flash 3s ease-out;
+}
+
+@media print {
+  header,
+  .no-print {
+    display: none !important;
+  }
+}
