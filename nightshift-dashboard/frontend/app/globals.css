@@ -90,34 +90,27 @@ html[data-alarm="red"] body::after {
 }
 @media (prefers-reduced-motion: reduce) { .owl-shake { animation: none; } }
 
-/* Red alert, "going crazy": three pairs of eyes, each flickering fully in and out (off = gone) on its own loop (different lengths and
-   offsets, so they never line up), with a small sideways glitch when one comes back. The orange ghost jitters.
-   Small area, dims to dark (never a bright flash). Reduced motion: all pairs steady. */
-.owl-pair { animation: owl-pair 1.4s step-end infinite; }
-.owl-pair-0 { animation-duration: 1.15s; animation-delay: 0.35s; }
-.owl-pair-1 { animation-duration: 1.6s; }
-.owl-pair-2 { animation-duration: 1.3s; animation-delay: 0.7s; }
-.owl-ghost { animation: owl-ghost 0.8s step-end infinite; }
-@keyframes owl-pair {
-  0% { opacity: 1; transform: translateX(0); }
-  18% { opacity: 0; }
-  30% { opacity: 1; transform: translateX(1.5px); }
-  36% { opacity: 1; transform: translateX(0); }
-  55% { opacity: 0; }
-  61% { opacity: 1; transform: translateX(-1px); }
-  67% { opacity: 1; transform: translateX(0); }
-  80% { opacity: 0; }
-  92% { opacity: 1; transform: translateX(2px); }
-  96% { transform: translateX(0); }
+/* Owl aviator glasses in danger, ~1.9 s, once per entry: drop in with a bounce, jump off (showing the red eyes),
+   slam back, jump off once more, slam back and stay. Units are SVG user units (the owl is 48 wide), so 14 here is
+   about 38 px at the corner size. Then a red reflection streak fades in; it fades out when danger ends. */
+.owl-glasses.owl-hop { animation: owl-hop 1.9s ease-in-out 1 both; }
+@keyframes owl-hop {
+  0% { transform: translateY(-16px); opacity: 0; }
+  12% { transform: translateY(1.5px); opacity: 1; }
+  18% { transform: translateY(0); opacity: 1; }
+  30% { transform: translateY(-14px); opacity: 0; }
+  42% { transform: translateY(1.5px); opacity: 1; }
+  48% { transform: translateY(0); opacity: 1; }
+  62% { transform: translateY(-14px); opacity: 0; }
+  76% { transform: translateY(1.5px); opacity: 1; }
+  84% { transform: translateY(-0.4px); }
+  100% { transform: translateY(0); opacity: 1; }
 }
-@keyframes owl-ghost {
-  0% { transform: translateX(1px); }
-  25% { transform: translateX(-1.5px); }
-  50% { transform: translateX(2px); }
-  75% { transform: translateX(-0.5px); }
-}
+.owl-streak { opacity: 0; transition: opacity 0.6s ease-out; }
+.owl-streak.on { opacity: 0.9; transition-delay: 1.9s; }
 @media (prefers-reduced-motion: reduce) {
-  .owl-pair, .owl-ghost { animation: none; }
+  .owl-glasses.owl-hop { animation: none; }
+  .owl-streak.on { transition-delay: 0s; }
 }
 
 /* City map: pipeline flow pulses toward the disposal site, red glow around a facility in danger, the facility's

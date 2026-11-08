@@ -1,26 +1,20 @@
 "use client";
 
 // The NightShift owl. It shows how the shift is going at a glance, on every page:
-// calm and happy when all is normal, worried when something needs checking, freaked out when it is danger.
+// calm and happy when all is normal, worried when something needs checking, angry with red eyes in danger.
 // It is grey on purpose: the expression carries the message, so it never relies on colour alone.
 
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import type { RiskLevel } from "@/lib/types";
 
-// Red alert, angry and "going crazy": a solid black wraparound visor (its V-shaped top reads as angry brows) with
-// three pairs of glowing slit eyes, all the same size. Each pair flickers on its own loop, out of sync; when a pair
-// is off it is simply gone (only black glass remains). Reduced motion: all pairs steady.
+// Aviator sunglasses, worn in every state: two black teardrop lenses with a thin light metal frame, a double
+// bridge, short temple arms and a white glint. In danger the glasses hop (drop in, jump off to show the red eyes
+// underneath, slam back, once more, then stay) and a red reflection streak appears on each lens; the hop restarts
+// each time danger starts. Calm and check-soon: glasses sit still. Reduced motion: no hop. Original drawing.
 // The owl's right wing (on the viewer's right) is cybernetic: chrome plates, ball joints, red cable inlays and
-// metal finger-feathers. Original drawing.
-const EYE_ROWS = [16.6, 20.2, 23.8]; // one pair per row, same size
-const EYE_X = 14.6; // centre of the left eyes; right eyes mirror it
-const VISOR = "M7.6 12.2 L24 17 L40.4 12.2 L40.4 26.2 Q33 28.6 25.6 26.6 L24 25.6 L22.4 26.6 Q15 28.6 7.6 26.2 Z";
-
-// A slanted slit, inner end lower (angry). side -1 = left eye, 1 = right eye.
-function slit(cx: number, cy: number, side: number) {
-  const w = 2.6, h = 0.95, tilt = 0.7 * side;
-  return `${cx - w},${cy - h - tilt} ${cx + w},${cy - h + tilt} ${cx + w},${cy + h + tilt} ${cx - w},${cy + h - tilt}`;
-}
+// metal finger-feathers.
+const LENS_L = "M10 15.4 Q16.4 14.3 22.6 15.7 Q23.1 21 20.1 24.6 Q16.2 27.6 12.1 24.7 Q8.9 21.6 10 15.4 Z";
+const LENS_R = "M38 15.4 Q31.6 14.3 25.4 15.7 Q24.9 21 27.9 24.6 Q31.8 27.6 35.9 24.7 Q39.1 21.6 38 15.4 Z";
 
 // Cybernetic wing, down (calm) or raised (red).
 function CyberWing({ raised, chrome, dark }: { raised: boolean; chrome: string; dark: string }) {
@@ -65,11 +59,22 @@ const LABEL: Record<RiskLevel, string> = {
 
 export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: number }) {
   const uid = useId().replace(/:/g, "");
+  const glasses = useRef<SVGGElement>(null);
   const glow = `owl-glow-${uid}`;
   const chrome = `owl-chrome-${uid}`;
   const dark = `owl-chrome-dark-${uid}`;
   const red = level === "red";
   const amber = level === "amber";
+  // Each time the level enters danger, restart the hop: remove the class, force a reflow, add it back.
+  useEffect(() => {
+    const g = glasses.current;
+    if (!red || !g) return;
+    g.classList.remove("owl-hop");
+    void g.getBoundingClientRect();
+    g.classList.add("owl-hop");
+    return () => g.classList.remove("owl-hop");
+  }, [red]);
+
   return (
     <svg
       viewBox="0 0 48 48"
@@ -113,54 +118,60 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       {red ? <path d="M9 22 L2 12 L8 34 Z" fill="#4d535c" /> : <path d="M9 26 Q5 34 11 41 Q12 33 12 27 Z" fill="#4d535c" />}
       <CyberWing raised={red} chrome={chrome} dark={dark} />
 
-      {/* eyes */}
+      {/* eyes (under the glasses; they show when the glasses lift in danger) */}
       {level === "green" && (
         <>
-          <circle cx="17" cy="20" r="6" fill="#dfe2e6" />
-          <circle cx="31" cy="20" r="6" fill="#dfe2e6" />
-          {/* happy closed eyes */}
-          <path d="M13.5 21 q3.5 -5 7 0" stroke="#0e0f11" strokeWidth="2" fill="none" strokeLinecap="round" />
-          <path d="M27.5 21 q3.5 -5 7 0" stroke="#0e0f11" strokeWidth="2" fill="none" strokeLinecap="round" />
-          <ellipse cx="12" cy="26" rx="2.6" ry="1.5" fill="#8b929c" opacity="0.7" />
-          <ellipse cx="36" cy="26" rx="2.6" ry="1.5" fill="#8b929c" opacity="0.7" />
+          <circle cx="16.4" cy="20.4" r="5.4" fill="#dfe2e6" />
+          <circle cx="31.6" cy="20.4" r="5.4" fill="#dfe2e6" />
+          <path d="M13.2 21.4 q3.2 -4.5 6.4 0" stroke="#0e0f11" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+          <path d="M28.4 21.4 q3.2 -4.5 6.4 0" stroke="#0e0f11" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+          <ellipse cx="11.6" cy="28.6" rx="2.4" ry="1.3" fill="#8b929c" opacity="0.7" />
+          <ellipse cx="36.4" cy="28.6" rx="2.4" ry="1.3" fill="#8b929c" opacity="0.7" />
         </>
       )}
       {amber && (
         <>
-          <circle cx="17" cy="20" r="6.2" fill="#dfe2e6" />
-          <circle cx="31" cy="20" r="6.2" fill="#dfe2e6" />
-          <circle cx="18.5" cy="21" r="2.4" fill="#0e0f11" />
-          <circle cx="32.5" cy="21" r="2.4" fill="#0e0f11" />
+          <circle cx="16.4" cy="20.4" r="5.4" fill="#dfe2e6" />
+          <circle cx="31.6" cy="20.4" r="5.4" fill="#dfe2e6" />
+          <circle cx="17.6" cy="21.2" r="2.2" fill="#0e0f11" />
+          <circle cx="32.8" cy="21.2" r="2.2" fill="#0e0f11" />
           {/* worried brows and a sweat drop */}
-          <path d="M11 15 L20 11.5" stroke="#dfe2e6" strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M37 15 L28 11.5" stroke="#dfe2e6" strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M42 14 q2.5 3.6 0 5.2 q-2.5 -1.6 0 -5.2 Z" fill="#a9afb8" />
+          <path d="M11 13.2 L20 10.6" stroke="#dfe2e6" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M37 13.2 L28 10.6" stroke="#dfe2e6" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M42 13 q2.5 3.6 0 5.2 q-2.5 -1.6 0 -5.2 Z" fill="#a9afb8" />
         </>
       )}
       {red && (
         <>
-          {/* the visor: fully tinted black, always visible */}
-          <path d={VISOR} fill="#050608" stroke="#2a2f36" strokeWidth="0.6" strokeLinejoin="round" />
-          <path d="M9.5 14.2 L21 17.6" stroke="#3a3f46" strokeWidth="0.5" strokeLinecap="round" opacity="0.8" />
-          <path d="M7.6 18.5 L5.6 17.4 M40.4 18.5 L42.4 17.4" stroke="#2a2f36" strokeWidth="1" strokeLinecap="round" />
-
-          {/* three pairs of glowing slit eyes; a pair that flickers out leaves nothing behind */}
-          {EYE_ROWS.map((y, i) => (
-            <g key={y} className={`owl-pair owl-pair-${i}`}>
-              {[-1, 1].map((side) => {
-                const cx = 24 + side * (24 - EYE_X);
-                return (
-                  <g key={side}>
-                    <polygon points={slit(cx + 0.7, y, side)} fill="#FF7A2B" opacity="0.55" className="owl-ghost" />
-                    <polygon points={slit(cx, y, side)} fill="#19E6FF" filter={`url(#${glow})`} />
-                    <polygon points={slit(cx, y, side)} fill="#E6FDFF" transform={`translate(${cx} ${y}) scale(0.45 0.35) translate(${-cx} ${-y})`} />
-                  </g>
-                );
-              })}
-            </g>
-          ))}
+          {/* red irises, pinpoint pupils */}
+          <circle cx="16.4" cy="20.4" r="5.4" fill="#dfe2e6" />
+          <circle cx="31.6" cy="20.4" r="5.4" fill="#dfe2e6" />
+          <circle cx="16.4" cy="20.6" r="3.4" fill="#e5484d" />
+          <circle cx="31.6" cy="20.6" r="3.4" fill="#e5484d" />
+          <circle cx="16.4" cy="20.6" r="0.8" fill="#0e0f11" />
+          <circle cx="31.6" cy="20.6" r="0.8" fill="#0e0f11" />
+          {/* angry brows */}
+          <path d="M10.5 10.2 L20.6 14.2" stroke="#dfe2e6" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M37.5 10.2 L27.4 14.2" stroke="#dfe2e6" strokeWidth="1.8" strokeLinecap="round" />
         </>
       )}
+
+      {/* aviator sunglasses, every state */}
+      <g ref={glasses} className="owl-glasses">
+        <path d="M10.2 16.3 L6.4 15.1 M37.8 16.3 L41.6 15.1" stroke="#C9C2D0" strokeWidth="0.8" strokeLinecap="round" />
+        <path d="M22.4 16.1 Q24 14.7 25.6 16.1" stroke="#C9C2D0" strokeWidth="0.7" fill="none" strokeLinecap="round" />
+        <path d="M22.8 18.2 L25.2 18.2" stroke="#C9C2D0" strokeWidth="0.6" strokeLinecap="round" />
+        <path d={LENS_L} fill="#0B0A0D" stroke="#C9C2D0" strokeWidth="0.75" strokeLinejoin="round" />
+        <path d={LENS_R} fill="#0B0A0D" stroke="#C9C2D0" strokeWidth="0.75" strokeLinejoin="round" />
+        {/* glints */}
+        <path d="M12.3 19 L15 16.7" stroke="#ffffff" strokeWidth="0.65" strokeLinecap="round" opacity="0.85" />
+        <path d="M27.7 19 L30.4 16.7" stroke="#ffffff" strokeWidth="0.65" strokeLinecap="round" opacity="0.85" />
+        {/* red reflection streak: danger only, after the glasses settle; fades out when danger ends */}
+        <g className={`owl-streak${red ? " on" : ""}`}>
+          <path d="M14 24.4 L20.6 18.6" stroke="#e5484d" strokeWidth="0.5" strokeLinecap="round" />
+          <path d="M29.6 24.4 L36.2 18.6" stroke="#e5484d" strokeWidth="0.5" strokeLinecap="round" />
+        </g>
+      </g>
 
       {/* beak: closed; a scowl when angry */}
       {red ? (
