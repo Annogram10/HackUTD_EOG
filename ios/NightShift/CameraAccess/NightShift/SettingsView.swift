@@ -488,7 +488,7 @@ struct SettingsView: View {
       Text("Last phrase: \(controller.voice.lastHeard ?? "nothing yet")")
         .font(.ns(.caption))
         .foregroundStyle(.secondary)
-      Text("Commands: what's the issue, dismiss, prioritize, acknowledge, stop, repeat, status, next alert.")
+      Text("Commands: what's the issue, confirm, dismiss, prioritize, acknowledge, stop, repeat, status, next alert.")
         .font(.ns(.caption))
         .foregroundStyle(NS.textSecondary)
       if let feedback = controller.voiceFeedback {

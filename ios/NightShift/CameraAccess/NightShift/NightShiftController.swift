@@ -649,6 +649,14 @@ final class NightShiftController {
       if !(await alarm.decide(.prioritize)) {
         await reply("Say what's the issue first", ok: false)
       }
+    case .confirm:
+      voiceFeedback = ("Confirm", true)
+      if let flag = store.currentFlag {
+        decide(flag.id, as: .confirmed)
+        await reply("Confirmed")
+      } else {
+        await reply("No flag waiting", ok: false)
+      }
     case .dismiss:
       voiceFeedback = ("Dismiss", true)
       // After "what's the issue" (or during an alarm), dismiss acts on that issue;

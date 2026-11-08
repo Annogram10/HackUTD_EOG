@@ -25,6 +25,7 @@ struct LiveView: View {
     .padding(.horizontal, 16)
     .padding(.vertical, 12)
     .background(NS.background)
+    .flagCardOverlay(controller: controller)
     // The camera's own prompts, also needed when the preview starts from here.
     .alert("Allow camera access", isPresented: $cameraVM.showCameraPermissionRedirectConfirm) {
       Button("Continue") { Task { await cameraVM.confirmCameraPermissionRedirect() } }

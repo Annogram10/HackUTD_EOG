@@ -5,7 +5,8 @@
 // Anything else is "not understood" and has no network side effects.
 //
 //   "what's the issue" (and close variants)  GET /issue, speak it
-//   "dismiss" / "prioritize"                 decide the issue's flag
+//   "confirm"                                 confirm the newest pending camera flag
+//   "dismiss" / "prioritize"                 decide the issue's flag (or the camera flag)
 //   "acknowledge" / "stop"                    acknowledge the alarm, stop speech
 //   "repeat"                                  say the last message again
 //   "status" [of <facility>]                  read a facility's status
@@ -17,6 +18,8 @@ import Foundation
 enum VoiceCommand: Equatable, Sendable {
   /// "what's the issue": ask the backend what's wrong (GET /issue).
   case issue
+  /// Confirms the newest pending camera flag.
+  case confirm
   case dismiss
   /// "prioritize" / "priority" / "escalate": mark the issue's flag as a priority.
   case prioritize
@@ -28,7 +31,7 @@ enum VoiceCommand: Equatable, Sendable {
   case next
 
   private enum Trigger {
-    case dismiss, prioritize, acknowledge, stop, repeatLast, status, next
+    case confirm, dismiss, prioritize, acknowledge, stop, repeatLast, status, next
   }
 
   /// Phrases (normalized: lowercase letters, digits and single spaces) that ask what's
@@ -39,6 +42,7 @@ enum VoiceCommand: Equatable, Sendable {
   ]
 
   private static let triggers: [String: Trigger] = [
+    "confirm": .confirm, "confirmed": .confirm,
     "dismiss": .dismiss, "dismissed": .dismiss,
     "prioritize": .prioritize, "prioritise": .prioritize, "prioritized": .prioritize,
     "prioritised": .prioritize, "priority": .prioritize, "escalate": .prioritize,
@@ -66,11 +70,13 @@ enum VoiceCommand: Equatable, Sendable {
       let trigger = triggers[normalized[index]]
     else { return nil }
 
-    // "dismiss, or prioritize" (e.g. the app's own prompt picked up by the mic) is ambiguous.
-    let decisions = Set(normalized.compactMap { triggers[$0] }.filter { $0 == .dismiss || $0 == .prioritize })
+    // "confirm or dismiss" / "dismiss, or prioritize" (e.g. the app's own prompt picked
+    // up by the mic) is ambiguous.
+    let decisions = Set(normalized.compactMap { triggers[$0] }.filter { [.confirm, .dismiss, .prioritize].contains($0) })
     if decisions.count > 1 { return nil }
 
     switch trigger {
+    case .confirm: return .confirm
     case .dismiss: return .dismiss
     case .prioritize: return .prioritize
     case .acknowledge: return .acknowledge
@@ -87,6 +93,7 @@ enum VoiceCommand: Equatable, Sendable {
   var summary: String {
     switch self {
     case .issue: return "what's the issue"
+    case .confirm: return "confirm"
     case .dismiss: return "dismiss"
     case .prioritize: return "prioritize"
     case .acknowledge: return "acknowledge"
