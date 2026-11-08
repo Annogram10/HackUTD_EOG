@@ -14,13 +14,24 @@ enum VoiceCommand: Equatable, Sendable {
   case dismiss
   case note(text: String)
   case flag(type: String)
+  /// "what's the issue": ask the backend what's wrong (GET /issue).
+  case issue
+  /// "prioritize" / "priority" / "escalate": mark the issue's flag as a priority.
+  case prioritize
 
   /// Types an operator can raise by voice: "flag leak", "flag smoke", "flag damage".
   static let flagTypes = ["leak", "smoke", "damage"]
 
   private enum Trigger {
-    case next, status, confirm, dismiss, note, flag
+    case next, status, confirm, dismiss, note, flag, prioritize
   }
+
+  /// Phrases (normalized: lowercase letters, digits and single spaces) that ask what's
+  /// wrong. Matched anywhere in the utterance, before single trigger words.
+  private static let issuePhrases = [
+    "whats the issue", "what is the issue", "whats the problem", "what is the problem",
+    "whats wrong", "what is wrong", "whats going on", "what is going on",
+  ]
 
   private static let triggers: [String: Trigger] = [
     "next": .next,
@@ -29,6 +40,8 @@ enum VoiceCommand: Equatable, Sendable {
     "dismiss": .dismiss, "dismissed": .dismiss,
     "note": .note,
     "flag": .flag, "flags": .flag, "flagged": .flag,
+    "prioritize": .prioritize, "prioritise": .prioritize, "prioritized": .prioritize,
+    "prioritised": .prioritize, "priority": .prioritize, "escalate": .prioritize,
   ]
 
   /// Filler words skipped between "flag" and the type ("flag a leak").
@@ -55,18 +68,26 @@ enum VoiceCommand: Equatable, Sendable {
     let words = transcript.split(whereSeparator: \.isWhitespace).map(String.init)
     let normalized = words.map { $0.lowercased().filter { $0.isLetter || $0.isNumber } }
 
+    let phrase = " " + normalized.filter { !$0.isEmpty }.joined(separator: " ") + " "
+    if issuePhrases.contains(where: { phrase.contains(" \($0) ") }) {
+      return .issue
+    }
+
     guard let index = normalized.firstIndex(where: { triggers[$0] != nil }),
       let trigger = triggers[normalized[index]]
     else { return nil }
 
-    // "confirm or dismiss" (e.g. the app's own prompt picked up by the mic) is ambiguous.
-    let decisions = Set(normalized.compactMap { triggers[$0] }.filter { $0 == .confirm || $0 == .dismiss })
+    // "confirm or dismiss" / "dismiss, or prioritize" (e.g. the app's own prompt picked
+    // up by the mic) is ambiguous.
+    let decisions = Set(normalized.compactMap { triggers[$0] }.filter { [.confirm, .dismiss, .prioritize].contains($0) })
     if decisions.count > 1 { return nil }
 
     let rest = words[(index + 1)...]
     switch trigger {
     case .next:
       return .next
+    case .prioritize:
+      return .prioritize
     case .confirm:
       return .confirm
     case .dismiss:
@@ -99,6 +120,8 @@ enum VoiceCommand: Equatable, Sendable {
     case .dismiss: return "dismiss"
     case .note(let text): return "note: \(text)"
     case .flag(let type): return "flag \(type)"
+    case .issue: return "what's the issue"
+    case .prioritize: return "prioritize"
     }
   }
 }

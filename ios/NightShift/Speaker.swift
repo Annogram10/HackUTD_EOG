@@ -160,8 +160,9 @@ final class Speaker: NSObject {
     /// play-and-record (for example, a video recording with mic), it is left as is so its
     /// mode isn't disturbed. `.defaultToSpeaker` sends audio to the phone's loudspeaker,
     /// not the earpiece, when the glasses aren't connected.
-    /// While an alarm sounds the session is playback-only (loudest output, other audio
-    /// ducked, keeps playing when locked). Voice commands pause until it ends.
+    /// While an alarm sounds, other audio is ducked and the session keeps playing when
+    /// locked. It stays play-and-record (with the glasses' Bluetooth mic and output) so
+    /// the operator can answer by voice ("what's the issue", "dismiss", "prioritize").
     static var isAlarmMode = false {
         didSet {
             guard isAlarmMode != oldValue else { return }
@@ -171,17 +172,13 @@ final class Speaker: NSObject {
 
     static func activateAudioSession() {
         let session = AVAudioSession.sharedInstance()
+        var options: AVAudioSession.CategoryOptions = [.allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker]
         if isAlarmMode {
-            if session.category != .playback {
-                try? session.setCategory(.playback, mode: .default, options: [.duckOthers])
-            }
-            try? session.setActive(true)
-            return
+            options.insert(.duckOthers)
         }
-        if session.category != .playAndRecord {
-            try? session.setCategory(.playAndRecord,
-                                     mode: .spokenAudio,
-                                     options: [.allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker])
+        let mode: AVAudioSession.Mode = isAlarmMode ? .default : .spokenAudio
+        if session.category != .playAndRecord || session.categoryOptions != options || session.mode != mode {
+            try? session.setCategory(.playAndRecord, mode: mode, options: options)
         }
         try? session.setActive(true)
     }

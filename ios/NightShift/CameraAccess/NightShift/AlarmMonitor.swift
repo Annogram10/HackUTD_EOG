@@ -8,6 +8,11 @@
 // never flashes again; a different alarm_id starts a new flash. If the backend clears
 // the alarm by itself, everything stops too.
 //
+// Voice flow: the listener starts with the alarm (for up to 3 minutes). "What's the
+// issue" stops the siren (the flash stays), fetches GET /issue and speaks its
+// spoken_text; "dismiss" or "prioritize" (or the on-screen buttons) then POSTs the
+// decision for the issue's flag, which also acknowledges the alarm and reloads /map.
+//
 
 import Observation
 import SwiftUI
@@ -18,6 +23,16 @@ import UIKit
 final class AlarmMonitor {
   /// The alarm currently flashing; nil when quiet.
   private(set) var active: AlarmStatus?
+  /// Last GET /issue answer, kept until a decision, acknowledgement, or 3 minutes.
+  private(set) var issue: IssueReport?
+  private(set) var isLoadingIssue = false
+  private(set) var isDeciding = false
+  /// Last error or result line for the alarm screen.
+  private(set) var statusLine: (text: String, ok: Bool)?
+
+  let voice: VoiceCommandListener
+  /// Called after a dismiss/prioritize succeeds (reloads /map so the route updates).
+  @ObservationIgnored var onDecided: (@MainActor () async -> Void)?
 
   @ObservationIgnored private let api: any NightShiftAPI
   @ObservationIgnored private let siren = AlarmSiren()
@@ -25,6 +40,13 @@ final class AlarmMonitor {
   @ObservationIgnored private var hapticTask: Task<Void, Never>?
   @ObservationIgnored private var speechTask: Task<Void, Never>?
   @ObservationIgnored private var window: UIWindow?
+  @ObservationIgnored private var listenTimeoutTask: Task<Void, Never>?
+  @ObservationIgnored private var issueExpiryTask: Task<Void, Never>?
+  /// True if the alarm turned the listener on (so it turns it back off after).
+  @ObservationIgnored private var startedVoice = false
+
+  /// How long the alarm keeps the listener on, and an /issue answer stays actionable.
+  private static let listenWindow: Duration = .seconds(180)
 
   private static let acknowledgedKey = "NightShift.acknowledgedAlarmID"
 
@@ -34,8 +56,9 @@ final class AlarmMonitor {
     set { UserDefaults.standard.set(newValue, forKey: Self.acknowledgedKey) }
   }
 
-  init(api: any NightShiftAPI) {
+  init(api: any NightShiftAPI, voice: VoiceCommandListener) {
     self.api = api
+    self.voice = voice
   }
 
   // MARK: - Polling
@@ -93,6 +116,7 @@ final class AlarmMonitor {
     Speaker.isAlarmMode = true
     siren.start()
     showWindow()
+    Task { await startListening() }
 
     hapticTask = Task { @MainActor in
       let haptics = UINotificationFeedbackGenerator()
@@ -117,15 +141,114 @@ final class AlarmMonitor {
   private func stop() {
     guard active != nil else { return }
     active = nil
+    statusLine = nil
+    clearIssue()
     hapticTask?.cancel()
     speechTask?.cancel()
     hapticTask = nil
     speechTask = nil
     siren.stop()
     Speaker.shared.stopAll()
-    // Back to the normal session so voice commands resume (their watchdog restarts them).
+    // Back to the normal session (no ducking).
     Speaker.isAlarmMode = false
+    stopListeningIfStarted()
     hideWindow()
+  }
+
+  /// Silences the siren and the repeating alarm speech; the red flash stays.
+  private func silence() {
+    speechTask?.cancel()
+    speechTask = nil
+    siren.stop()
+    Speaker.shared.stopAll()
+  }
+
+  // MARK: - Listening
+
+  /// Turns the voice listener on for up to `listenWindow` (the "Listen" button too).
+  func startListening() async {
+    listenTimeoutTask?.cancel()
+    if !voice.isListening {
+      await voice.start()
+      startedVoice = voice.isListening
+    }
+    listenTimeoutTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: Self.listenWindow)
+      guard !Task.isCancelled else { return }
+      self?.stopListeningIfStarted()
+    }
+  }
+
+  private func stopListeningIfStarted() {
+    listenTimeoutTask?.cancel()
+    listenTimeoutTask = nil
+    if startedVoice {
+      startedVoice = false
+      voice.stop()
+    }
+  }
+
+  // MARK: - Issue and decisions
+
+  /// "What's the issue": stop the siren (keep the flash), GET /issue, show and speak it.
+  func askIssue() async {
+    guard !isLoadingIssue else { return }
+    silence()
+    isLoadingIssue = true
+    defer { isLoadingIssue = false }
+    do {
+      let report = try await api.fetchIssue(facility: nil)
+      issue = report
+      statusLine = nil
+      issueExpiryTask?.cancel()
+      issueExpiryTask = Task { @MainActor [weak self] in
+        try? await Task.sleep(for: Self.listenWindow)
+        guard !Task.isCancelled else { return }
+        self?.issue = nil
+      }
+      await Speaker.shared.speak(report.spokenText ?? "There is nothing to act on.")
+    } catch {
+      statusLine = ("Couldn't get the issue: \(NightShiftAPIError.describe(error))", false)
+      await Speaker.shared.speak("Couldn't get the issue. Try again.")
+    }
+  }
+
+  /// Applies a decision to the last /issue flag. Returns false if no issue has been
+  /// asked (so "dismiss" can fall back to the shift's own pending flag).
+  @discardableResult
+  func decide(_ action: FlagAction) async -> Bool {
+    guard let issue else { return false }
+    guard let flag = issue.flag else {
+      statusLine = ("There is nothing to act on.", false)
+      await Speaker.shared.speak("There is nothing to act on.")
+      return true
+    }
+    guard !isDeciding else { return true }
+    isDeciding = true
+    defer { isDeciding = false }
+    do {
+      let updated = try await api.decideFlag(id: flag.id, action: action)
+      let reply = action == .dismiss ? "Dismissed." : "Marked as priority."
+      NSLog("[NightShift] Flag \(updated.id) now \(updated.status ?? "?") priority \(updated.priority)")
+      // Either decision acknowledges the alarm; stop everything before confirming aloud.
+      acknowledge()
+      clearIssue()
+      await Speaker.shared.speak(reply)
+      await onDecided?()
+    } catch {
+      statusLine = ("Couldn't send \(action.rawValue): \(NightShiftAPIError.describe(error))", false)
+      await Speaker.shared.speak("Couldn't reach the backend. Try again.")
+    }
+    return true
+  }
+
+  /// True while an /issue answer is waiting for a decision.
+  var isAwaitingDecision: Bool { issue != nil }
+
+  private func clearIssue() {
+    issueExpiryTask?.cancel()
+    issueExpiryTask = nil
+    issue = nil
   }
 
   // MARK: - Window
@@ -181,6 +304,78 @@ private struct AlarmOverlayView: View {
     return Color(red: 0.35 + 0.65 * mix, green: 0.0 + 0.08 * mix, blue: 0.0 + 0.08 * mix)
   }
 
+  /// Listening state plus how to start: say "What's the issue" or tap.
+  private var listeningRow: some View {
+    VStack(spacing: 10) {
+      if monitor.voice.isRunning {
+        Label("Listening: say \"What's the issue\"", systemImage: "mic.fill")
+          .font(.headline)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 6)
+          .background(.black.opacity(0.35), in: Capsule())
+      } else {
+        Button {
+          Task { await monitor.startListening() }
+        } label: {
+          Label("Listen", systemImage: "mic")
+            .font(.headline)
+            .frame(maxWidth: .infinity, minHeight: 48)
+        }
+        .buttonStyle(.bordered)
+        .tint(.white)
+      }
+      if monitor.issue == nil {
+        Button {
+          Task { await monitor.askIssue() }
+        } label: {
+          Label(monitor.isLoadingIssue ? "Asking…" : "What's the issue?", systemImage: "questionmark.bubble")
+            .font(.headline)
+            .frame(maxWidth: .infinity, minHeight: 48)
+        }
+        .buttonStyle(.bordered)
+        .tint(.white)
+        .disabled(monitor.isLoadingIssue)
+      }
+    }
+  }
+
+  /// The /issue answer as text, with Dismiss and Prioritize when there is a flag.
+  private func issueSection(_ issue: IssueReport) -> some View {
+    VStack(spacing: 14) {
+      Text(issue.spokenText ?? "There is nothing to act on.")
+        .font(.title3.weight(.semibold))
+        .multilineTextAlignment(.center)
+        .padding(12)
+        .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
+      if issue.flag != nil {
+        HStack(spacing: 12) {
+          Button {
+            Task { await monitor.decide(.dismiss) }
+          } label: {
+            Text("Dismiss")
+              .font(.title2.bold())
+              .frame(maxWidth: .infinity, minHeight: 64)
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(.gray)
+          Button {
+            Task { await monitor.decide(.prioritize) }
+          } label: {
+            Text("Prioritize")
+              .font(.title2.bold())
+              .frame(maxWidth: .infinity, minHeight: 64)
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(.orange)
+        }
+        .disabled(monitor.isDeciding)
+      } else {
+        Text("There is nothing to act on.")
+          .font(.headline)
+      }
+    }
+  }
+
   private var content: some View {
     VStack(spacing: 24) {
       Spacer()
@@ -192,12 +387,23 @@ private struct AlarmOverlayView: View {
         .font(.title.bold())
         .multilineTextAlignment(.center)
         .minimumScaleFactor(0.6)
-      ForEach(Array((monitor.active?.reasons ?? []).prefix(3).enumerated()), id: \.offset) { _, reason in
-        Text(reason)
-          .font(.body)
-          .multilineTextAlignment(.center)
+      if let issue = monitor.issue {
+        issueSection(issue)
+      } else {
+        ForEach(Array((monitor.active?.reasons ?? []).prefix(3).enumerated()), id: \.offset) { _, reason in
+          Text(reason)
+            .font(.body)
+            .multilineTextAlignment(.center)
+        }
+      }
+      if let line = monitor.statusLine {
+        Text(line.text)
+          .font(.callout.bold())
+          .padding(8)
+          .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
       }
       Spacer()
+      listeningRow
       Button {
         monitor.acknowledge()
       } label: {

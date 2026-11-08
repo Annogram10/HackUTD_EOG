@@ -317,3 +317,68 @@ struct AlarmStatus: Codable, Hashable, Sendable {
     facilityIds = (try? c.decodeIfPresent([String].self, forKey: .facilityIds)) ?? []
   }
 }
+
+// MARK: - GET /issue, POST /flag/{id}/dismiss|prioritize
+
+/// A backend flag the operator can act on (dismiss or prioritize).
+struct BackendFlag: Codable, Hashable, Sendable {
+  let id: String
+  let type: String?
+  let status: String?
+  /// The backend sends a number (0/1) or a bool.
+  let priority: Bool
+  let reason: String?
+  let equipmentId: String?
+  let timestamp: String?
+
+  private enum CodingKeys: String, CodingKey {
+    case id, type, status, priority, reason, equipmentId, timestamp
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    guard let id = c.lenientString(.id), !id.isEmpty else {
+      throw DecodingError.dataCorruptedError(forKey: .id, in: c, debugDescription: "Flag without id")
+    }
+    self.id = id
+    type = c.lenientString(.type)
+    status = c.lenientString(.status)
+    if let value = try? c.decodeIfPresent(Bool.self, forKey: .priority) {
+      priority = value
+    } else {
+      priority = (c.lenientDouble(.priority) ?? 0) > 0
+    }
+    reason = c.lenientString(.reason)
+    equipmentId = c.lenientString(.equipmentId)
+    timestamp = c.lenientString(.timestamp)
+  }
+}
+
+/// GET /issue: what's wrong at a facility, written for speech, plus the flag to act on.
+struct IssueReport: Codable, Hashable, Sendable {
+  let facilityId: String?
+  let name: String?
+  /// false when the facility has nothing wrong (spoken_text then says so).
+  let problem: Bool
+  let level: String?
+  /// Spoken as received; ends with "Say dismiss, or prioritize." when there is a flag.
+  let spokenText: String?
+  /// nil when there is nothing to act on.
+  let flag: BackendFlag?
+  let options: [String]
+
+  private enum CodingKeys: String, CodingKey {
+    case facilityId, name, problem, level, spokenText, flag, options
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    facilityId = c.lenientString(.facilityId)
+    name = c.lenientString(.name)
+    problem = (try? c.decodeIfPresent(Bool.self, forKey: .problem)) ?? false
+    level = c.lenientString(.level)
+    spokenText = c.lenientString(.spokenText).flatMap { $0.isEmpty ? nil : $0 }
+    flag = try? c.decodeIfPresent(BackendFlag.self, forKey: .flag)
+    options = (try? c.decodeIfPresent([String].self, forKey: .options)) ?? []
+  }
+}

@@ -77,7 +77,11 @@ final class NightShiftController {
     self.cache = cache
     vision = FrameGrabber(api: api)
     uploads = UploadQueue(api: api)
-    alarm = AlarmMonitor(api: api)
+    alarm = AlarmMonitor(api: api, voice: voice)
+    alarm.onDecided = { [weak self] in
+      // A prioritized facility moves to stop 1.
+      await self?.refreshMap()
+    }
     uploads.onUploaded = { [weak self] in
       // The ranking uses the latest uploaded shift, so reload it.
       await self?.refreshMap()
@@ -450,6 +454,20 @@ final class NightShiftController {
     case .status(let name):
       voiceFeedback = ("Status of \(name)", true)
       await speakStatus(of: name)
+    case .issue:
+      voiceFeedback = ("What's the issue", true)
+      await alarm.askIssue()
+    case .prioritize:
+      voiceFeedback = ("Prioritize", true)
+      if !(await alarm.decide(.prioritize)) {
+        await reply("Say what's the issue first", ok: false)
+      }
+    case .dismiss where alarm.isAwaitingDecision || alarm.active != nil:
+      // During an alarm, or right after "what's the issue", dismiss acts on that issue.
+      voiceFeedback = ("Dismiss", true)
+      if !(await alarm.decide(.dismiss)) {
+        await reply("Say what's the issue first", ok: false)
+      }
     case .confirm, .dismiss:
       let status: FlagStatus = command == .confirm ? .confirmed : .dismissed
       guard let flag = store.currentFlag else {

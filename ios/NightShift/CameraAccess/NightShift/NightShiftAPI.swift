@@ -16,9 +16,19 @@ protocol NightShiftAPI: Sendable {
   func fetchMap() async throws -> FacilityMap
   /// GET /alarm: the current alarm state.
   func fetchAlarm() async throws -> AlarmStatus
+  /// GET /issue[?facility=]: without a facility the backend picks the most urgent one.
+  func fetchIssue(facility: String?) async throws -> IssueReport
+  /// POST /flag/{id}/dismiss or /prioritize. Returns the updated flag.
+  func decideFlag(id: String, action: FlagAction) async throws -> BackendFlag
   /// Sends one JPEG frame for the given facility; the backend says whether it shows a problem.
   func checkVision(jpeg: Data, facility: String?) async throws -> VisionResult
   func submitReport(_ report: ShiftReport) async throws
+}
+
+/// What the operator decided about a backend flag.
+enum FlagAction: String, Sendable {
+  case dismiss
+  case prioritize
 }
 
 enum NightShiftAPIError: LocalizedError {
@@ -134,6 +144,21 @@ struct RealAPI: NightShiftAPI {
     try JSONCoding.decoder.decode(AlarmStatus.self, from: try await send(makeRequest("alarm"), path: "alarm"))
   }
 
+  func fetchIssue(facility: String?) async throws -> IssueReport {
+    var request = makeRequest("issue")
+    if let facility, let url = request.url {
+      request.url = url.appending(queryItems: [URLQueryItem(name: "facility", value: facility)])
+    }
+    return try JSONCoding.decoder.decode(IssueReport.self, from: try await send(request, path: "issue"))
+  }
+
+  func decideFlag(id: String, action: FlagAction) async throws -> BackendFlag {
+    let path = "flag/\(id)/\(action.rawValue)"
+    var request = makeRequest(path)
+    request.httpMethod = "POST"
+    return try JSONCoding.decoder.decode(BackendFlag.self, from: try await send(request, path: path))
+  }
+
   /// Raw JPEG body (Content-Type: image/jpeg), facility as `?facility=<id>`.
   func checkVision(jpeg: Data, facility: String?) async throws -> VisionResult {
     let path = "vision/check"
@@ -222,6 +247,24 @@ struct MockAPI: NightShiftAPI {
 
   func fetchMap() async throws -> FacilityMap {
     try await load(FacilityMap.self, "mock_map")
+  }
+
+  /// The mock has nothing to act on.
+  func fetchIssue(facility: String?) async throws -> IssueReport {
+    try await simulateNetwork()
+    return try JSONCoding.decoder.decode(
+      IssueReport.self,
+      from: Data(#"{"problem": false, "spoken_text": "Nothing is wrong right now (mock data).", "flag": null, "options": []}"#.utf8)
+    )
+  }
+
+  func decideFlag(id: String, action: FlagAction) async throws -> BackendFlag {
+    try await simulateNetwork()
+    let status = action == .dismiss ? "dismissed" : "confirmed"
+    return try JSONCoding.decoder.decode(
+      BackendFlag.self,
+      from: Data(#"{"id": "\#(id)", "status": "\#(status)", "priority": \#(action == .prioritize ? 1 : 0)}"#.utf8)
+    )
   }
 
   /// The mock never raises an alarm.
