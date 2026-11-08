@@ -29,7 +29,7 @@ function summarize(tool: string, raw: string): string | null {
     }
     case "forecast_shutdown":
       return r.tripped ? `${facName(r.facility_id)}: tank already at shutdown`
-        : `${facName(r.facility_id)}: tank ${r.level_pct}% full, reaches shutdown in ${r.hours_to_limit?.p50} h (range ${r.hours_to_limit?.p10} to ${r.hours_to_limit?.p90} h)`;
+        : `${facName(r.facility_id)}: tank ${typeof r.level_pct === "number" ? r.level_pct.toFixed(1) : r.level_pct}% full, reaches shutdown in ${r.hours_to_limit?.p50} h (range ${r.hours_to_limit?.p10} to ${r.hours_to_limit?.p90} h)`;
     case "optimize_plan":
       return (r.plans as { facility_id: string; action: string }[]).map((p) => `${facName(p.facility_id)}: ${p.action}`).join(" · ")
         + (r.shared ? ` · total ${money(r.shared.total_cost)} with ${r.shared.trucks_used} of ${r.shared.fleet} trucks` : "");

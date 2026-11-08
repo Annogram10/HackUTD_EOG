@@ -148,8 +148,8 @@ html[data-alarm="red"] body::after {
 @keyframes city-danger { 50% { stroke-opacity: 0.25; } }
 .city-sign { animation: city-sign 4s ease-in-out infinite; }
 @keyframes city-sign { 50% { opacity: 0.4; } }
-.fac-card { box-shadow: 0 0 0 4px rgba(14, 15, 17, 0.9), 0 10px 28px rgba(0, 0, 0, 0.65); }
-.fac-danger { box-shadow: 0 0 0 4px rgba(14, 15, 17, 0.9), 0 0 22px #ff3b3b66, 0 10px 28px rgba(0, 0, 0, 0.65); }
+.fac-card { box-shadow: 0 0 0 4px rgba(21, 17, 26, 0.9); }
+.fac-danger { box-shadow: 0 0 0 4px rgba(21, 17, 26, 0.9), 0 0 0 5px rgba(255, 59, 59, 0.4); }
 .fac-sign { text-shadow: 0 0 8px #ff3b3b; animation: fac-sign 0.24s step-end 3; }
 @keyframes fac-sign { 0% { opacity: 1; } 40% { opacity: 0.15; } 70% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {

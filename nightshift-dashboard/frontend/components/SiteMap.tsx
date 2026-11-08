@@ -236,7 +236,7 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
       </span>
 
       <div className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={{ ...at(disp), transform: `scale(${cardScale})` }}>
-        <span className="h-7 w-7 rotate-45 border-2 border-cyan-200 bg-zinc-950 shadow-[0_0_12px_#19E6FF80]" />
+        <span className="h-7 w-7 rotate-45 border-2 border-[#19E6FF] bg-zinc-950" />
         <span className="mt-2 whitespace-nowrap bg-zinc-950/85 px-2 py-0.5 text-sm font-semibold text-zinc-200">Disposal site</span>
         <span className="whitespace-nowrap bg-zinc-950/85 px-1.5 text-sm text-zinc-400">{system.disposal_site.pressure_psi} psi</span>
       </div>
