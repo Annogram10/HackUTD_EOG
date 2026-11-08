@@ -182,3 +182,20 @@ html[data-alarm="red"] body::after {
 }
 .btn-primary:hover { background: #c97b7b; }
 .btn-primary:disabled { opacity: 0.5; }
+
+/* ---------- header: neon sign, skyline, scanlines ---------- */
+.neon-night { color: #a99bb4; text-shadow: 0 0 6px rgba(169, 155, 180, 0.55), 0 0 14px rgba(169, 155, 180, 0.25); }
+.neon-shift { color: #bd6b6b; text-shadow: 0 0 6px rgba(189, 107, 107, 0.6), 0 0 14px rgba(189, 107, 107, 0.3); }
+.neon-flicker { animation: neon-flicker 10s steps(1, end) infinite; }
+@keyframes neon-flicker { 0%, 91%, 93.5%, 95%, 100% { opacity: 1; } 92%, 94% { opacity: 0.25; text-shadow: none; } }
+.scanlines { background: repeating-linear-gradient(to bottom, rgba(238, 237, 229, 0.03) 0 1px, transparent 1px 3px); }
+.sky-win { opacity: 0.55; animation: sky-win 23s steps(1, end) infinite; }
+@keyframes sky-win { 0%, 60% { opacity: 0.55; } 61%, 100% { opacity: 0.06; } }
+/* alarm burst (~2 s when danger starts): the sign and the windows tint red, then settle */
+html[data-burst] .neon-night, html[data-burst] .neon-shift { color: #ff3b3b; text-shadow: 0 0 8px rgba(255, 59, 59, 0.7); }
+html[data-burst] .sky-win { fill: #ff3b3b; opacity: 0.8; }
+.neon-night, .neon-shift, .sky-win { transition: color 0.6s, fill 0.6s, text-shadow 0.6s; }
+@media (prefers-reduced-motion: reduce) {
+  .neon-flicker, .sky-win { animation: none; }
+  .neon-night, .neon-shift, .sky-win { transition: none; }
+}
