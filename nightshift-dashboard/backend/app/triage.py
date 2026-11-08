@@ -115,13 +115,13 @@ def _describe(plan: dict) -> str:
     bits = []
     if plan["trucks"]:
         t, k = plan["trucks"], plan["trips_per_truck"]
-        bits.append(f"send {t} truck{'s' if t > 1 else ''}, {k} trip{'s' if k > 1 else ''} each")
+        bits.append(f"send {t} truck{'s' if t > 1 else ''} ({k} trip{'s' if k > 1 else ''} each)")
     for s in plan["shut_ins"]:
         when = "now" if s["start_after_min"] <= 0 else f"in {s['start_after_min']} min"
         bits.append(f"shut in {s['well']} {when}")
     if not bits:
-        bits.append("let the tank trip" if plan["tank_trips"] else "no action needed")
-    return " and ".join(bits)
+        bits.append("no action, the tank reaches shutdown" if plan["tank_trips"] else "no action needed")
+    return "Proposed plan for supervisor approval: " + ", ".join(bits)
 
 
 def _timeline(c: opt.Ctx, p: dict, now: int) -> list:
@@ -172,7 +172,7 @@ def run_triage(ds: Dataset, now: Optional[int] = None) -> dict:
         else:
             a.update(hours_to_limit=None, level_pct=None,
                      recommended_actions=[{"type": "field_inspection", "asset_id": e["asset_id"]}],
-                     action_text="Send an inspector to " + e["asset_id"],
+                     action_text="Proposed for supervisor approval: an inspector checks " + e["asset_id"],
                      plan=None, options=[])
         alerts.append(a)
 
@@ -198,7 +198,7 @@ def run_triage(ds: Dataset, now: Optional[int] = None) -> dict:
             a["options"] = opts
             a["recommended_actions"] = plan["actions"]
             a["trucks_shared_with"] = [x for x in shared[sid]["events"] if x != a["event_id"]]
-            a["action_text"] = _describe(plan) + f" ({money(plan['cost'])})"
+            a["action_text"] = _describe(plan) + f", {money(plan['cost'])}"
             a["whatif"] = {
                 "shutdown_pct": c.shutdown_pct, "warning_pct": ds.limits["warning"],
                 "repair_end_ts": a["repair_end_ts"],

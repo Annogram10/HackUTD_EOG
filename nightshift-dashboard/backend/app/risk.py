@@ -107,7 +107,7 @@ def _money(tri: dict) -> dict:
     cost = sum(r["cost"] for r in rows)
     idle = sum(r["do_nothing"] or 0 for r in rows)
     saves = sum(r["saves"] or 0 for r in rows)
-    text = f"Cheapest fix: ${cost:,}. Doing nothing: ${idle:,}. The plan saves ${saves:,}."
+    text = f"Proposed plan for supervisor approval: ${cost:,}. Doing nothing: ${idle:,}. The plan saves ${saves:,}."
     return {"rows": rows, "total_cost": cost, "total_do_nothing": idle, "total_saves": saves, "text": text, "from_ai": False,
             "trip_price": rows[0]["trucks"]["trip_price"], "trip_bbl": rows[0]["trucks"]["trip_bbl"]}
 
@@ -189,7 +189,7 @@ def ai_check(tri: dict, rules: dict) -> dict:
         "Name facilities exactly as written in the facts (for example \"S1 Facility C\"), never as \"the tank\" or \"S1 tank\". "
         "Only red problems are danger: a leak or a worn pump is at most amber. The headline must name the facility when there is one. "
         "Do not diagnose and never tell anyone to operate or shut down equipment. "
-        'Answer with JSON only: {"level": "green"|"amber"|"red", "headline": "max 10 words", "why": "one short plain sentence", "money": "one plain sentence on the cost, like: Cheapest fix: send 1 truck, $905. Doing nothing would cost $4,984. Use only dollar figures from the facts (write them with commas); empty string if there is no pump failure"}\n\n'
+        'Answer with JSON only: {"level": "green"|"amber"|"red", "headline": "max 10 words", "why": "one short plain sentence", "money": "one plain sentence on the cost, worded as a proposal a supervisor approves, like: Proposed plan for supervisor approval: send 1 truck, $905. Doing nothing would cost $4,984. Use only numbers that appear in the facts (dollars with commas); empty string if there is no pump failure"}\n\n'
         + json.dumps(facts))
     body = json.dumps({"model": MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 400,
                        "temperature": 0.2, "chat_template_kwargs": {"enable_thinking": False}}).encode()
@@ -199,10 +199,55 @@ def ai_check(tri: dict, rules: dict) -> dict:
             text = json.loads(r.read())["choices"][0]["message"].get("content") or ""
         out = json.loads(re.search(r"\{.*\}", text, re.S).group(0))
         lv = out.get("level") if out.get("level") in ORDER else "green"
-        return {"available": True, "model": MODEL, "level": lv, "headline": str(out.get("headline", ""))[:120],
-                "why": str(out.get("why", ""))[:300], "money": str(out.get("money", ""))[:300]}
+        known = allowed_numbers(facts)  # a sentence with a number the facts do not contain is dropped
+        said = {k: str(out.get(k, ""))[:n] for k, n in (("headline", 120), ("why", 300), ("money", 300))}
+        said = {k: (v if numbers_ok(v, known) else "") for k, v in said.items()}
+        return {"available": True, "model": MODEL, "level": lv, **said}
     except Exception as e:
         return {"available": False, "error": str(e)[:120]}
+
+
+_WORD_NUM = {w: i for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
+    "seventeen eighteen nineteen".split())}
+_WORD_NUM.update({"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80,
+                  "ninety": 90, "hundred": 100, "thousand": 1000, "million": 1000000})
+
+
+def allowed_numbers(*sources) -> set:
+    """Every number that appears anywhere in the structured input (nested dicts/lists/strings)."""
+    out: set = set()
+
+    def walk(x):
+        if isinstance(x, bool) or x is None:
+            return
+        if isinstance(x, (int, float)):
+            out.add(round(float(x), 2))
+            out.add(float(round(x)))
+        elif isinstance(x, str):
+            for n in re.findall(r"\d[\d,]*(?:\.\d+)?", x):
+                out.add(round(float(n.replace(",", "")), 2))
+        elif isinstance(x, dict):
+            for v in x.values():
+                walk(v)
+        elif isinstance(x, (list, tuple, set)):
+            for v in x:
+                walk(v)
+
+    for s in sources:
+        walk(s)
+    return out
+
+
+def numbers_ok(sentence: str, allowed: set) -> bool:
+    """False if the sentence has any number, in digits or spelled out, that is not in `allowed`."""
+    for n in re.findall(r"\d[\d,]*(?:\.\d+)?", sentence):
+        if round(float(n.replace(",", "").rstrip(".")), 2) not in allowed:
+            return False
+    for w in re.findall(r"[a-z]+", sentence.lower()):
+        if w in _WORD_NUM and float(_WORD_NUM[w]) not in allowed:
+            return False
+    return True
 
 
 def worst_red(red_alerts: list):
@@ -256,11 +301,7 @@ def assess(ds, now=None, use_ai: bool = True, peek_ai: bool = False) -> dict:
                               "onset_unix": int(a["onset_unix"]), "text": text})
     money = _money(tri)
     if ai and ai.get("available") and ai.get("money") and money["rows"]:
-        real = {money["total_cost"], money["total_do_nothing"], money["total_saves"]}
-        for r in money["rows"]:
-            real |= {r["cost"], r["do_nothing"], r["saves"]}
-        said = {int(x.replace(",", "")) for x in re.findall(r"\$([\d,]+)", ai["money"])}
-        if said and said <= {x for x in real if x is not None}:
+        if numbers_ok(ai["money"], allowed_numbers(money)):  # else keep the deterministic sentence
             money["text"], money["from_ai"] = ai["money"], True
     speak = ""
     if level == "red":

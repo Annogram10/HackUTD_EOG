@@ -75,7 +75,7 @@ export default function AlertCard({ a, compact = false }: { a: Alert; compact?: 
             )}
             {a.plan && (
               <div className="mt-3 border-t border-zinc-800 pt-3">
-                <p className="text-sm uppercase tracking-wide text-zinc-500">Cheapest plan</p>
+                <p className="text-sm uppercase tracking-wide text-zinc-500">Proposed plan · needs supervisor approval</p>
                 <p className="text-lg text-zinc-100">
                   {planWords(a.plan)} <span className="font-bold text-emerald-300">{money(a.plan.cost)}</span>
                 </p>
@@ -105,7 +105,7 @@ export default function AlertCard({ a, compact = false }: { a: Alert; compact?: 
           </div>
         )}
       </div>
-      {!failure && <p className="mt-3 text-lg font-medium text-sky-300">{a.action_text} to check it</p>}
+      {!failure && <p className="mt-3 text-lg font-medium text-sky-300">{a.action_text}</p>}
       {failure && (
         <p className="mt-3 text-base">
           <Link href={`/facility/${a.facility_id}`} className="text-sky-400 underline underline-offset-2 hover:text-sky-300">

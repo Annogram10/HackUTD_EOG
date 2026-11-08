@@ -468,7 +468,7 @@ def app_alert(a: dict) -> dict:
         "id": a["event_id"], "facility": a["facility_id"], "facility_name": a["facility_name"], "system": a["system_id"],
         "type": TYPE_NAME[a["category"]], "severity": sev, "severity_word": word, "level": SEVERITY_COLOR[word],
         "hours_to_shutdown": h["p50"] if h else None, "tripped": bool(a.get("tripped")),
-        "best_plan": a.get("action_text") or ("Send an inspector to check" if a["category"] != "pump_failure" else None),
+        "best_plan": a.get("action_text") or ("Proposed for supervisor approval: an inspector checks it" if a["category"] != "pump_failure" else None),
         "cost": plan["cost"] if plan else None, "spoken_text": spoken(a),
     }
 

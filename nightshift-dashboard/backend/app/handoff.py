@@ -1,7 +1,11 @@
-"""Plain-English shift handoff, written from the triage numbers (no AI needed, no numbers invented)."""
-
+"""
+Plain-English shift handoff, written from the triage numbers (no AI needed, no numbers invented).
+Every plan is worded as a proposal a supervisor approves, never as an instruction: nothing here operates equipment.
+"""
 from . import speech as sp
 from .triage import fac_name, money
+
+PROPOSAL = "Proposed plan for supervisor approval"
 
 
 def spoken(a: dict, words: bool = True) -> str:
@@ -10,15 +14,15 @@ def spoken(a: dict, words: bool = True) -> str:
     if a["category"] == "pump_failure":
         h = a.get("hours_to_limit")
         if a.get("tripped"):
-            return f"{who} pump has failed and the tank has already reached shutdown. Wells stay shut in until the repair ends."
+            return f"{who} pump has failed and the tank has already reached shutdown. The wells stay shut in until the repair ends."
         hours_txt = (sp.hours(h["p50"]) if words else "%.1f hours" % h["p50"]) if h else ""
         t = f"Shutdown in about {hours_txt}." if h else ""
         plan = a.get("plan")
-        fix = f" Cheapest fix: {_plan_words(plan, words)}, {sp.dollars(plan['cost']) if words else money(plan['cost'])}." if plan else ""
+        fix = f" {PROPOSAL}: {_plan_words(plan, words)}, {sp.dollars(plan['cost']) if words else money(plan['cost'])}." if plan else ""
         return f"{who} pump has failed. {t}{fix}"
     if a["category"] == "pipeline_leak":
-        return f"{who} pipeline looks like it is leaking. Send an inspector."
-    return f"{who} pump is wearing out. Send an inspector."
+        return f"{who} pipeline may be leaking. Proposed for supervisor approval: an inspector checks it."
+    return f"{who} pump may be wearing out. Proposed for supervisor approval: an inspector checks it."
 
 
 def _plan_words(plan: dict, words: bool = True) -> str:
@@ -29,7 +33,7 @@ def _plan_words(plan: dict, words: bool = True) -> str:
         bits.append(f"send {num(n)} truck{'s' if n > 1 else ''}" + (f", {num(k)} trips each" if k > 1 else ""))
     for s in plan["shut_ins"]:
         bits.append(f"shut in well {s['well'].split('_')[-1]}" + ("" if s["start_after_min"] <= 0 else f" in {num(int(s['start_after_min']))} minutes"))
-    return " and ".join(bits) or ("let the tank trip" if plan["tank_trips"] else "no action needed")
+    return ", ".join(bits) or ("no action, the tank reaches shutdown" if plan["tank_trips"] else "no action needed")
 
 
 def build_handoff(triage: dict) -> dict:

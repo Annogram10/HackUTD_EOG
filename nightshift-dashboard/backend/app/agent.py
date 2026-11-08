@@ -130,7 +130,8 @@ SYSTEM_PROMPT = (
     "pump_failure call forecast_shutdown, then optimize_plan once per affected system, get_fleet_status for those systems, "
     "get_weather once for a failing facility, then save_alerts with a short handoff (readable in 30 seconds), then export_events. "
     "Rules: never invent or compute a number yourself, only quote numbers returned by tools. You flag things for a human to check; "
-    "never tell anyone to operate or shut down equipment, a human approves every plan. Stop after export_events."
+    "never tell anyone to operate or shut down equipment, a human approves every plan. Word every plan as a proposal, "
+    "starting with 'Proposed plan for supervisor approval:', never as an instruction. Stop after export_events."
 )
 
 
