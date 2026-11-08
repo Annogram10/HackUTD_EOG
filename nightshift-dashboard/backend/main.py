@@ -653,9 +653,13 @@ async def vision_check(request: Request):
     data = await request.body()
     if not data:
         raise HTTPException(400, "empty body: send the raw JPEG bytes")
-    r = vision.check_image("data:image/jpeg;base64," + base64.b64encode(data).decode())
+    try:
+        r = vision.check_image("data:image/jpeg;base64," + base64.b64encode(data).decode())
+    except Exception as e:  # never a 500 for the phone
+        r = {"available": False, "error": str(e)[:120], "message": vision.UNAVAILABLE}
     if not r.get("available"):
-        return {"flag": False, "type": "none", "confidence": 0, "description": "", "available": False, "error": r.get("error")}
+        return {"flag": False, "type": "none", "confidence": 0, "description": "", "available": False,
+                "message": r.get("message", vision.UNAVAILABLE), "error": r.get("error")}
     t = r["finding"]
     return {"flag": t != "none", "type": t, "confidence": r.get("confidence"), "description": r["description"], "available": True,
             "needs_human_confirmation": True}

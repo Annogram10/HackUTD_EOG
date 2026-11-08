@@ -10,6 +10,8 @@ import urllib.request
 
 URL = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1") + "/chat/completions"
 VISION_MODEL = os.environ.get("NEMOTRON_VISION_MODEL", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning")
+VISION_TIMEOUT_S = 15  # the operator is waiting; nothing else depends on this check
+UNAVAILABLE = "The camera check is not available right now. Look at it yourself and flag it by hand if needed."
 
 PROMPT = (
     "You are checking one frame from an oil and gas operator's glasses camera at night. "
@@ -22,7 +24,7 @@ PROMPT = (
 def check_image(image_url: str) -> dict:
     key = os.environ.get("NVIDIA_API_KEY")
     if not key:
-        return {"available": False, "error": "NVIDIA_API_KEY is not set"}
+        return {"available": False, "error": "NVIDIA_API_KEY is not set", "message": UNAVAILABLE}
     body = json.dumps({
         "model": VISION_MODEL,
         "messages": [{"role": "user", "content": [
@@ -31,7 +33,7 @@ def check_image(image_url: str) -> dict:
     }).encode()
     req = urllib.request.Request(URL, body, {"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with urllib.request.urlopen(req, timeout=VISION_TIMEOUT_S) as r:
             text = json.loads(r.read())["choices"][0]["message"].get("content") or ""
         m = re.search(r"\{.*\}", text, re.S)
         out = json.loads(m.group(0)) if m else {}
@@ -39,4 +41,4 @@ def check_image(image_url: str) -> dict:
         return {"available": True, "model": VISION_MODEL, "finding": finding if finding in ("leak", "smoke", "damage", "none") else "none",
                 "confidence": out.get("confidence"), "description": out.get("description", ""), "needs_human_confirmation": True}
     except Exception as e:
-        return {"available": False, "error": str(e)[:120]}
+        return {"available": False, "error": str(e)[:120], "message": UNAVAILABLE}
