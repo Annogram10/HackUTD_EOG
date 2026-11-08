@@ -7,7 +7,7 @@ The BACKEND (separate Python server in the repo root) does ALL calculation: dete
 
 ## HARD RULES
 - Free Apple account. NEVER add Wi-Fi Info / Hotspot Configuration capabilities or entitlements.
-- Camera link uses Bluetooth Classic: keep UISupportedExternalAccessoryProtocols = com.meta.ar.wearable, the external-accessory background mode, and all background modes in Info.plist.
+- Camera link uses Bluetooth Classic: keep UISupportedExternalAccessoryProtocols = com.meta.ar.wearable and the background modes bluetooth-central, bluetooth-peripheral, audio and external-accessory, plus NSBonjourServices. ("processing" and the photo-library permission were removed in hardening item 10 as unused.)
 - Do not touch CameraAccess.entitlements, the MWDAT keys (MetaAppID, AppLinkURLScheme, TeamID, ClientToken) or the URL scheme.
 - Bundle ID is com.kavin.nightshift (tied to the developer's personal team).
 - Backend is reached over https (ngrok), so it needs no ATS exception. Never add NSAllowsArbitraryLoads. The only ATS exception is NSAllowsLocalNetworking, added on request for the Pico buzzer (plain http on the local network); NSLocalNetworkUsageDescription covers glasses Wi-Fi and the Pico.
