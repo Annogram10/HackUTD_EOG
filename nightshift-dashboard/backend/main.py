@@ -32,6 +32,7 @@ import json
 import os
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Literal, Optional
@@ -67,10 +68,21 @@ app.mount("/photos", StaticFiles(directory=PHOTOS), name="photos")
 
 # ---------- database (iPhone uploads) ----------
 
-def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+@contextmanager
+def db():
+    """One connection per use: commits on success, rolls back on error, always closes. WAL lets reads run while a
+    write is in progress, and busy_timeout makes a second writer wait instead of failing."""
+    conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.row_factory = sqlite3.Row
-    return conn
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        yield conn
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 SCHEMA = """
@@ -90,6 +102,7 @@ CREATE TABLE IF NOT EXISTS flags (
 
 def init_db() -> None:
     with db() as c:
+        c.execute("PRAGMA journal_mode = WAL")  # stored in the database file, so it holds for every later connection
         cols = [r["name"] for r in c.execute("PRAGMA table_info(shifts)")]
         if cols and "dataset" not in cols:  # old demo schema
             for t in ("shifts", "flags", "equipment", "readings"):
@@ -894,19 +907,16 @@ def record_alarm(ds, out: dict, live: bool, cleanup: bool = True) -> None:
             shift_id = before[0]["id"] if before else None
         if shift_id is None:  # no phone shift yet at this time: keep the alarm in a system log shift
             shift_id = f"alarms-{ds.name}"
-            if not c.execute("SELECT 1 FROM shifts WHERE id = ?", (shift_id,)).fetchone():
-                c.execute("INSERT INTO shifts VALUES (?,?,?,?,?,?,?,?,?)",
-                          (shift_id, ds.name, out["as_of"][:10], "System alarms", out["as_of"], out["as_of"],
-                           out["as_of"], "[]", "[]"))
+            c.execute("INSERT OR IGNORE INTO shifts VALUES (?,?,?,?,?,?,?,?,?)",  # many polls can arrive at once
+                      (shift_id, ds.name, out["as_of"][:10], "System alarms", out["as_of"], out["as_of"],
+                       out["as_of"], "[]", "[]"))
         for r in out["flaggable"]:
             fid = r["facility_id"]
             flag_id = f"alarm-{fid}-{r['onset_unix']}"
-            if c.execute("SELECT 1 FROM flags WHERE id = ?", (flag_id,)).fetchone():
-                continue
             # the AI sentence is about one facility: only attach it to the flag of the facility it names
             reason = r["text"] + (f". {why}" if why and r["level"] == "red" and fac_name(fid) in why else "")
-            c.execute(
-                """INSERT INTO flags (id, shift_id, type, location, equipment_id, photo_url, timestamp, status, note,
+            c.execute(  # OR IGNORE: one flag per facility per problem, however many requests race here
+                """INSERT OR IGNORE INTO flags (id, shift_id, type, location, equipment_id, photo_url, timestamp, status, note,
                    control_note, trigger_src, reason) VALUES (?,?,?,?,?,?,?,?,NULL,NULL,?,?)""",
                 (flag_id, shift_id, AUTO_TYPE[r["category"]], fac_name(fid) if fid in ds.facilities else fid, fid, "",
                  out["as_of"], "pending", "data", reason))
