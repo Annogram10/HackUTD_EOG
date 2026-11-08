@@ -43,7 +43,7 @@ export default function Report() {
       <h2 className="text-2xl font-semibold">Summary: {hand.headline}</h2>
       <p className="mb-3 text-sm text-zinc-500">
         As of {formatDateTime(hand.as_of)}
-        {hand.agent_mode ? ` · saved by the triage agent (${hand.agent_mode === "nemotron" ? "Nemotron" : "offline script"})` : ""}
+        {hand.agent_engine ? ` · triage agent engine: ${hand.agent_engine === "nemotron" ? "Nemotron (live model)" : "offline script (no model)"}` : ""}
       </p>
       <ul className="space-y-1.5 text-lg text-zinc-200">
         {hand.lines.map((l, i) => <li key={i}>{l}</li>)}

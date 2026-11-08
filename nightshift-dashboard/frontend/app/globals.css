@@ -135,3 +135,9 @@ html[data-alarm="red"] header {
 .timeslider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; height: 1.75rem; width: 0.5rem; margin-top: 0.125rem; background: #dfe2e6; border: 2px solid #0e0f11; }
 .timeslider::-moz-range-track { background: transparent; height: 2rem; }
 .timeslider::-moz-range-thumb { height: 1.75rem; width: 0.5rem; background: #dfe2e6; border: 2px solid #0e0f11; border-radius: 0; }
+
+/* Keyboard focus is always visible (projector + keyboard demos). */
+:where(a, button, select, input, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #5a9bf0;
+  outline-offset: 2px;
+}

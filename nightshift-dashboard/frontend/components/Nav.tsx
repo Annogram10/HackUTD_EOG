@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+// Demo path only. /flags and /facility/[id] still work (linked from the pages) but are not in the menu.
 const LINKS = [
   { href: "/", label: "Now" },
-  { href: "/flags", label: "Flags" },
   { href: "/report", label: "Handover" },
   { href: "/agent", label: "How it decided" },
 ];

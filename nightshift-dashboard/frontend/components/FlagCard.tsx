@@ -187,7 +187,7 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && save()}
                 placeholder="Add a note for the next shift..."
-                className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-base text-zinc-100 placeholder:text-zinc-600"
+                className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-base text-zinc-100 placeholder:text-zinc-500"
               />
               <button
                 onClick={save}

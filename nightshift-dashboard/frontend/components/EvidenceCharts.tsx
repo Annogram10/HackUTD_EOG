@@ -27,6 +27,13 @@ export default function EvidenceCharts() {
   }, [dataset, asOf, key, playing]);
 
   const ev = got?.data;
+  if (got && got.key === key && !ev)
+    return (
+      <section>
+        <h2 className="text-2xl font-semibold">What dropped</h2>
+        <p className="mt-1 text-base text-zinc-400">The charts could not be loaded. The rest of the page is unaffected.</p>
+      </section>
+    );
   if (!ev) return null;
   if (ev.sections.length === 0)
     return (

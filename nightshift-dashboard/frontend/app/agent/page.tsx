@@ -2,7 +2,7 @@
 
 // AGENT TRACE: what the triage agent concluded, then every tool call it made to get there.
 
-import { PageSkeleton } from "@/components/Skeleton";
+import { ErrorState, PageSkeleton } from "@/components/Skeleton";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { facName, getAgentTrace, money, rerunAgent } from "@/lib/api";
@@ -79,14 +79,17 @@ function toRows(steps: TraceStep[]): { rows: Row[]; notes: TraceStep[]; final: T
 }
 
 export default function AgentTrace() {
-  const { dataset } = useApp();
+  const { dataset, offline } = useApp();
   const [loaded, setLoaded] = useState<AgentRun | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
   const run = loaded && loaded.dataset === dataset ? loaded : null; // ignore a trace from another dataset
 
   useEffect(() => {
     if (!dataset) return;
     let alive = true;
-    getAgentTrace(dataset).then((r) => alive && setLoaded(r)).catch(() => {});
+    getAgentTrace(dataset)
+      .then((r) => alive && setLoaded(r))
+      .catch(() => alive && setFailed(dataset));
     return () => {
       alive = false;
     };
@@ -106,7 +109,7 @@ export default function AgentTrace() {
     };
   }, [running, dataset]);
 
-  if (!run) return <PageSkeleton cards={3} />;
+  if (!run) return (failed === dataset || offline) ? <ErrorState what="the agent trace" /> : <PageSkeleton cards={3} />;
   const live = run.engine === "nemotron";
   const { rows, final } = toRows(run.steps);
   const toolCalls = run.steps.filter((s) => s.kind === "tool");
@@ -165,7 +168,7 @@ export default function AgentTrace() {
                     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                       <span className="font-mono text-lg font-semibold text-zinc-100">{s.tool}</span>
                       <span className="text-base text-zinc-500">{argsLine(s.args)}</span>
-                      <span className="ml-auto text-sm text-zinc-600">{s.ms} ms</span>
+                      <span className="ml-auto text-sm text-zinc-500">{s.ms} ms</span>
                     </div>
                     {line && <p className="mt-2 text-lg text-zinc-100">{line}</p>}
                     {s.error && <p className="mt-2 text-base text-red-300">{s.error}</p>}

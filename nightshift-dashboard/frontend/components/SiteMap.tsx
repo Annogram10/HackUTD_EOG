@@ -1,27 +1,22 @@
 "use client";
 
 // One system drawn from its real coordinates: facilities (wells -> tank -> pump), the pipeline from each
-// to the shared disposal site, and the truck yard. Chips are colored by status:
-// green normal, amber worn pump / needs review, orange possible leak, red pump failure or confirmed issue.
+// to the shared disposal site, and the truck yard. Chips are coloured and labelled by the backend's severity:
+// green normal or minor, amber check soon, red danger.
 // The blue line is the route the operator walked last shift; missed stops are dashed.
 
 import Link from "next/link";
 import { fmtHours } from "@/lib/api";
 import type { FacilityCard, Shift, System } from "@/lib/types";
+import { SEVERITY } from "./Badges";
 
 type Tone = "ok" | "amber" | "orange" | "red";
 const BORDER: Record<Tone, string> = { ok: "border-emerald-500", amber: "border-amber-400", orange: "border-amber-500", red: "border-red-500" };
 const DOT: Record<Tone, string> = { ok: "bg-emerald-500", amber: "bg-amber-400", orange: "bg-amber-500", red: "bg-red-500" };
 const STROKE: Record<Tone, string> = { ok: "#4d535c", amber: "#f2b33d", orange: "#f2b33d", red: "#e5484d" };
 
-function tone(f: FacilityCard, shift: Shift | null): Tone {
-  const flags = shift?.flags.filter((x) => x.equipment_id === f.id) ?? [];
-  if (f.status === "tripped" || f.status === "failure" || flags.some((x) => x.status === "confirmed")) return "red";
-  const minor = f.risk_level === "green"; // a small decrease is fine: no colour
-  if (f.status === "leak" && !minor) return "orange";
-  if ((f.status === "worn" && !minor) || flags.some((x) => x.status === "pending")) return "amber";
-  return "ok";
-}
+// Chip colour = the backend's severity for this facility (never worked out here).
+const tone = (f: FacilityCard): Tone => SEVERITY[f.severity].tone;
 
 const W = 100;
 const H = 56.25;
@@ -111,7 +106,7 @@ export default function SiteMap({ system, shift }: { system: System; shift: Shif
       <div className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={pct(disp)}>
         <span className="h-7 w-7 rotate-45 rounded-sm border-2 border-zinc-300 bg-zinc-950" />
         <span className="mt-2 whitespace-nowrap rounded bg-zinc-950/85 px-2 py-0.5 text-sm font-semibold text-zinc-200">Disposal site</span>
-        <span className="whitespace-nowrap rounded bg-zinc-950/85 px-1.5 text-xs text-zinc-400">{system.disposal_site.pressure_psi} psi</span>
+        <span className="whitespace-nowrap rounded bg-zinc-950/85 px-1.5 text-sm text-zinc-400">{system.disposal_site.pressure_psi} psi</span>
       </div>
       <div className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={pct(yard)}>
         <span className="h-6 w-6 rounded border-2 border-zinc-300 bg-zinc-950" />
@@ -121,7 +116,8 @@ export default function SiteMap({ system, shift }: { system: System; shift: Shif
       </div>
 
       {facs.map((f) => {
-        const t = tone(f, shift);
+        const t = tone(f);
+        const flagCount = shift?.flags.filter((x) => x.equipment_id === f.id && x.status !== "dismissed").length ?? 0;
         const stop = planned.indexOf(f.id) + 1;
         const isMissed = missed.includes(f.id);
         const run = f.pump_status === 1;
@@ -143,7 +139,7 @@ export default function SiteMap({ system, shift }: { system: System; shift: Shif
                 <div className={`h-full rounded-sm ${f.level_pct >= f.shutdown_pct - 0.1 ? "bg-red-500" : f.level_pct >= f.warning_pct ? "bg-amber-400" : "bg-sky-500"}`} style={{ width: `${f.level_pct}%` }} />
                 <div className="absolute inset-y-0 w-px bg-red-300" style={{ left: `${f.shutdown_pct}%` }} />
               </div>
-              <span className={`text-xs font-bold ${f.pump_status === 2 ? "text-red-400" : run ? "text-emerald-400" : "text-zinc-500"}`}>
+              <span className={`text-sm font-bold ${f.pump_status === 2 ? "text-red-400" : run ? "text-emerald-400" : "text-zinc-500"}`}>
                 {f.pump_status === 2 ? "FAULT" : run ? "ON" : "off"}
               </span>
             </div>
@@ -152,7 +148,10 @@ export default function SiteMap({ system, shift }: { system: System; shift: Shif
               {f.hours_to_limit && f.status !== "tripped" && <span className="ml-1 font-semibold text-red-300">· {fmtHours(f.hours_to_limit.p50)} left</span>}
               {f.status === "tripped" && <span className="ml-1 font-semibold text-red-300">· tripped</span>}
             </div>
-            {isMissed && <div className="text-xs text-zinc-400">stop missed</div>}
+            <div className="mt-1 text-sm font-semibold text-zinc-200">
+              {SEVERITY[f.severity].label}{flagCount ? ` · ${flagCount} flag${flagCount > 1 ? "s" : ""}` : ""}
+            </div>
+            {isMissed && <div className="text-sm text-zinc-400">stop missed</div>}
           </Link>
         );
       })}
@@ -163,7 +162,7 @@ export default function SiteMap({ system, shift }: { system: System; shift: Shif
 export function MapLegend() {
   return (
     <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-base text-zinc-300">
-      {[["bg-emerald-500", "Normal"], ["bg-amber-400", "Pump wearing out / needs review"], ["bg-amber-500", "Possible leak"], ["bg-red-500", "Pump failure / confirmed"]].map(([c, l]) => (
+      {[["bg-emerald-500", "Normal or minor"], ["bg-amber-400", "Check soon"], ["bg-red-500", "Danger"]].map(([c, l]) => (
         <li key={l} className="flex items-center gap-2"><span className={`h-4 w-4 rounded-full ${c}`} />{l}</li>
       ))}
       <li className="flex items-center gap-2"><span className="h-1 w-8 rounded bg-sky-400" />Route walked last shift</li>

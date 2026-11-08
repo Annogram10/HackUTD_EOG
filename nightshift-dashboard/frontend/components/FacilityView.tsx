@@ -111,7 +111,7 @@ export default function FacilityView() {
         <Link href="/" className="text-base text-sky-400 underline underline-offset-2 hover:text-sky-300">Network map</Link>
         <div className="mt-2 flex flex-wrap items-center gap-4">
           <h1 className="text-4xl font-bold">{f.name}</h1>
-          <FacStatusBadge status={f.status} />
+          <FacStatusBadge status={f.status} severity={f.severity} />
         </div>
         <p className="mt-1 text-lg text-zinc-400">
           {f.system_id} · tank {f.capacity_bbl} bbl · {f.wells.length} wells · up to {money(f.lost_revenue_per_hour)}/h lost if shut in · data to {formatDateTime(new Date(f.now * 1000).toISOString())}

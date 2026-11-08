@@ -1,17 +1,19 @@
 // All backend calls live here. The backend loads EOG's files; there is no demo fallback.
 
 import type {
-  AgentRun, DatasetInfo, Evidence, FacilityDetail, Flag, Handoff, Overview, Priority, Report, Risk, Shift, Timeline,
+  AgentRun, Clock, DatasetInfo, Evidence, FacilityDetail, Flag, Handoff, Overview, Priority, Report, Risk, Shift, Timeline,
 } from "./types";
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Inlined at build time. A production build without it shows a full-screen error instead of guessing localhost.
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
+export const CONFIG_ERROR = API_URL === "";
 
 // Writes carry the shared secret when the backend runs with NIGHTSHIFT_KEY (set the same value here).
 const API_KEY = process.env.NEXT_PUBLIC_NIGHTSHIFT_KEY;
 const writeHeaders = (h: Record<string, string> = {}): Record<string, string> => (API_KEY ? { ...h, "X-API-Key": API_KEY } : h);
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
+async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { cache: "no-store", signal });
   if (!res.ok) throw new Error(`${path}: ${res.status}`);
   return (await res.json()) as T;
 }
@@ -22,12 +24,14 @@ const q = (params: Record<string, string | undefined>) => {
 };
 
 export const getDatasets = () => get<DatasetInfo[]>("/datasets");
-export const getOverview = (dataset: string, now?: number) => get<Overview>(`/overview${q({ dataset, now: now?.toString() })}`);
+export const getOverview = (dataset: string, now?: number, signal?: AbortSignal) =>
+  get<Overview>(`/overview${q({ dataset, now: now?.toString() })}`, signal);
+export const getClock = () => get<Clock>("/clock");
 export const getFacility = (dataset: string, id: string, now?: number) =>
   get<FacilityDetail>(`/facilities/${id}${q({ dataset, now: now?.toString() })}`);
 export const getTimeline = (dataset: string) => get<Timeline>(`/timeline${q({ dataset })}`);
-export const getRisk = (dataset: string, now?: number, ai = true) =>
-  get<Risk>(`/risk${q({ dataset, now: now?.toString(), ai: ai ? undefined : "false" })}`);
+export const getRisk = (dataset: string, now?: number, ai = true, signal?: AbortSignal) =>
+  get<Risk>(`/risk${q({ dataset, now: now?.toString(), ai: ai ? undefined : "false" })}`, signal);
 
 export const getEvidence = (dataset: string, now?: number, ai = true) =>
   get<Evidence>(`/evidence${q({ dataset, now: now?.toString(), ai: ai ? undefined : "false" })}`);
@@ -38,7 +42,7 @@ export async function setClock(dataset: string, now: number | null): Promise<voi
     await fetch(`${API_URL}/clock`, { method: "POST", headers: writeHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ dataset, now }) });
   } catch {}
 }
-export const getShifts = (dataset: string) => get<Shift[]>(`/shifts${q({ dataset })}`);
+export const getShifts = (dataset: string, signal?: AbortSignal) => get<Shift[]>(`/shifts${q({ dataset })}`, signal);
 export const getReport = (shiftId: string, now?: number) => get<Report>(`/report${q({ shift_id: shiftId, now: now?.toString() })}`);
 export const getNextShift = (shiftId?: string, dataset?: string, now?: number) =>
   get<Priority[]>(`/next-shift${q({ shift_id: shiftId, dataset, now: now?.toString() })}`);

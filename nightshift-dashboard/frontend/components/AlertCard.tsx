@@ -3,9 +3,7 @@
 import Link from "next/link";
 import { facName, formatDateTime, formatTime, fmtHours, money } from "@/lib/api";
 import type { Alert } from "@/lib/types";
-import { useApp } from "./AppProvider";
-import { CategoryBadge } from "./Badges";
-import { WarningIcon } from "./Icons";
+import { CategoryBadge, SeverityBadge } from "./Badges";
 
 export function planWords(p: NonNullable<Alert["plan"]>): string {
   const bits: string[] = [];
@@ -15,25 +13,17 @@ export function planWords(p: NonNullable<Alert["plan"]>): string {
 }
 
 export default function AlertCard({ a, compact = false }: { a: Alert; compact?: boolean }) {
-  const { overview } = useApp();
   const failure = a.category === "pump_failure";
-  // Danger = the tank reaches shutdown before the repair ends (or already has). Same rule as the danger card.
-  const now = overview ? Date.parse(overview.now_ts) : NaN;
-  const repairLeft = a.repair_end_ts && !Number.isNaN(now) ? (Date.parse(a.repair_end_ts) - now) / 3.6e6 : null;
-  const danger = a.level ? a.level === "red" : failure && (a.tripped || (a.hours_to_limit && repairLeft !== null && a.hours_to_limit.p50 < repairLeft));
-  const minor = a.level === "green";
+  const danger = a.severity === "high"; // from the backend's one severity rule
   const urgent = danger;
   return (
     <article className="border border-zinc-700 bg-zinc-900 p-5">
       <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-3xl font-bold tabular-nums text-zinc-600">{a.order}</span>
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-sm font-semibold uppercase ring-1 ${danger ? "bg-red-500/15 text-red-300 ring-red-500/50" : minor ? "bg-zinc-800 text-zinc-300 ring-zinc-600" : "bg-amber-500/15 text-amber-300 ring-amber-500/40"}`}>
-              {!minor && <WarningIcon />}
-              {danger ? "Danger" : minor ? "Minor" : "Check soon"}
-            </span>
-            <CategoryBadge category={a.category} minor={minor} />
+            <span className="text-3xl font-bold tabular-nums text-zinc-500">{a.order}</span>
+            <SeverityBadge severity={a.severity} />
+            <CategoryBadge category={a.category} />
             <span className="text-sm text-zinc-500">
               confidence {Math.round(a.confidence * 100)}% · started {formatDateTime(a.onset_ts)} · noticed {formatDateTime(a.detected_ts)}
             </span>
@@ -48,7 +38,7 @@ export default function AlertCard({ a, compact = false }: { a: Alert; compact?: 
             <ul className="space-y-1 text-lg text-zinc-300">
               {a.evidence.map((e) => (
                 <li key={e}>
-                  <span className="mr-2 text-zinc-600">•</span>
+                  <span className="mr-2 text-zinc-500">•</span>
                   {e}
                 </li>
               ))}

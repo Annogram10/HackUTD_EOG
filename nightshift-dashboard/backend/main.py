@@ -443,6 +443,7 @@ def _facility_card(ds, tri, fid: str) -> dict:
         "hours_to_limit": fail["hours_to_limit"] if fail else None,
         "lost_revenue_per_hour": round(st["lost_revenue_per_hour"], 2),
         "alert_ids": [a["event_id"] for a in alerts],
+        "severity": worst_severity(alerts) or "none",
     }
 
 
@@ -466,7 +467,6 @@ def overview(dataset: Optional[str] = None, now: Optional[int] = None):
     for s in systems:
         for f in s["facilities"]:
             f["risk_level"] = rules["facilities"].get(f["id"], "green")
-            f["severity"] = worst_severity([a for a in tri["alerts"] if a["facility_id"] == f["id"]]) or "none"
     return {
         "dataset": ds.name, "now_ts": tri["now_ts"], "first_ts": tri["t_first_ts"], "mode": mode, "as_of": tri["now_ts"],
         "systems": systems,

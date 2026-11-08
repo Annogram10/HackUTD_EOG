@@ -1,6 +1,6 @@
 "use client";
 
-// Is this moment dangerous? Rules plus a Nemotron second opinion. Red means an alarm for the phone and glasses.
+// Is this moment dangerous? The rules decide; a Nemotron note is added when ready. Red = alarm for phone and glasses.
 
 import { money } from "@/lib/api";
 import type { RiskLevel } from "@/lib/types";
@@ -15,7 +15,7 @@ const LOOK: Record<RiskLevel, { label: string; box: string; pill: string }> = {
 };
 
 export default function RiskCard({ children, footer }: { children?: React.ReactNode; footer?: React.ReactNode }) {
-  const { asOf, playing, risk } = useApp();
+  const { asOf, playing, risk, lastOk } = useApp();
 
   // No danger check yet (first load, or the check failed): still show the time bar so playback never disappears.
   if (!risk)
@@ -41,11 +41,11 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
         </span>
         <h2 className="text-2xl font-bold text-zinc-100">{risk.headline}</h2>
       </div>
-      {ai?.available && ai.why && <p className="mt-2 text-lg text-zinc-300">{ai.why}</p>}
+      {risk.note && <p className="mt-2 text-lg text-zinc-300"><span className="text-zinc-500">AI note: </span>{risk.note}</p>}
       {mine.length > 0 && (
         <ul className="mt-2 space-y-0.5 text-base text-zinc-300">
           {mine.slice(0, 4).map((r, i) => (
-            <li key={i}><span className="mr-2 text-zinc-600">•</span>{r.text}</li>
+            <li key={i}><span className="mr-2 text-zinc-500">•</span>{r.text}</li>
           ))}
         </ul>
       )}
@@ -92,13 +92,16 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
         {playing
           ? "Playing: rules check only. The AI check runs when you pause. "
           : ai?.available
-          ? `Rules and AI check (${ai.model?.split("/").pop()}). The AI can raise the level, never lower it. `
+          ? `Level from the rules; note from ${ai.model?.split("/").pop()}. The AI never changes the level. `
+          : ai?.pending
+          ? "Level from the rules. AI note on its way. "
           : ai
-          ? `Rules only (${ai.error ?? "AI not available"}). `
+          ? `Level from the rules (AI note not available: ${ai.error ?? "no answer"}). `
           : risk.reasons.length === 0
           ? "Nothing to check right now, so the AI was not asked. "
           : "Rules only. "}
         A person decides what to do.
+        {lastOk && <> Last updated {lastOk.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}.</>}
       </p>
       {footer && <p className="mt-2 text-base text-zinc-300">{footer}</p>}
       {children && <div className="mt-4 border-t border-zinc-700/70 pt-4">{children}</div>}
