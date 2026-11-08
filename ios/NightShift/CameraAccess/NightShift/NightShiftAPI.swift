@@ -24,7 +24,8 @@ protocol NightShiftAPI: Sendable {
   func decideFlag(id: String, action: FlagAction) async throws -> BackendFlag
   /// Sends one JPEG frame for the given facility; the backend says whether it shows a problem.
   func checkVision(jpeg: Data, facility: String?) async throws -> VisionResult
-  func submitReport(_ report: ShiftReport) async throws
+  /// POST /report. `progress` gets 0...1 while the body uploads (if supported).
+  func submitReport(_ report: ShiftReport, progress: (@Sendable (Double) -> Void)?) async throws
 }
 
 /// What the operator decided about a backend flag.
@@ -43,6 +44,8 @@ enum NightShiftAPIError: LocalizedError {
 
   var errorDescription: String? {
     switch self {
+    case .badStatus(401, _), .badStatus(403, _): return "Not allowed. Check the API key in Settings."
+    case .badStatus(404, let path) where path.hasPrefix("flag/"): return "That flag isn't on the server any more. Refresh and try again."
     case .badStatus(404, let path): return "Not found (HTTP 404 on /\(path))."
     case .badStatus(let code, _): return "Server returned HTTP \(code)."
     case .cloudflare(let code): return "Cloudflare error \(code): tunnel is offline."
@@ -129,6 +132,20 @@ protocol HTTPTransport: Sendable {
 extension URLSession: HTTPTransport {
   func perform(_ request: URLRequest) async throws -> (Data, URLResponse) {
     try await data(for: request)
+  }
+}
+
+/// Reports upload progress (0...1) for one task.
+final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+  private let onProgress: @Sendable (Double) -> Void
+
+  init(_ onProgress: @escaping @Sendable (Double) -> Void) {
+    self.onProgress = onProgress
+  }
+
+  func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+    guard totalBytesExpectedToSend > 0 else { return }
+    onProgress(Double(totalBytesSent) / Double(totalBytesExpectedToSend))
   }
 }
 
@@ -223,14 +240,14 @@ struct RealAPI: NightShiftAPI {
     return result
   }
 
-  func submitReport(_ report: ShiftReport) async throws {
+  func submitReport(_ report: ShiftReport, progress: (@Sendable (Double) -> Void)?) async throws {
     var request = makeRequest("report")
     request.httpMethod = "POST"
-    // Reports carry photos, so allow longer than the default timeout.
+    // Reports carry photos: give up after 20 s without progress, then offer a retry.
     request.timeoutInterval = Config.uploadTimeout
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try JSONCoding.encoder.encode(report)
-    _ = try await send(request, path: "report")
+    _ = try await sendWithStatus(request, path: "report", progress: progress)
   }
 
   private func makeRequest(_ path: String) -> URLRequest {
@@ -246,7 +263,11 @@ struct RealAPI: NightShiftAPI {
 
   /// Sends the request and records the outcome in `BackendStatus`. Returns the body
   /// and HTTP status of a 2xx response.
-  private func sendWithStatus(_ request: URLRequest, path: String) async throws -> (data: Data, status: Int) {
+  private func sendWithStatus(
+    _ request: URLRequest,
+    path: String,
+    progress: (@Sendable (Double) -> Void)? = nil
+  ) async throws -> (data: Data, status: Int) {
     var request = request
     // Stops ngrok's browser-warning HTML page from replacing the JSON response.
     request.setValue("true", forHTTPHeaderField: "ngrok-skip-browser-warning")
@@ -257,7 +278,15 @@ struct RealAPI: NightShiftAPI {
     }
     let session: any HTTPTransport = transport ?? (isWrite ? Self.writeSession : Self.pollSession)
     do {
-      let (data, response) = try await session.perform(request)
+      let (data, response): (Data, URLResponse)
+      if let progress, transport == nil, let body = request.httpBody {
+        // Upload task so the body's progress can be reported.
+        var upload = request
+        upload.httpBody = nil
+        (data, response) = try await Self.writeSession.upload(for: upload, from: body, delegate: UploadProgressDelegate(progress))
+      } else {
+        (data, response) = try await session.perform(request)
+      }
       if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
         // Cloudflare's tunnel errors carry their code in the body, e.g. "error code: 1033".
         let body = String(decoding: data.prefix(2048), as: UTF8.self)
@@ -338,7 +367,7 @@ struct MockAPI: NightShiftAPI {
     return VisionResult(flag: true, type: types[Int.random(in: 0..<types.count)])
   }
 
-  func submitReport(_ report: ShiftReport) async throws {
+  func submitReport(_ report: ShiftReport, progress: (@Sendable (Double) -> Void)?) async throws {
     try await simulateNetwork()
     NSLog("[NightShift] MockAPI received report \(report.shiftId): \(report.flags.count) flags, \(report.notes.count) notes")
   }

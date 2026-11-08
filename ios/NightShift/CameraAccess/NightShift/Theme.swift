@@ -336,6 +336,60 @@ struct ModePill: View {
   }
 }
 
+/// One report's upload state as text + icon (never color alone).
+struct ReportStateRow: View {
+  let entry: UploadQueue.Entry
+  var onRetry: () -> Void = {}
+
+  var body: some View {
+    let (text, icon, tone) = describe(entry.state)
+    Button {
+      if case .failed = entry.state {
+        Haptics.tap()
+        onRetry()
+      }
+    } label: {
+      HStack(spacing: 10) {
+        Image(systemName: icon).foregroundStyle(tone.text).accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Shift report, \(entry.startedAt.formatted(date: .abbreviated, time: .shortened))")
+            .font(.body)
+            .foregroundStyle(NS.textBody)
+          Text(text)
+            .font(.subheadline.weight(.semibold).monospacedDigit())
+            .foregroundStyle(tone.text)
+        }
+        Spacer(minLength: 0)
+      }
+      .frame(minHeight: NS.tap)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityElement(children: .combine)
+    .accessibilityHint(entry.state.isFailed ? "Tap to retry" : "")
+  }
+
+  private func describe(_ state: UploadQueue.State) -> (String, String, Tone) {
+    switch state {
+    case .sending(let progress):
+      return (progress.map { "Sending… \(Int($0 * 100))%" } ?? "Sending…", "arrow.up.circle", .blue)
+    case .sent(let at):
+      return ("Sent \(at.formatted(date: .omitted, time: .shortened))", "checkmark.circle.fill", .green)
+    case .queued:
+      return ("Queued — will send when online", "tray.full", .amber)
+    case .failed(let message):
+      return ("Failed: \(message) Tap to retry.", "exclamationmark.circle.fill", .red)
+    }
+  }
+}
+
+extension UploadQueue.State {
+  var isFailed: Bool {
+    if case .failed = self { return true }
+    return false
+  }
+}
+
 /// Persistent red banner while GET /alarm keeps failing; stays until a poll succeeds.
 struct MonitoringLostBanner: View {
   let lastSuccess: Date?

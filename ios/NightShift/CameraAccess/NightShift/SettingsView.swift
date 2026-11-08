@@ -314,6 +314,9 @@ struct SettingsView: View {
         "\(network.isConnected ? "Online" : "Offline") · \(controller.uploads.pendingCount) pending upload\(controller.uploads.pendingCount == 1 ? "" : "s")",
         systemImage: network.isConnected ? "wifi" : "wifi.slash"
       )
+      ForEach(controller.uploads.entries) { entry in
+        ReportStateRow(entry: entry) { controller.uploads.retry(entry.id) }
+      }
       if case .unavailable(let reason) = controller.voice.status {
         Label(reason, systemImage: "mic.slash")
           .foregroundStyle(.red)

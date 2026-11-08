@@ -168,6 +168,7 @@ final class ShiftStore {
     }
     return ShiftReport(
       shiftId: shift.id,
+      clientId: UUID(),
       date: Date.ISO8601FormatStyle(timeZone: .current).year().month().day().format(shift.startedAt),
       startedAt: shift.startedAt,
       endedAt: shift.endedAt,

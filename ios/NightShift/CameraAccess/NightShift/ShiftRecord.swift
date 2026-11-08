@@ -93,6 +93,10 @@ struct ShiftReport: Codable, Sendable {
   }
 
   let shiftId: UUID
+  /// One id per report, reused on every retry so the server never stores it twice.
+  /// Optional only so reports queued by older builds still decode (they get one
+  /// before their next upload).
+  var clientId: UUID?
   /// Shift date, "yyyy-MM-dd" in the phone's time zone, from `startedAt`. Optional only
   /// so reports queued by older builds still decode.
   let date: String?

@@ -292,6 +292,10 @@ final class NightShiftController {
       isBackendReachable = false
     }
     clockCheckedAt = Date()
+    // The backend answered: send anything waiting in the outbox.
+    if isBackendReachable == true, uploads.pendingCount > 0 {
+      await uploads.drain()
+    }
   }
 
   /// Starts the app-wide polls: GET /alarm every 4 s and GET /map every 10 s. Called

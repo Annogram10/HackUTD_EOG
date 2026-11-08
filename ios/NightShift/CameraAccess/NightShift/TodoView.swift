@@ -75,6 +75,12 @@ struct TodoView: View {
       header
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 10) {
+          // Unsent reports stay visible until they're accepted.
+          ForEach(controller.uploads.entries.filter { if case .sent = $0.state { return false } else { return true } }) { entry in
+            ReportStateRow(entry: entry) { controller.uploads.retry(entry.id) }
+              .padding(.horizontal, 12)
+              .flatCard()
+          }
           if isEmpty {
             Text("Nothing needs checking right now.")
               .font(.title3.weight(.semibold))
