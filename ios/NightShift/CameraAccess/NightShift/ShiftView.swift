@@ -40,6 +40,8 @@ struct ShiftView: View {
 
         facilitySection
 
+        voiceSection
+
         Section("Flags") {
           if let shift = controller.store.current, !shift.flags.isEmpty || !shift.notes.isEmpty {
             ForEach(shift.flags.reversed()) { flag in
@@ -140,6 +142,24 @@ struct ShiftView: View {
       Label(visionStatusText, systemImage: "eye")
         .font(.caption)
         .foregroundStyle(.secondary)
+    }
+  }
+
+  private var voiceSection: some View {
+    Section("Voice") {
+      Label(
+        controller.voice.isRunning ? "Listening: on" : "Listening: off",
+        systemImage: controller.voice.isRunning ? "mic.fill" : "mic.slash"
+      )
+      .foregroundStyle(controller.voice.isRunning ? .green : .secondary)
+      Text("Heard: \(controller.voice.lastHeard ?? "nothing yet")")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      if let feedback = controller.voiceFeedback {
+        Text(feedback.text)
+          .font(.subheadline)
+          .foregroundStyle(feedback.ok ? .green : .red)
+      }
     }
   }
 

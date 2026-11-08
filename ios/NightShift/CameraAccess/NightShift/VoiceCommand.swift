@@ -28,8 +28,23 @@ enum VoiceCommand: Equatable, Sendable {
     "confirm": .confirm, "confirmed": .confirm,
     "dismiss": .dismiss, "dismissed": .dismiss,
     "note": .note,
-    "flag": .flag,
+    "flag": .flag, "flags": .flag, "flagged": .flag,
   ]
+
+  /// Filler words skipped between "flag" and the type ("flag a leak").
+  private static let flagFillers: Set<String> = ["a", "an", "the", "some", "of", "for", "possible"]
+
+  /// Common mishearings of "leak" by speech recognition.
+  private static let leakSoundalikes: Set<String> = ["lead", "leek", "leeks", "lee", "leake", "lake"]
+
+  /// The flag type a single (normalized) word stands for, if any. Accepts word forms
+  /// such as "leaking", "smoky", "damaged" and soundalikes such as "leek".
+  static func flagType(for word: String) -> String? {
+    if word.hasPrefix("leak") || leakSoundalikes.contains(word) { return "leak" }
+    if word.hasPrefix("smok") { return "smoke" }
+    if word.hasPrefix("damag") { return "damage" }
+    return nil
+  }
 
   /// Filler words skipped between "status" and the facility name.
   private static let statusFillers: Set<String> = ["of", "for", "at", "on", "the"]
@@ -59,10 +74,16 @@ enum VoiceCommand: Equatable, Sendable {
       let text = rest.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
       return text.isEmpty ? nil : .note(text: text)
     case .flag:
-      // The next word picks the type; "leaking", "smoky", "damaged" count too.
-      guard index + 1 < normalized.count else { return nil }
-      let word = normalized[index + 1]
-      return flagTypes.first { word.hasPrefix(String($0.prefix(4))) }.map { .flag(type: $0) }
+      // The first type word after "flag" (skipping fillers) picks the type: "flag leak",
+      // "flag a leak". Otherwise the word just before it: "leak flag".
+      let after = normalized[(index + 1)...].drop { flagFillers.contains($0) }
+      if let word = after.first, let type = flagType(for: word) {
+        return .flag(type: type)
+      }
+      if index > 0, let type = flagType(for: normalized[index - 1]) {
+        return .flag(type: type)
+      }
+      return nil
     }
   }
 

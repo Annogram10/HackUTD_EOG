@@ -75,6 +75,9 @@ final class NightShiftController {
     voice.onCommand = { [weak self] command in
       await self?.handle(command)
     }
+    voice.onUnrecognized = { [weak self] transcript in
+      self?.handleUnrecognized(transcript)
+    }
     vision.facility = { [weak self] in self?.currentFacilityID }
     vision.onFlag = { [weak self] type, description, facility, photo in
       await self?.handleCameraFlag(type: type, description: description, facility: facility, photo: photo)
@@ -227,11 +230,17 @@ final class NightShiftController {
     }
     if let text = alert.spokenText {
       await Speaker.shared.announce(text)
+    } else {
+      await Speaker.shared.speak("This alert has no spoken text.")
     }
   }
 
   /// Answers "status of <name>" from cached facility data.
   func speakStatus(of spokenName: String) async {
+    guard !spokenName.trimmingCharacters(in: .whitespaces).isEmpty else {
+      await Speaker.shared.speak("Say status of, then a facility name.")
+      return
+    }
     guard let facility = facility(matching: spokenName) else {
       await Speaker.shared.speak("No status for \(spokenName).")
       return
@@ -239,6 +248,8 @@ final class NightShiftController {
     setCurrentFacility(facility.id)
     if let text = facility.spokenText {
       await Speaker.shared.speak(text)
+    } else {
+      await Speaker.shared.speak("No status for \(spokenName).")
     }
   }
 
@@ -276,36 +287,68 @@ final class NightShiftController {
 
   // MARK: - Voice commands
 
+  /// Visible result of the last voice command or unrecognized phrase. `ok` is false
+  /// when the command could not complete or wasn't understood.
+  private(set) var voiceFeedback: (text: String, ok: Bool)?
+
+  /// Shows a phrase that matched no command (not spoken).
+  func handleUnrecognized(_ transcript: String) {
+    voiceFeedback = ("Not understood: \(transcript)", false)
+  }
+
+  /// Runs a voice command. Every path shows a line and speaks a short confirmation
+  /// or the reason it couldn't complete, so a command never fails silently.
   func handle(_ command: VoiceCommand) async {
     switch command {
     case .next:
+      voiceFeedback = ("Next alert", true)
       await speakNextAlert()
-    case .status(let facility):
-      await speakStatus(of: facility)
+    case .status(let name):
+      voiceFeedback = ("Status of \(name)", true)
+      await speakStatus(of: name)
     case .confirm, .dismiss:
       let status: FlagStatus = command == .confirm ? .confirmed : .dismissed
       guard let flag = store.currentFlag else {
-        await Speaker.shared.speak("No flag waiting.")
+        await reply("No flag waiting", ok: false)
         return
       }
       store.setStatus(status, for: flag.id)
-      await Speaker.shared.speak(status == .confirmed ? "Confirmed." : "Dismissed.")
+      await reply(status == .confirmed ? "Confirmed" : "Dismissed")
     case .note(let text):
       store.addNote(text, to: store.currentFlag?.id)
-      await Speaker.shared.speak("Note saved.")
+      await reply("Note saved")
     case .flag(let type):
-      guard let facility = currentFacilityID else {
-        await Speaker.shared.speak("Pick a facility first.")
-        return
-      }
-      // Same scaled size as camera evidence; encoded off the main actor.
-      var photo: Data?
-      if let frame = vision.latestFrame {
-        photo = await Task.detached(priority: .userInitiated) { FrameGrabber.scaledJPEG(frame) }.value
-      }
-      // The operator raised it, so it needs no confirm step.
-      store.addFlag(type: type, source: "voice", status: .confirmed, photo: photo, facility: facility)
-      await Speaker.shared.speak("\(type) flagged.")
+      await flagByVoice(type: type)
     }
+  }
+
+  private func flagByVoice(type: String) async {
+    guard voice.isListening else {
+      await reply("Voice commands are off", ok: false)
+      return
+    }
+    guard let facility = currentFacilityID else {
+      await reply("Pick a facility first", ok: false)
+      return
+    }
+    let label = type.prefix(1).uppercased() + type.dropFirst()
+    // The operator raised it, so it needs no confirm step.
+    guard let frame = vision.latestFrame else {
+      // No frame: keep the flag anyway, marked as having no photo.
+      let flag = store.addFlag(type: type, source: "voice", status: .confirmed, photo: nil, facility: facility)
+      store.addNote("no photo", to: flag.id)
+      await reply("\(label) flagged, no photo. Start the camera first", ok: false)
+      return
+    }
+    // Same scaled size as camera evidence; encoded off the main actor.
+    let photo = await Task.detached(priority: .userInitiated) { FrameGrabber.scaledJPEG(frame) }.value
+    store.addFlag(type: type, source: "voice", status: .confirmed, photo: photo, facility: facility)
+    await reply("\(label) flagged")
+  }
+
+  /// Shows `text` on the Shift screen and speaks it.
+  private func reply(_ text: String, ok: Bool = true) async {
+    voiceFeedback = (text, ok)
+    await Speaker.shared.speak(text + ".")
   }
 }

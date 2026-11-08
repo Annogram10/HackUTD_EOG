@@ -30,8 +30,17 @@ final class VoiceCommandListener {
 
   var isListening: Bool { status == .listening }
 
+  /// True only while listening and the audio engine is actually capturing (checked on
+  /// start/stop, restarts, and by the watchdog every few seconds).
+  private(set) var isRunning = false
+
+  /// The last complete phrase heard (excluding the app's own speech).
+  private(set) var lastHeard: String?
+
   /// Called on the main actor for each recognized command.
   @ObservationIgnored var onCommand: (@MainActor (VoiceCommand) async -> Void)?
+  /// Called on the main actor for a phrase that matches no command.
+  @ObservationIgnored var onUnrecognized: (@MainActor (String) -> Void)?
 
   /// Silence that ends an utterance.
   private static let utteranceSilence: Duration = .milliseconds(1500)
@@ -95,6 +104,7 @@ final class VoiceCommandListener {
     status = .listening
     startRecognitionTask()
     startWatchdogs()
+    updateRunning()
   }
 
   func stop() {
@@ -107,6 +117,11 @@ final class VoiceCommandListener {
     if isListening {
       status = .off
     }
+    updateRunning()
+  }
+
+  private func updateRunning() {
+    isRunning = isListening && engine?.isRunning == true
   }
 
   // MARK: - Audio engine
@@ -235,7 +250,12 @@ final class VoiceCommandListener {
     guard isListening else { return }
     startRecognitionTask()
 
-    guard !transcript.isEmpty, !overlapsSpeaker, let command = VoiceCommand.parse(transcript) else { return }
+    guard !transcript.isEmpty, !overlapsSpeaker else { return }
+    lastHeard = transcript
+    guard let command = VoiceCommand.parse(transcript) else {
+      onUnrecognized?(transcript)
+      return
+    }
     Self.logger.info("Command: \(command.summary, privacy: .public)")
     let handler = onCommand
     Task { @MainActor in await handler?(command) }
@@ -260,6 +280,7 @@ final class VoiceCommandListener {
         if self.engine?.isRunning != true {
           self.restartEngine(reason: "engine stopped")
         }
+        self.updateRunning()
       }
     }
   }
@@ -275,6 +296,7 @@ final class VoiceCommandListener {
       // The watchdog retries in a few seconds.
       Self.logger.error("Voice engine restart failed: \(error.localizedDescription)")
     }
+    updateRunning()
   }
 }
 
