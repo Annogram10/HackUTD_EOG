@@ -145,6 +145,7 @@ final class ShiftStore {
       return ShiftReport.ReportFlag(
         id: flag.id,
         createdAt: flag.createdAt,
+        timestamp: flag.createdAt,
         facility: flag.facility,
         trigger: flag.source,
         type: flag.type,
@@ -157,6 +158,7 @@ final class ShiftStore {
     }
     return ShiftReport(
       shiftId: shift.id,
+      date: Date.ISO8601FormatStyle(timeZone: .current).year().month().day().format(shift.startedAt),
       startedAt: shift.startedAt,
       endedAt: shift.endedAt,
       flags: flags,

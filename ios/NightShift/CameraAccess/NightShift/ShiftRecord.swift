@@ -72,6 +72,9 @@ struct ShiftReport: Codable, Sendable {
   struct ReportFlag: Codable, Sendable {
     let id: UUID
     let createdAt: Date
+    /// When the flag was raised (ISO 8601). Same as `createdAt`; the backend reads
+    /// `timestamp`. Optional only so reports queued by older builds still decode.
+    let timestamp: Date?
     let facility: String?
     /// "camera" or "voice", as stored in `Flag.source`.
     let trigger: String
@@ -85,6 +88,9 @@ struct ShiftReport: Codable, Sendable {
   }
 
   let shiftId: UUID
+  /// Shift date, "yyyy-MM-dd" in the phone's time zone, from `startedAt`. Optional only
+  /// so reports queued by older builds still decode.
+  let date: String?
   let startedAt: Date
   let endedAt: Date?
   let flags: [ReportFlag]
