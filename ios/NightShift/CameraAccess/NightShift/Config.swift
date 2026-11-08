@@ -67,7 +67,7 @@ enum Config {
   static let requestTimeout: TimeInterval = 10
 
   /// How often a streaming frame is sent to /vision/check.
-  static let visionCheckInterval: Duration = .seconds(4)
+  static let visionCheckInterval: Duration = .seconds(6)
 
   static func makeAPI() -> any NightShiftAPI {
     useMock ? MockAPI() : RealAPI()

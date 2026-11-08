@@ -30,9 +30,21 @@ final class NightShiftController {
   private(set) var backendURL: URL = Config.baseURL
   private(set) var isUsingDefaultBackend = Config.savedBaseURL == nil
 
-  /// Facility the operator is at: the one from the last alert or status spoken.
-  /// Sent with vision checks and saved on flags.
+  /// Facility id the operator is at (e.g. "S5_FACILITY_C"): from the last alert or
+  /// status spoken, the "I'm at" picker, or the top alert at Start Shift. Sent with
+  /// vision checks and saved on flags; while nil, camera and voice flags are blocked.
   private(set) var currentFacilityID: String?
+
+  /// Facilities the "I'm at" picker offers: unique ids from the cached alerts, in
+  /// backend order, with the best name available.
+  var facilityChoices: [(id: String, name: String)] {
+    var seen = Set<String>()
+    return alerts.compactMap { alert in
+      guard let id = alert.facility, seen.insert(id).inserted else { return nil }
+      let name = alert.facilityName ?? facilities.first { $0.id == id }?.name ?? id
+      return (id, name)
+    }
+  }
 
   // MARK: - Components
 
@@ -64,8 +76,8 @@ final class NightShiftController {
       await self?.handle(command)
     }
     vision.facility = { [weak self] in self?.currentFacilityID }
-    vision.onFlag = { [weak self] type, frame in
-      await self?.handleCameraFlag(type: type, frame: frame)
+    vision.onFlag = { [weak self] type, description, facility, photo in
+      await self?.handleCameraFlag(type: type, description: description, facility: facility, photo: photo)
     }
   }
 
@@ -90,6 +102,10 @@ final class NightShiftController {
     store.startShift()
     await voice.start()
     await refresh()
+    // Default to the top alert's facility so flags can be raised right away.
+    if let topFacility = alerts.first?.facility {
+      setCurrentFacility(topFacility)
+    }
     if let briefing = handoff?.spokenText {
       await Speaker.shared.speak(briefing)
     }
@@ -207,7 +223,7 @@ final class NightShiftController {
     let alert = alerts[nextAlertIndex]
     nextAlertIndex += 1
     if let facility = alert.facility {
-      currentFacilityID = facility
+      setCurrentFacility(facility)
     }
     if let text = alert.spokenText {
       await Speaker.shared.announce(text)
@@ -220,7 +236,7 @@ final class NightShiftController {
       await Speaker.shared.speak("No status for \(spokenName).")
       return
     }
-    currentFacilityID = facility.id
+    setCurrentFacility(facility.id)
     if let text = facility.spokenText {
       await Speaker.shared.speak(text)
     }
@@ -236,11 +252,25 @@ final class NightShiftController {
     }
   }
 
+  // MARK: - Facility
+
+  /// Sets the current facility, accepting only a non-empty id known from /alerts (or
+  /// the facility statuses fetched for them), never a spoken name.
+  func setCurrentFacility(_ id: String?) {
+    guard let id, !id.isEmpty else { return }
+    guard alerts.contains(where: { $0.facility == id }) || facilities.contains(where: { $0.id == id }) else {
+      NSLog("[NightShift] Ignoring unknown facility id \(id)")
+      return
+    }
+    currentFacilityID = id
+  }
+
   // MARK: - Flags
 
-  /// Backend flagged a frame: save it, chime, and ask for a decision.
-  private func handleCameraFlag(type: String, frame: UIImage) async {
-    store.addFlag(type: type, source: "camera", status: .waiting, frame: frame, facility: currentFacilityID)
+  /// Backend flagged a frame: save it with the facility the check was sent for, chime,
+  /// and ask for a decision.
+  private func handleCameraFlag(type: String, description: String?, facility: String, photo: Data) async {
+    store.addFlag(type: type, source: "camera", status: .waiting, photo: photo, facility: facility, description: description)
     await Speaker.shared.announce("possible \(type), confirm or dismiss")
   }
 
@@ -264,8 +294,17 @@ final class NightShiftController {
       store.addNote(text, to: store.currentFlag?.id)
       await Speaker.shared.speak("Note saved.")
     case .flag(let type):
+      guard let facility = currentFacilityID else {
+        await Speaker.shared.speak("Pick a facility first.")
+        return
+      }
+      // Same scaled size as camera evidence; encoded off the main actor.
+      var photo: Data?
+      if let frame = vision.latestFrame {
+        photo = await Task.detached(priority: .userInitiated) { FrameGrabber.scaledJPEG(frame) }.value
+      }
       // The operator raised it, so it needs no confirm step.
-      store.addFlag(type: type, source: "voice", status: .confirmed, frame: vision.latestFrame, facility: currentFacilityID)
+      store.addFlag(type: type, source: "voice", status: .confirmed, photo: photo, facility: facility)
       await Speaker.shared.speak("\(type) flagged.")
     }
   }

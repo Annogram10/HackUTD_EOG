@@ -1,7 +1,7 @@
 //
 // FlagRow.swift
 //
-// One flag: photo, type, facility, status, and notes.
+// One flag: photo, type, description (camera flags), facility, status, and notes.
 //
 
 import SwiftUI
@@ -30,6 +30,11 @@ struct FlagRow: View {
           Text(flag.status.rawValue)
             .font(.caption.bold())
             .foregroundStyle(statusColor)
+        }
+        if let description = flag.description, !description.isEmpty {
+          Text(description)
+            .font(.caption)
+            .lineLimit(1)
         }
         Text("\(facilityName ?? "Unknown facility") · \(flag.createdAt.formatted(date: .omitted, time: .shortened))")
           .font(.caption)

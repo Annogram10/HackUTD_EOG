@@ -38,6 +38,8 @@ struct ShiftView: View {
           .disabled(controller.isRefreshing)
         }
 
+        facilitySection
+
         Section("Flags") {
           if let shift = controller.store.current, !shift.flags.isEmpty || !shift.notes.isEmpty {
             ForEach(shift.flags.reversed()) { flag in
@@ -110,6 +112,41 @@ struct ShiftView: View {
       }
       .disabled(controller.isTestingConnection)
     }
+  }
+
+  private var facilitySection: some View {
+    Section("Facility") {
+      Picker("I'm at", selection: Binding(
+        get: { controller.currentFacilityID },
+        set: { controller.setCurrentFacility($0) }
+      )) {
+        if controller.currentFacilityID == nil {
+          Text("Pick a facility").tag(String?.none)
+        }
+        ForEach(controller.facilityChoices, id: \.id) { choice in
+          Text("\(choice.name) (\(choice.id))").tag(Optional(choice.id))
+        }
+      }
+      if controller.currentFacilityID == nil {
+        Label(
+          controller.facilityChoices.isEmpty
+            ? "Pick a facility: no alerts loaded yet, tap Refresh. Camera and voice flags are paused."
+            : "Pick a facility. Camera and voice flags are paused until you choose one.",
+          systemImage: "mappin.slash"
+        )
+        .font(.subheadline)
+        .foregroundStyle(.red)
+      }
+      Label(visionStatusText, systemImage: "eye")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+  }
+
+  private var visionStatusText: String {
+    let sent = "\(controller.vision.checksSent) check\(controller.vision.checksSent == 1 ? "" : "s") sent"
+    guard let last = controller.vision.lastCheck else { return "Last check: none yet · \(sent)" }
+    return "Last check: \(last.outcome.rawValue) at \(last.at.formatted(date: .omitted, time: .standard)) · \(sent)"
   }
 
   private var backendHostText: String {

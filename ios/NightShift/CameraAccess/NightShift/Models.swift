@@ -27,20 +27,24 @@ enum JSONCoding {
 /// GET /alerts element. `severity` is display-only (number or word).
 struct ShiftAlert: Codable, Identifiable, Hashable, Sendable {
   let id: String
+  /// Facility id, e.g. "S5_FACILITY_C".
   let facility: String?
+  /// Facility name for display, e.g. "S5 Facility C".
+  let facilityName: String?
   let system: String?
   let type: String?
   let severity: String?
   let spokenText: String?
 
   private enum CodingKeys: String, CodingKey {
-    case id, facility, system, type, severity, spokenText
+    case id, facility, facilityName, system, type, severity, spokenText
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = c.lenientString(.id) ?? UUID().uuidString
-    facility = c.lenientString(.facility)
+    facility = c.lenientString(.facility).flatMap { $0.isEmpty ? nil : $0 }
+    facilityName = c.lenientString(.facilityName)
     system = c.lenientString(.system)
     type = c.lenientString(.type)
     severity = c.lenientString(.severity)
@@ -86,24 +90,42 @@ struct Handoff: Codable, Hashable, Sendable {
   }
 }
 
-/// POST /vision/check response. Anything other than `flag: true` means "no flag".
+/// POST /vision/check response. Only `flag`, `type`, `available` and `description` are
+/// used; confidence is ignored.
 struct VisionResult: Codable, Hashable, Sendable {
+  /// The only types that count as a camera flag (exact, lowercase).
+  static let flagTypes: Set<String> = ["leak", "smoke", "damage"]
+
   let flag: Bool
   let type: String?
+  /// nil (missing) is treated as available.
+  let available: Bool?
+  let description: String?
 
   private enum CodingKeys: String, CodingKey {
-    case flag, type
+    case flag, type, available, description
   }
 
-  init(flag: Bool, type: String?) {
+  init(flag: Bool, type: String?, available: Bool? = true, description: String? = nil) {
     self.flag = flag
     self.type = type
+    self.available = available
+    self.description = description
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     flag = (try? c.decodeIfPresent(Bool.self, forKey: .flag)) ?? false
     type = c.lenientString(.type)
+    available = try? c.decodeIfPresent(Bool.self, forKey: .available)
+    description = c.lenientString(.description).flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// The flag type if this is a real flag: flag == true, available, and type is
+  /// exactly "leak", "smoke" or "damage". Otherwise nil (skip silently).
+  var flaggedType: String? {
+    guard flag, available != false, let type, Self.flagTypes.contains(type) else { return nil }
+    return type
   }
 }
 

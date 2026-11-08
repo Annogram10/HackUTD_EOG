@@ -39,6 +39,8 @@ struct Flag: Codable, Identifiable, Hashable, Sendable {
   /// "camera" (vision check) or "voice" ("flag leak" etc.).
   let source: String
   let type: String
+  /// What the vision check saw; nil for voice flags and flags saved before this field.
+  var description: String? = nil
   var status: FlagStatus
   var decidedAt: Date?
   /// File name of the saved frame inside the shift's photo folder.
@@ -71,6 +73,8 @@ struct ShiftReport: Codable, Sendable {
     let facility: String?
     let source: String
     let type: String
+    /// Omitted from the JSON when nil.
+    let description: String?
     let status: FlagStatus
     let decidedAt: Date?
     let notes: [VoiceNote]

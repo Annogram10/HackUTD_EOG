@@ -9,7 +9,6 @@
 
 import Foundation
 import Observation
-import UIKit
 
 @Observable
 @MainActor
@@ -62,10 +61,17 @@ final class ShiftStore {
     current?.flags.last { $0.status == .waiting }
   }
 
-  /// Saves a flag and, if given, its frame. Starts a shift if none is running so no
-  /// evidence is lost.
+  /// Saves a flag and, if given, its evidence photo (JPEG, already scaled). Starts a
+  /// shift if none is running so no evidence is lost.
   @discardableResult
-  func addFlag(type: String, source: String, status: FlagStatus, frame: UIImage?, facility: String?) -> Flag {
+  func addFlag(
+    type: String,
+    source: String,
+    status: FlagStatus,
+    photo: Data?,
+    facility: String,
+    description: String? = nil
+  ) -> Flag {
     let shift = startShift()
     let id = UUID()
     var flag = Flag(
@@ -74,12 +80,13 @@ final class ShiftStore {
       facility: facility,
       source: source,
       type: type,
+      description: description,
       status: status,
       decidedAt: status == .waiting ? nil : Date(),
       photoFilename: nil,
       notes: []
     )
-    if let jpeg = frame?.jpegData(compressionQuality: 0.8) {
+    if let jpeg = photo {
       let filename = "\(id).jpg"
       let directory = photosDirectory(for: shift.id)
       do {
@@ -138,6 +145,7 @@ final class ShiftStore {
         facility: flag.facility,
         source: flag.source,
         type: flag.type,
+        description: flag.description,
         status: flag.status,
         decidedAt: flag.decidedAt,
         notes: flag.notes,
