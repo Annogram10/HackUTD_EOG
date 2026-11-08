@@ -13,7 +13,7 @@ export default function TopBar() {
     <div className="no-print sticky top-0 z-40">
       {offline && (
         <div role="alert" className="border-b border-red-700 bg-red-950 px-6 py-3 text-base font-semibold text-red-100">
-          Backend unreachable — data may be stale
+          Backend unreachable. Data may be stale
           {lastOk ? ` (last update ${lastOk.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })})` : " (no data received yet)"}.
           <span className="ml-2 font-normal text-red-200">
             Start it with <code className="bg-zinc-900 px-2 py-0.5">scripts/demo.sh</code> or{" "}

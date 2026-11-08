@@ -95,13 +95,13 @@ export default function FacilityView() {
   const bands = f.events.map((e) => ({
     from: Math.floor(new Date(e.onset_ts).getTime() / 1000),
     to: e.end_ts ? Math.floor(new Date(e.end_ts).getTime() / 1000) : f.now,
-    color: e.category === "pump_failure" ? "#e5484d" : e.category === "pipeline_leak" ? "#f2b33d" : "#f2b33d",
+    color: e.category === "pump_failure" ? "#ff3b3b" : e.category === "pipeline_leak" ? "#e8a33d" : "#e8a33d",
     label: `${e.category.replace("_", " ")} (${e.status})`,
   }));
   const lim = (label: string) => f.readings.find((r) => r.label === label);
   const linesFor = (metric: string) =>
-    metric === "level_pct" ? [{ value: f.warning_pct, label: `warning ${f.warning_pct}%`, color: "#f2b33d" }, { value: f.shutdown_pct, label: `shutdown ${f.shutdown_pct}%`, color: "#ef6b6e" }]
-    : metric === "flow_bpd" && lim("Pump flow") ? [{ value: lim("Pump flow")!.limit, label: "rated flow", color: "#3fb97f" }] : [];
+    metric === "level_pct" ? [{ value: f.warning_pct, label: `warning ${f.warning_pct}%`, color: "#e8a33d" }, { value: f.shutdown_pct, label: `shutdown ${f.shutdown_pct}%`, color: "#ef6b6e" }]
+    : metric === "flow_bpd" && lim("Pump flow") ? [{ value: lim("Pump flow")!.limit, label: "rated flow", color: "#7fc8a9" }] : [];
   const flagFacts = shifts.length ? f.flags : [];
   const failure = f.alerts.find((a) => a.category === "pump_failure");
 

@@ -4,65 +4,92 @@
    red danger). One blue accent for things you can click. */
 @theme {
   --font-sans: var(--font-plex-sans), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --font-heading: var(--font-chakra-petch), "Chakra Petch", var(--font-plex-sans), sans-serif;
 
-  --color-zinc-950: #0e0f11;
-  --color-zinc-900: #17191c;
-  --color-zinc-800: #22252a;
-  --color-zinc-700: #32363d;
-  --color-zinc-600: #4d535c;
-  --color-zinc-500: #8b929c;
-  --color-zinc-400: #a9afb8;
-  --color-zinc-300: #c8ccd2;
-  --color-zinc-200: #dfe2e6;
-  --color-zinc-100: #eceef1;
+  /* Avon Grid: plum greys. 950 page, 900 panel, 800 raised, 700 border; 100-500 text tiers (AA on panels). */
+  --color-zinc-950: #15111a;
+  --color-zinc-900: #221b26;
+  --color-zinc-800: #2d2333;
+  --color-zinc-700: #3a2e3c;
+  --color-zinc-600: #6e6475;
+  --color-zinc-500: #968b9e;
+  --color-zinc-400: #a99bb4;
+  --color-zinc-300: #c9c2cc;
+  --color-zinc-200: #dddad2;
+  --color-zinc-100: #eeede5;
 
-  /* square corners on every box, button and field */
+  /* square-ish corners (pills only for status badges) */
   --radius-xs: 0;
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
-  --radius-2xl: 0;
-  --radius-3xl: 0;
-  --radius-4xl: 0;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
+  --radius-3xl: 4px;
+  --radius-4xl: 4px;
 
-  /* the one accent */
-  --color-sky-200: #bcd5f8;
-  --color-sky-300: #8db8f5;
-  --color-sky-400: #5a9bf0;
-  --color-sky-500: #2f6fd6;
+  /* links and labels: lavender */
+  --color-sky-200: #d6cddd;
+  --color-sky-300: #c0b3ca;
+  --color-sky-400: #a99bb4;
+  --color-sky-500: #7d6e88;
 
-  /* anything still using violet is plain grey */
-  --color-violet-300: #c8ccd2;
-  --color-violet-400: #a9afb8;
-  --color-violet-500: #4d535c;
+  /* brand */
+  --color-salmon: #bd6b6b;
+  --color-rust: #8f4a3c;
+  --color-raised: #5a3e48;
+  --color-magenta: #ff2bd6;
+  --color-neon: #19e6ff;
+  --color-violet-300: #c9c2cc;
+  --color-violet-400: #a99bb4;
+  --color-violet-500: #6e6475;
 
-  /* status colours */
-  --color-amber-200: #fadfa3;
-  --color-amber-300: #f6c76a;
-  --color-amber-400: #f2b33d;
-  --color-amber-500: #d99a1e;
-  --color-emerald-300: #7fd3ab;
-  --color-emerald-400: #3fb97f;
-  --color-emerald-500: #2c9c67;
-  --color-red-300: #f5a3a5;
-  --color-red-400: #ef6b6e;
-  --color-red-500: #e5484d;
+  /* status only: danger, check soon, normal (always with a text label) */
+  --color-red-100: #ffe1e1;
+  --color-red-200: #ffc2c2;
+  --color-red-300: #ff8f8f;
+  --color-red-400: #ff6363;
+  --color-red-500: #ff3b3b;
+  --color-amber-200: #f7dcae;
+  --color-amber-300: #f0c27a;
+  --color-amber-400: #e8a33d;
+  --color-amber-500: #c98a2a;
+  --color-emerald-300: #a9dcc5;
+  --color-emerald-400: #7fc8a9;
+  --color-emerald-500: #5faf8e;
 }
 
 :root {
   color-scheme: dark;
-  --alarm-red: #e5484d;
+  --alarm-red: #ff3b3b;
+  --bg: #15111a;
+  --panel: #221b26;
+  --raised: #5a3e48;
+  --border: #3a2e3c;
+  --text: #eeede5;
+  --label: #a99bb4;
+  --brand: #bd6b6b;
+  --rust: #8f4a3c;
+  --magenta: #ff2bd6;
+  --cyan: #19e6ff;
+  --danger: #ff3b3b;
+  --check: #e8a33d;
+  --normal: #7fc8a9;
 }
 
 body {
-  background: #0e0f11;
-  color: #eceef1;
+  background: var(--bg);
+  color: var(--text);
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums; /* every reading, countdown and cost lines up */
 }
 code, kbd, .font-mono { font-family: var(--font-mono); }
+/* every number (readings, times, countdowns, costs) uses the mono face with tabular figures */
+.tabular-nums, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+h1, h2, h3, .font-heading { font-family: var(--font-heading); letter-spacing: 0.01em; }
+/* small uppercase HUD labels above panels: SYS//STATUS */
+.hud { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--label); }
 
 /* ALARM: three pulses on the screen border, then it stays on */
 body::after {
@@ -122,8 +149,8 @@ html[data-alarm="red"] body::after {
 .city-sign { animation: city-sign 4s ease-in-out infinite; }
 @keyframes city-sign { 50% { opacity: 0.4; } }
 .fac-card { box-shadow: 0 0 0 4px rgba(14, 15, 17, 0.9), 0 10px 28px rgba(0, 0, 0, 0.65); }
-.fac-danger { box-shadow: 0 0 0 4px rgba(14, 15, 17, 0.9), 0 0 22px #e5484d66, 0 10px 28px rgba(0, 0, 0, 0.65); }
-.fac-sign { text-shadow: 0 0 8px #e5484d; animation: fac-sign 0.24s step-end 3; }
+.fac-danger { box-shadow: 0 0 0 4px rgba(14, 15, 17, 0.9), 0 0 22px #ff3b3b66, 0 10px 28px rgba(0, 0, 0, 0.65); }
+.fac-sign { text-shadow: 0 0 8px #ff3b3b; animation: fac-sign 0.24s step-end 3; }
 @keyframes fac-sign { 0% { opacity: 1; } 40% { opacity: 0.15; } 70% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .city-flow, .city-danger, .city-sign, .fac-sign { animation: none; }
