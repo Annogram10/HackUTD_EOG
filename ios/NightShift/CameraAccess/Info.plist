@@ -44,6 +44,11 @@
 		<key>TeamID</key>
 		<string>$(DEVELOPMENT_TEAM)</string>
 	</dict>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Needed to connect to Meta AI Glasses</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
@@ -55,7 +60,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs camera access to stream from your phone's camera as a mock device feed.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>This lets your phone find and connect to your glasses over Wi-Fi.</string>
+	<string>This lets your phone find and connect to your glasses over Wi-Fi, and buzz the NightShift alarm buzzer on your local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app needs microphone access to record sound from your glasses' microphone alongside video.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

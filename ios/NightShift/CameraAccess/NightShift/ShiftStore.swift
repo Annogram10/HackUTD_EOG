@@ -102,6 +102,15 @@ final class ShiftStore {
     return flag
   }
 
+  /// Marks a flag as a priority (on-screen Prioritize); also confirms it.
+  func setPriority(for flagID: Flag.ID) {
+    guard let index = current?.flags.firstIndex(where: { $0.id == flagID }) else { return }
+    current?.flags[index].priority = true
+    current?.flags[index].status = .confirmed
+    current?.flags[index].decidedAt = Date()
+    save()
+  }
+
   func setStatus(_ status: FlagStatus, for flagID: Flag.ID) {
     guard let index = current?.flags.firstIndex(where: { $0.id == flagID }) else { return }
     current?.flags[index].status = status
@@ -150,6 +159,7 @@ final class ShiftStore {
         trigger: flag.source,
         type: flag.type,
         description: flag.description,
+        priority: flag.priority,
         status: flag.status,
         decidedAt: flag.decidedAt,
         notes: flag.notes,

@@ -1,10 +1,9 @@
 //
 // SettingsView.swift
 //
-// Everything that isn't on the home map, behind the gear button: glasses and camera,
-// map system filter, shift tools, "I'm at" facility, camera checks, voice, flags,
-// upload queue and backend address. Shown as a sheet over the home screen, so the
-// camera stream (and the vision checks that read from it) keep running.
+// Settings tab: glasses, voice, default map system, backend address and uploads,
+// supervisor phone, Pico buzzer. A collapsed Developer section holds the camera
+// preview, "I'm at" picker, Check now, Simulate, demo map layers and all flags.
 //
 
 import SwiftUI
@@ -14,123 +13,79 @@ struct SettingsView: View {
   var controller: NightShiftController
   var wearablesVM: WearablesViewModel
   var cameraVM: CameraViewModel
-  @Environment(\.dismiss) private var dismiss
+  let alarmActive: Bool
   @State private var showCamera = false
+  @State private var showDeveloper = false
   var network = NetworkMonitor.shared
   var backend = BackendStatus.shared
-  @State private var confirmEndShift = false
   @State private var noteFlagID: Flag.ID?
   @State private var noteText = ""
   @State private var addressText = ""
   @State private var addressError: String?
+  @AppStorage(Config.Keys.supervisorPhone) private var supervisorPhone = ""
+  @AppStorage(Config.Keys.picoAddress) private var picoAddress = ""
+  @AppStorage(Config.Keys.defaultSystem) private var defaultSystem = ""
+  @AppStorage(Config.Keys.showDemoMapLayers) private var showDemoLayers = true
 
   var body: some View {
-    NavigationStack {
+    VStack(spacing: 0) {
+      HeaderStrip(alarmActive: alarmActive) {
+        Text("Settings")
+          .font(.title2.bold())
+          .foregroundStyle(NS.textPrimary)
+          .frame(minHeight: 40)
+          .accessibilityAddTraits(.isHeader)
+      }
       List {
-        glassesSection
+        glassesSection.listRowBackground(NS.surface)
+        voiceSection.listRowBackground(NS.surface)
+        mapSection.listRowBackground(NS.surface)
+        statusSection.listRowBackground(NS.surface)
+        supervisorSection
+        picoSection
 
-        mapSection
-
-        Section("Shift") {
-          if let since = controller.unfinishedShiftStart {
-            Label(
-              "Shift in progress since \(since.formatted(date: .abbreviated, time: .shortened))",
-              systemImage: "clock.badge.exclamationmark"
-            )
-            .foregroundStyle(.orange)
-            Button("Resume", systemImage: "play") {
-              Task { await controller.resumeShift() }
+        Section {
+          Button {
+            Haptics.tap()
+            showDeveloper.toggle()
+          } label: {
+            HStack {
+              Label("Developer", systemImage: "hammer")
+              Spacer()
+              Image(systemName: showDeveloper ? "chevron.up" : "chevron.down")
             }
-            Button("End Shift", systemImage: "moon.zzz", role: .destructive) {
-              confirmEndShift = true
-            }
-          } else if controller.isOnShift {
-            Button("End Shift", systemImage: "moon.zzz", role: .destructive) {
-              confirmEndShift = true
-            }
-          } else {
-            Button("Start Shift", systemImage: "sunset") {
-              Task { await controller.startShift() }
-            }
+            .contentShape(Rectangle())
           }
-          Button("Next alert", systemImage: "forward") {
-            Task { await controller.speakNextAlert() }
-          }
-          Button("Refresh", systemImage: "arrow.clockwise") {
-            Task { await controller.refresh() }
-          }
-          .disabled(controller.isRefreshing)
+          .accessibilityLabel(showDeveloper ? "Hide developer tools" : "Show developer tools")
         }
+        .listRowBackground(NS.surface)
 
-        facilitySection
-
-        voiceSection
-
-        Section("Flags") {
-          if let shift = controller.store.current, !shift.flags.isEmpty || !shift.notes.isEmpty {
-            let pending = shift.flags.count(where: { $0.status == .pending })
-            Label(
-              pending == 0 ? "No flags waiting" : "\(pending) flag\(pending == 1 ? "" : "s") waiting for review",
-              systemImage: pending == 0 ? "checkmark.circle" : "exclamationmark.circle"
-            )
-            .font(.subheadline.bold())
-            .foregroundStyle(pending == 0 ? Color.secondary : Color.orange)
-            ForEach(shift.flags.reversed()) { flag in
-              FlagRow(
-                flag: flag,
-                photoURL: controller.store.photoURL(for: flag, in: shift),
-                facilityName: facilityName(for: flag.facility),
-                onConfirm: { controller.decide(flag.id, as: .confirmed) },
-                onDismiss: { controller.decide(flag.id, as: .dismissed) },
-                onAddNote: {
-                  noteText = ""
-                  noteFlagID = flag.id
-                }
-              )
-              .disabled(!controller.isOnShift)
-            }
-            ForEach(shift.notes) { note in
-              Label(note.text, systemImage: "quote.bubble")
-                .font(.subheadline)
-            }
-          } else {
-            Text("No flags yet.")
-              .foregroundStyle(.secondary)
-          }
-        }
-
-        statusSection
-      }
-      .environment(\.defaultMinListRowHeight, 56)
-      .navigationTitle("Settings")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Done") { dismiss() }
-            .frame(minWidth: 56, minHeight: 56)
-            .accessibilityLabel("Close settings")
+        if showDeveloper {
+          developerSection
+          facilitySection.listRowBackground(NS.surface)
+          flagsSection
         }
       }
-      .fullScreenCover(isPresented: $showCamera) {
-        CameraView(viewModel: cameraVM, wearablesVM: wearablesVM)
-      }
-      .alert("Add note", isPresented: Binding(
-        get: { noteFlagID != nil },
-        set: { if !$0 { noteFlagID = nil } }
-      )) {
-        TextField("Note", text: $noteText)
-        Button("Save") {
-          if let noteFlagID {
-            controller.addNote(noteText, to: noteFlagID)
-          }
+      .listStyle(.grouped)
+      .scrollContentBackground(.hidden)
+      .environment(\.defaultMinListRowHeight, NS.tap)
+    }
+    .background(NS.background)
+    .tint(NS.accent)
+    .fullScreenCover(isPresented: $showCamera) {
+      CameraView(viewModel: cameraVM, wearablesVM: wearablesVM)
+    }
+    .alert("Add note", isPresented: Binding(
+      get: { noteFlagID != nil },
+      set: { if !$0 { noteFlagID = nil } }
+    )) {
+      TextField("Note", text: $noteText)
+      Button("Save") {
+        if let noteFlagID {
+          controller.addNote(noteText, to: noteFlagID)
         }
-        Button("Cancel", role: .cancel) {}
       }
-      .confirmationDialog("End shift?", isPresented: $confirmEndShift, titleVisibility: .visible) {
-        Button("End Shift and Upload", role: .destructive) {
-          Task { await controller.endShift() }
-        }
-      }
+      Button("Cancel", role: .cancel) {}
     }
     .task {
       addressText = controller.backendURL.absoluteString
@@ -138,6 +93,94 @@ struct SettingsView: View {
     }
     // Keep the field showing the address in use after Save, Paste or Reset.
     .onChange(of: controller.backendURL) { addressText = controller.backendURL.absoluteString }
+  }
+
+  // MARK: - New sections
+
+  private var supervisorSection: some View {
+    Section("Supervisor") {
+      TextField("Supervisor phone number", text: $supervisorPhone)
+        .keyboardType(.phonePad)
+        .textContentType(.telephoneNumber)
+        .font(.body.monospacedDigit())
+        .accessibilityLabel("Supervisor phone number")
+      Text("Used by Call supervisor on the Alerts tab.")
+        .font(.subheadline)
+        .foregroundStyle(NS.textSecondary)
+    }
+    .listRowBackground(NS.surface)
+  }
+
+  private var picoSection: some View {
+    Section("Pico buzzer") {
+      TextField("Pico address, e.g. 192.168.1.50", text: $picoAddress)
+        .keyboardType(.URL)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .font(.body.monospaced())
+        .accessibilityLabel("Pico address")
+      HStack(spacing: 10) {
+        ForEach(1...3, id: \.self) { level in
+          FlatButton(title: "Level \(level)", accessibilityLabel: "Test nudge level \(level)") {
+            PicoNudge.wake(level: level)
+          }
+        }
+      }
+      .buttonStyle(.borderless)
+      Text("Test nudge sends GET http://<address>/wake?level=N and ignores failures. Alarms send level 2, then level 3 every 15 seconds.")
+        .font(.subheadline)
+        .foregroundStyle(NS.textSecondary)
+    }
+    .listRowBackground(NS.surface)
+  }
+
+  private var developerSection: some View {
+    Section("Developer") {
+      if wearablesVM.registrationState == .registered {
+        Button("Open glasses camera", systemImage: "video") { showCamera = true }
+      } else {
+        Text("Connect the glasses to open the camera.")
+          .foregroundStyle(NS.textSecondary)
+      }
+      Toggle("Demo wells and pipelines on map", isOn: $showDemoLayers)
+      Button("Next alert", systemImage: "forward") {
+        Task { await controller.speakNextAlert() }
+      }
+      Button("Refresh all data", systemImage: "arrow.clockwise") {
+        Task { await controller.refresh() }
+      }
+      .disabled(controller.isRefreshing)
+    }
+    .listRowBackground(NS.surface)
+  }
+
+  private var flagsSection: some View {
+    Section("All flags this shift") {
+      if let shift = controller.store.current, !shift.flags.isEmpty || !shift.notes.isEmpty {
+        ForEach(shift.flags.reversed()) { flag in
+          FlagRow(
+            flag: flag,
+            photoURL: controller.store.photoURL(for: flag, in: shift),
+            facilityName: facilityName(for: flag.facility),
+            onConfirm: { controller.decide(flag.id, as: .confirmed) },
+            onDismiss: { controller.decide(flag.id, as: .dismissed) },
+            onAddNote: {
+              noteText = ""
+              noteFlagID = flag.id
+            }
+          )
+          .disabled(!controller.isOnShift)
+        }
+        ForEach(shift.notes) { note in
+          Label(note.text, systemImage: "quote.bubble")
+            .font(.subheadline)
+        }
+      } else {
+        Text("No flags yet.")
+          .foregroundStyle(NS.textSecondary)
+      }
+    }
+    .listRowBackground(NS.surface)
   }
 
   /// Glasses link (Meta AI registration) and the camera screen.
@@ -149,7 +192,6 @@ struct SettingsView: View {
       )
       .foregroundStyle(cameraVM.hasActiveDevice ? .green : .secondary)
       if wearablesVM.registrationState == .registered {
-        Button("Open glasses camera", systemImage: "video") { showCamera = true }
         Button("Disconnect glasses", systemImage: "xmark.circle", role: .destructive) {
           wearablesVM.disconnectGlasses()
         }
@@ -171,9 +213,13 @@ struct SettingsView: View {
   /// Which system the home map shows, and a manual map refresh.
   private var mapSection: some View {
     Section("Map") {
-      Picker("Show", selection: Binding(
-        get: { controller.mapSystemFilter },
-        set: { controller.mapSystemFilter = $0 }
+      // Saved on the phone; the Map tab starts on this system.
+      Picker("Default system", selection: Binding(
+        get: { defaultSystem.isEmpty ? nil : defaultSystem },
+        set: {
+          defaultSystem = $0 ?? ""
+          controller.mapSystemFilter = $0
+        }
       )) {
         Text("All systems").tag(String?.none)
         ForEach(controller.map?.systemIDs ?? [], id: \.self) { id in
@@ -198,7 +244,7 @@ struct SettingsView: View {
   }
 
   private var statusSection: some View {
-    Section("Status") {
+    Section("Backend and uploads") {
       Label(
         "\(network.isConnected ? "Online" : "Offline") · \(controller.uploads.pendingCount) pending upload\(controller.uploads.pendingCount == 1 ? "" : "s")",
         systemImage: network.isConnected ? "wifi" : "wifi.slash"
@@ -235,7 +281,7 @@ struct SettingsView: View {
   }
 
   private var facilitySection: some View {
-    Section("Facility") {
+    Section("Facility and camera checks") {
       Picker("I'm at", selection: Binding(
         get: { controller.currentFacilityID },
         set: { controller.setCurrentFacility($0) }

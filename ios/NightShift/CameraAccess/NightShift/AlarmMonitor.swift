@@ -33,6 +33,28 @@ final class AlarmMonitor {
   let voice: VoiceCommandListener
   /// Called after a dismiss/prioritize succeeds (reloads /map so the route updates).
   @ObservationIgnored var onDecided: (@MainActor () async -> Void)?
+  /// History hooks for the Alerts tab (display only; they don't change alarm behavior).
+  @ObservationIgnored var onAcknowledged: (@MainActor (AlarmStatus) -> Void)?
+  @ObservationIgnored var onFlagDecision: (@MainActor (FlagAction, BackendFlag, IssueReport) -> Void)?
+
+  /// The last GET /alarm answer, flashing or not (for the tabs' alarm border and cards).
+  private(set) var backendStatus: AlarmStatus?
+
+  /// True if the backend's current alarm was already acknowledged on this phone.
+  var isBackendAlarmAcknowledged: Bool {
+    guard let backendStatus, backendStatus.alarm else { return false }
+    return Self.identity(of: backendStatus) == acknowledgedID
+  }
+
+  /// Saves the backend's current alarm as acknowledged (after an on-screen decision
+  /// from the Alerts or To-do tab) and stops any flash, siren and speech.
+  func acknowledgeBackendAlarm() {
+    if active != nil {
+      acknowledge()
+    } else if let backendStatus, backendStatus.alarm {
+      acknowledgedID = Self.identity(of: backendStatus)
+    }
+  }
 
   @ObservationIgnored private let api: any NightShiftAPI
   @ObservationIgnored private let siren = AlarmSiren()
@@ -76,6 +98,7 @@ final class AlarmMonitor {
   private func poll() async {
     // A failed poll changes nothing: keep flashing (or stay quiet) until we know more.
     guard let status = try? await api.fetchAlarm() else { return }
+    backendStatus = status
     guard status.alarm else {
       stop()
       return
@@ -103,6 +126,7 @@ final class AlarmMonitor {
   func acknowledge() {
     if let active {
       acknowledgedID = Self.identity(of: active)
+      onAcknowledged?(active)
     }
     stop()
   }
@@ -116,6 +140,8 @@ final class AlarmMonitor {
     Speaker.isAlarmMode = true
     siren.start()
     showWindow()
+    // Pico buzzer: level 2 at the start, then level 3 with each repeat below.
+    PicoNudge.wake(level: 2)
     Task { await startListening() }
 
     hapticTask = Task { @MainActor in
@@ -128,8 +154,13 @@ final class AlarmMonitor {
     speechTask = Task { @MainActor [weak self] in
       // Let the siren sound first, then speak, then repeat until acknowledged.
       try? await Task.sleep(for: .seconds(2))
+      var isRepeat = false
       while !Task.isCancelled {
         guard let self, let text = self.active?.spokenText else { return }
+        if isRepeat {
+          PicoNudge.wake(level: 3)
+        }
+        isRepeat = true
         self.siren.setDucked(true)
         await Speaker.shared.speak(text)
         self.siren.setDucked(false)
@@ -228,6 +259,7 @@ final class AlarmMonitor {
     defer { isDeciding = false }
     do {
       let updated = try await api.decideFlag(id: flag.id, action: action)
+      onFlagDecision?(action, updated, issue)
       let reply = action == .dismiss ? "Dismissed." : "Marked as priority."
       NSLog("[NightShift] Flag \(updated.id) now \(updated.status ?? "?") priority \(updated.priority)")
       // Either decision acknowledges the alarm; stop everything before confirming aloud.

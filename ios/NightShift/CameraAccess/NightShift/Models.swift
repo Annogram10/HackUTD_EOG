@@ -54,15 +54,42 @@ struct ShiftAlert: Codable, Identifiable, Hashable, Sendable {
 
 /// GET /facility/{id}
 struct FacilityStatus: Codable, Identifiable, Hashable, Sendable {
+  /// One sensor reading, e.g. {label "Tank level", value 74, unit "%", limit 92}.
+  struct Reading: Codable, Hashable, Sendable {
+    let label: String
+    let value: Double?
+    let unit: String?
+    /// The shutdown limit for this reading, if any.
+    let limit: Double?
+
+    private enum CodingKeys: String, CodingKey {
+      case label, value, unit, limit
+    }
+
+    init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      label = c.lenientString(.label) ?? ""
+      value = c.lenientDouble(.value)
+      unit = c.lenientString(.unit)
+      limit = c.lenientDouble(.limit)
+    }
+  }
+
   let id: String
   let name: String?
   let status: String?
   let spokenText: String?
+  let readings: [Reading]
 
   var displayName: String { name ?? id }
 
+  /// The "Tank level" reading, if the backend sent one.
+  var tankLevel: Reading? {
+    readings.first { $0.label.lowercased().contains("tank") }
+  }
+
   private enum CodingKeys: String, CodingKey {
-    case id, name, status, spokenText
+    case id, name, status, spokenText, readings
   }
 
   init(from decoder: Decoder) throws {
@@ -71,6 +98,7 @@ struct FacilityStatus: Codable, Identifiable, Hashable, Sendable {
     name = c.lenientString(.name)
     status = c.lenientString(.status)
     spokenText = c.lenientString(.spokenText)
+    readings = (try? c.decodeIfPresent(LossyArray<Reading>.self, forKey: .readings))?.elements ?? []
   }
 }
 
@@ -295,6 +323,8 @@ extension KeyedDecodingContainer {
 struct AlarmStatus: Codable, Hashable, Sendable {
   let alarm: Bool
   let alarmId: String?
+  /// Backend data time (ISO 8601), shown as the alarm's timestamp.
+  let asOf: String?
   let level: String?
   let headline: String?
   /// Written for speech (numbers spelled out); spoken as received.
@@ -303,13 +333,14 @@ struct AlarmStatus: Codable, Hashable, Sendable {
   let facilityIds: [String]
 
   private enum CodingKeys: String, CodingKey {
-    case alarm, alarmId, level, headline, spokenText, reasons, facilityIds
+    case alarm, alarmId, asOf, level, headline, spokenText, reasons, facilityIds
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     alarm = (try? c.decodeIfPresent(Bool.self, forKey: .alarm)) ?? false
     alarmId = c.lenientString(.alarmId).flatMap { $0.isEmpty ? nil : $0 }
+    asOf = c.lenientString(.asOf)
     level = c.lenientString(.level)
     headline = c.lenientString(.headline)
     spokenText = c.lenientString(.spokenText).flatMap { $0.isEmpty ? nil : $0 }

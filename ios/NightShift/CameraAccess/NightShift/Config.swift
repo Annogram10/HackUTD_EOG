@@ -70,6 +70,35 @@ enum Config {
   /// Turn off before a real demo.
   static let showTestTools = true
 
+  // MARK: - On-phone settings (Settings tab), stored in UserDefaults
+
+  enum Keys {
+    static let supervisorPhone = "NightShift.supervisorPhone"
+    static let picoAddress = "NightShift.picoAddress"
+    static let defaultSystem = "NightShift.defaultSystem"
+    static let showDemoMapLayers = "NightShift.showDemoMapLayers"
+  }
+
+  /// Pico buzzer address (PICO_IP, optionally with :port), or nil if not set.
+  static var picoAddress: String? {
+    let raw = UserDefaults.standard.string(forKey: Keys.picoAddress)?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .replacingOccurrences(of: "http://", with: "")
+      .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    return raw?.isEmpty == false ? raw : nil
+  }
+
+  /// System the map starts on (nil = all).
+  static var defaultSystem: String? {
+    UserDefaults.standard.string(forKey: Keys.defaultSystem).flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// Wells and pipelines aren't in /map yet, so the map draws placeholder ("demo")
+  /// layers for them while this is on. Defaults to on.
+  static var showDemoMapLayers: Bool {
+    UserDefaults.standard.object(forKey: Keys.showDemoMapLayers) as? Bool ?? true
+  }
+
   /// How often GET /alarm is polled while the app is open.
   static let alarmPollInterval: Duration = .seconds(4)
   /// How often an unacknowledged alarm's spoken_text is repeated.

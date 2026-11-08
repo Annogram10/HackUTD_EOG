@@ -43,6 +43,9 @@ struct Flag: Codable, Identifiable, Hashable, Sendable {
   let type: String
   /// What the vision check saw; nil for voice flags and flags saved before this field.
   var description: String? = nil
+  /// Set by the on-screen Prioritize button (local only; there is no backend endpoint
+  /// for phone flags). nil for older saved flags.
+  var priority: Bool? = nil
   var status: FlagStatus
   var decidedAt: Date?
   /// File name of the saved frame inside the shift's photo folder.
@@ -81,6 +84,8 @@ struct ShiftReport: Codable, Sendable {
     let type: String
     /// Omitted from the JSON when nil.
     let description: String?
+    /// true if the operator prioritized it on screen; omitted when nil.
+    let priority: Bool?
     let status: FlagStatus
     let decidedAt: Date?
     let notes: [VoiceNote]

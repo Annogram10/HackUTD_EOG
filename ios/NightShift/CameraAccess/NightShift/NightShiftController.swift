@@ -25,8 +25,10 @@ final class NightShiftController {
   /// GET /map: facilities ranked by importance, in backend order (loaded from cache first).
   private(set) var map: FacilityMap?
   private(set) var isLoadingMap = false
-  /// System shown on the home map (nil = all). Set from Settings.
-  var mapSystemFilter: String?
+  /// System shown on the map (nil = all). Starts at the Settings default.
+  var mapSystemFilter: String? = Config.defaultSystem
+  /// When /map last loaded successfully (for "Updated Xs ago").
+  private(set) var mapUpdatedAt: Date?
   /// Error text of the last failed map load; nil after a success.
   private(set) var mapError: String?
 
@@ -72,6 +74,8 @@ final class NightShiftController {
     static let facilities = "facilities"
     static let handoff = "handoff"
     static let map = "map"
+    static let history = "alert_history"
+    static let todo = "todo_progress"
   }
 
   init(api: any NightShiftAPI = Config.makeAPI(), cache: DataCache = DataCache()) {
@@ -84,6 +88,25 @@ final class NightShiftController {
       // A prioritized facility moves to stop 1.
       await self?.refreshMap()
     }
+    alarm.onFlagDecision = { [weak self] action, flag, issue in
+      // The decision acknowledges a flashing alarm right after this; don't log it twice.
+      self?.suppressNextAcknowledgedEntry = self?.alarm.active != nil
+      self?.recordHistory(
+        kind: .alarm,
+        title: issue.name ?? flag.equipmentId ?? "Alarm",
+        facilityID: issue.facilityId ?? flag.equipmentId,
+        outcome: action == .dismiss ? .dismissed : .prioritized
+      )
+    }
+    alarm.onAcknowledged = { [weak self] status in
+      guard let self else { return }
+      // A dismiss/prioritize already logged this alarm.
+      if self.suppressNextAcknowledgedEntry {
+        self.suppressNextAcknowledgedEntry = false
+        return
+      }
+      self.recordHistory(kind: .alarm, title: status.headline ?? "Alarm", facilityID: status.facilityIds.first, outcome: .acknowledged)
+    }
     uploads.onUploaded = { [weak self] in
       // The ranking uses the latest uploaded shift, so reload it.
       await self?.refreshMap()
@@ -92,6 +115,8 @@ final class NightShiftController {
     facilities = cache.load([FacilityStatus].self, from: CacheKey.facilities) ?? []
     handoff = cache.load(Handoff.self, from: CacheKey.handoff)
     map = cache.load(FacilityMap.self, from: CacheKey.map)
+    history = cache.load([AlertHistoryEntry].self, from: CacheKey.history) ?? []
+    todo = cache.load(TodoProgress.self, from: CacheKey.todo) ?? TodoProgress()
     // A shift saved by an earlier launch is not continued automatically.
     isAwaitingResume = store.current != nil
 
@@ -134,6 +159,11 @@ final class NightShiftController {
   /// Opens the shift record, turns on voice commands, refreshes, then speaks the
   /// handoff and the first alert.
   func startShift() async {
+    // A new shift starts with an empty to-do progress.
+    if store.current == nil {
+      todo = TodoProgress()
+      cache.save(todo, as: CacheKey.todo)
+    }
     isAwaitingResume = false
     store.startShift()
     await voice.start()
@@ -257,6 +287,7 @@ final class NightShiftController {
       let newMap = try await api.fetchMap()
       map = newMap
       mapError = nil
+      mapUpdatedAt = Date()
       cache.save(newMap, as: CacheKey.map)
     } catch {
       mapError = NightShiftAPIError.describe(error)
@@ -421,10 +452,116 @@ final class NightShiftController {
   @discardableResult
   func decide(_ flagID: Flag.ID, as status: FlagStatus) -> Bool {
     guard status != .pending,
-      store.current?.flags.first(where: { $0.id == flagID })?.status == .pending
+      let flag = store.current?.flags.first(where: { $0.id == flagID }),
+      flag.status == .pending
     else { return false }
     store.setStatus(status, for: flagID)
+    recordHistory(kind: .flag, title: flagTitle(flag), facilityID: flag.facility, outcome: status == .confirmed ? .confirmed : .dismissed)
     return true
+  }
+
+  /// On-screen Prioritize for a phone flag: confirms it and marks it a priority. There
+  /// is no backend endpoint for phone flags, so the priority travels in the report.
+  @discardableResult
+  func prioritize(_ flagID: Flag.ID) -> Bool {
+    guard let flag = store.current?.flags.first(where: { $0.id == flagID }), flag.status == .pending else { return false }
+    store.setPriority(for: flagID)
+    recordHistory(kind: .flag, title: flagTitle(flag), facilityID: flag.facility, outcome: .prioritized)
+    return true
+  }
+
+  private func flagTitle(_ flag: Flag) -> String {
+    let name = flag.facility.flatMap { id in map?.facilities.first { $0.id == id }?.displayName } ?? flag.facility
+    return "Possible \(flag.type)" + (name.map { " at \($0)" } ?? "")
+  }
+
+  // MARK: - Alarm decisions from the screen
+
+  /// Dismiss or Prioritize on the alarm card (Alerts / To-do): asks /issue for the
+  /// alarm's flag (quietly), POSTs the decision, acknowledges the alarm and reloads
+  /// /map. Returns an error line, or nil on success.
+  func decideCurrentAlarm(_ action: FlagAction) async -> String? {
+    do {
+      let issue = try await api.fetchIssue(facility: alarm.backendStatus?.facilityIds.first)
+      guard let flag = issue.flag else { return "There is nothing to act on." }
+      _ = try await api.decideFlag(id: flag.id, action: action)
+      suppressNextAcknowledgedEntry = alarm.active != nil
+      recordHistory(
+        kind: .alarm,
+        title: issue.name ?? alarm.backendStatus?.headline ?? "Alarm",
+        facilityID: issue.facilityId,
+        outcome: action == .dismiss ? .dismissed : .prioritized
+      )
+      alarm.acknowledgeBackendAlarm()
+      suppressNextAcknowledgedEntry = false
+      await refreshMap()
+      return nil
+    } catch {
+      return NightShiftAPIError.describe(error)
+    }
+  }
+
+  // MARK: - To-do progress (this shift, on this phone only)
+
+  /// "I'm here" and "Done" per facility id. Local only; reset at Start Shift.
+  struct TodoProgress: Codable, Sendable {
+    var here: [String: Date] = [:]
+    var done: [String: Date] = [:]
+  }
+
+  private(set) var todo = TodoProgress()
+
+  /// "I'm here": tag new flags with this facility and mark it visited.
+  func markHere(_ facilityID: String) {
+    setCurrentFacility(facilityID)
+    todo.here[facilityID] = Date()
+    cache.save(todo, as: CacheKey.todo)
+  }
+
+  /// "Done": moves the facility to the Done section for this shift.
+  func markDone(_ facilityID: String) {
+    todo.done[facilityID] = Date()
+    cache.save(todo, as: CacheKey.todo)
+  }
+
+  func undoDone(_ facilityID: String) {
+    todo.done[facilityID] = nil
+    cache.save(todo, as: CacheKey.todo)
+  }
+
+  // MARK: - Alert history (on this phone only)
+
+  struct AlertHistoryEntry: Codable, Identifiable, Sendable {
+    enum Kind: String, Codable, Sendable { case alarm, flag }
+    enum Outcome: String, Codable, Sendable {
+      case confirmed = "Confirmed"
+      case dismissed = "Dismissed"
+      case prioritized = "Prioritized"
+      case acknowledged = "Acknowledged"
+    }
+    var id = UUID()
+    let kind: Kind
+    let title: String
+    let facilityID: String?
+    let outcome: Outcome
+    let at: Date
+  }
+
+  /// Newest first.
+  private(set) var history: [AlertHistoryEntry] = []
+  @ObservationIgnored private var suppressNextAcknowledgedEntry = false
+
+  private func recordHistory(kind: AlertHistoryEntry.Kind, title: String, facilityID: String?, outcome: AlertHistoryEntry.Outcome) {
+    history.insert(AlertHistoryEntry(kind: kind, title: title, facilityID: facilityID, outcome: outcome, at: Date()), at: 0)
+    history = Array(history.prefix(200))
+    cache.save(history, as: CacheKey.history)
+  }
+
+  /// Unresolved items for the Alerts tab badge: pending flags plus an unacknowledged alarm.
+  var unresolvedCount: Int {
+    let pending = store.current?.flags.count(where: { $0.status == .pending }) ?? 0
+    let alarmOpen = alarm.backendStatus?.alarm == true && !alarm.isBackendAlarmAcknowledged
+    return pending + (alarmOpen ? 1 : 0)
   }
 
   /// Adds an on-screen note to a flag. Returns false if empty or no shift is active.

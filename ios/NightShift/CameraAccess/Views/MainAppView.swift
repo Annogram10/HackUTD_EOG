@@ -9,7 +9,7 @@
 //
 // MainAppView.swift
 //
-// Root view: NightShift's single home screen (map, route, check-first card).
+// Root view: NightShift's four tabs (To-do, Map, Alerts, Settings).
 //
 
 import MWDATCore
@@ -20,8 +20,8 @@ struct MainAppView: View {
   var viewModel: WearablesViewModel
 
   var body: some View {
-    // NightShift has one screen. Connecting the glasses (Meta AI registration) is in
-    // its Settings, so the map and alarms work before the glasses are linked.
-    HomeView(wearables: wearables, wearablesVM: viewModel)
+    // Connecting the glasses (Meta AI registration) is in the Settings tab, so the
+    // to-do list, map and alarms work before the glasses are linked.
+    RootTabView(wearables: wearables, wearablesVM: viewModel)
   }
 }
