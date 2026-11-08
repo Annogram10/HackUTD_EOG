@@ -76,13 +76,20 @@ struct ShiftTabView: View {
 
   private var statusCard: some View {
     SysCard(label: "SYS//SHIFT", key: controller.isOnShift) {
-      if controller.isOnShift, let start = controller.store.current?.startedAt {
-        Text("ON SHIFT · started \(start.formatted(date: .omitted, time: .shortened))")
+      if controller.isOnShift, let shift = controller.store.current {
+        Text("ON SHIFT · started \(shift.startText)")
           .font(.ns(.title3, .bold))
           .foregroundStyle(NS.green)
-        ShiftTimer(start: start)
-      } else if let since = controller.unfinishedShiftStart {
-        Text("SHIFT LEFT OPEN · since \(since.formatted(date: .abbreviated, time: .shortened))")
+        // Elapsed time on the phone's clock.
+        ShiftTimer(start: shift.startedAt)
+        if controller.isPlayingBriefing {
+          FlatButton(title: "Skip briefing", icon: "forward.end.fill", kind: .secondary,
+                     accessibilityLabel: "Skip the briefing") {
+            controller.skipBriefing()
+          }
+        }
+      } else if controller.unfinishedShiftStart != nil, let shift = controller.store.current {
+        Text("SHIFT LEFT OPEN · since \(shift.startText)")
           .font(.ns(.title3, .bold))
           .foregroundStyle(NS.amber)
       } else {
@@ -305,7 +312,7 @@ struct ShiftTabView: View {
           AdaptiveStack(spacing: 6, stackedAlignment: .leading) {
             Badge(text: flagStatusText(flag), tone: flagTone(flag))
             Badge(text: flag.source == "voice" ? "Voice" : "Camera", tone: .blue)
-            Text(flag.createdAt.formatted(date: .omitted, time: .shortened))
+            Text(flag.timeText)
               .font(.nsMono(.caption))
               .foregroundStyle(NS.textMuted)
           }

@@ -175,7 +175,7 @@ struct AlertsView: View {
         Badge(text: "NEEDS REVIEW", tone: .amber, icon: "exclamationmark.triangle.fill")
         Badge(text: flag.source == "voice" ? "Voice" : "Camera", tone: .grey)
         Spacer()
-        Text(flag.createdAt.formatted(date: .omitted, time: .shortened))
+        Text(flag.timeText)
           .font(.nsMono(.footnote))
           .foregroundStyle(NS.textSecondary)
       }

@@ -51,22 +51,42 @@ struct Flag: Codable, Identifiable, Hashable, Sendable {
   /// File name of the saved frame inside the shift's photo folder.
   var photoFilename: String?
   var notes: [VoiceNote]
+  /// The backend's clock (GET /clock) when the flag was raised: the time the report
+  /// sends, so the flag sits at the dashboard's data time. nil offline / older flags
+  /// (the report falls back to `createdAt`). `createdAt` stays phone time for local
+  /// timing ("the flag just raised").
+  var serverTime: Date? = nil
 }
 
 struct ShiftRecord: Codable, Identifiable, Sendable {
   let id: UUID
+  /// Phone time (drives the on-screen shift timer).
   let startedAt: Date
   var endedAt: Date?
   var flags: [Flag]
   /// Notes not attached to a flag.
   var notes: [VoiceNote]
+  /// The backend's clock at Start Shift / End Shift: the shift's times in the report
+  /// and on screen, so it starts wherever the dashboard's time is. nil when the backend
+  /// wasn't reachable (phone time is used instead).
+  var serverStartedAt: Date?
+  var serverEndedAt: Date?
+  /// The dataset the backend was on at Start Shift (sent with the report).
+  var dataset: String?
 
-  init(startedAt: Date = Date()) {
+  init(startedAt: Date = Date(), serverStartedAt: Date? = nil, dataset: String? = nil) {
     self.id = UUID()
     self.startedAt = startedAt
     self.endedAt = nil
     self.flags = []
     self.notes = []
+    self.serverStartedAt = serverStartedAt
+    self.dataset = dataset
+  }
+
+  /// When the shift started, as shown on screen: the backend's time in UTC if known.
+  var startText: String {
+    serverStartedAt.map { ServerTime.text($0) } ?? startedAt.formatted(date: .abbreviated, time: .shortened)
   }
 }
 
@@ -97,8 +117,10 @@ struct ShiftReport: Codable, Sendable {
   /// Optional only so reports queued by older builds still decode (they get one
   /// before their next upload).
   var clientId: UUID?
-  /// Shift date, "yyyy-MM-dd" in the phone's time zone, from `startedAt`. Optional only
-  /// so reports queued by older builds still decode.
+  /// The backend dataset the shift ran on. Optional so older queued reports decode.
+  var dataset: String? = nil
+  /// Shift date, "yyyy-MM-dd": UTC from the backend's start time, else the phone's
+  /// date. Optional only so reports queued by older builds still decode.
   let date: String?
   let startedAt: Date
   let endedAt: Date?

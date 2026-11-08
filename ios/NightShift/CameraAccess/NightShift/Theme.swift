@@ -549,7 +549,8 @@ struct ReportStateRow: View {
       HStack(spacing: 10) {
         Image(systemName: icon).foregroundStyle(tone.text).accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 2) {
-          Text("Shift report, \(entry.startedAt.formatted(date: .abbreviated, time: .shortened))")
+          // The report's start is the backend's (UTC) time.
+          Text("Shift report, \(ServerTime.text(entry.startedAt))")
             .font(.ns(.body))
             .foregroundStyle(NS.textBody)
           Text(text)
@@ -673,6 +674,13 @@ enum ServerTime {
   /// "Oct 10 at 3:30 PM UTC"
   static func text(_ date: Date) -> String {
     var style = Date.FormatStyle.dateTime.month(.abbreviated).day().hour().minute()
+    style.timeZone = utc
+    return "\(date.formatted(style)) UTC"
+  }
+
+  /// "3:30 PM UTC"
+  static func timeText(_ date: Date) -> String {
+    var style = Date.FormatStyle.dateTime.hour().minute()
     style.timeZone = utc
     return "\(date.formatted(style)) UTC"
   }

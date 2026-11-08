@@ -48,7 +48,7 @@ struct FlagRow: View {
             .font(.ns(.caption))
             .lineLimit(1)
         }
-        Text("\(facilityName ?? "Unknown facility") · \(flag.createdAt.formatted(date: .omitted, time: .shortened))")
+        Text("\(facilityName ?? "Unknown facility") · \(flag.timeText)")
           .font(.ns(.caption))
           .foregroundStyle(.secondary)
         ForEach(flag.notes) { note in
@@ -91,5 +91,13 @@ struct FlagRow: View {
     case .confirmed: return .red
     case .dismissed: return .secondary
     }
+  }
+}
+
+extension Flag {
+  /// When the flag was raised: the backend's time ("3:30 PM UTC") if known, so it
+  /// lines up with the dashboard; else the phone's time.
+  var timeText: String {
+    serverTime.map { ServerTime.timeText($0) } ?? createdAt.formatted(date: .omitted, time: .shortened)
   }
 }

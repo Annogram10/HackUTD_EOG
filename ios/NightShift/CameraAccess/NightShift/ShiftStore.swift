@@ -19,6 +19,12 @@ final class ShiftStore {
   @ObservationIgnored private var currentFileURL: URL { root.appending(path: "current_shift.json") }
   @ObservationIgnored private var shiftsDirectory: URL { root.appending(path: "shifts", directoryHint: .isDirectory) }
 
+  /// The backend's current time (GET /clock), or nil when unknown. Set by the
+  /// controller; shift and flag times sent in the report come from here.
+  @ObservationIgnored var serverNow: @MainActor () -> Date? = { nil }
+  /// The backend's current dataset, or nil when unknown.
+  @ObservationIgnored var serverDataset: @MainActor () -> String? = { nil }
+
   init(root: URL = URL.documentsDirectory.appending(path: "NightShift", directoryHint: .isDirectory)) {
     self.root = root
     try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -33,7 +39,7 @@ final class ShiftStore {
   @discardableResult
   func startShift() -> ShiftRecord {
     if let current { return current }
-    let shift = ShiftRecord()
+    let shift = ShiftRecord(serverStartedAt: serverNow(), dataset: serverDataset())
     current = shift
     save()
     return shift
@@ -43,6 +49,7 @@ final class ShiftStore {
   func endShift() -> ShiftRecord? {
     guard var shift = current else { return nil }
     shift.endedAt = Date()
+    shift.serverEndedAt = serverNow()
     do {
       try FileManager.default.createDirectory(at: shiftsDirectory, withIntermediateDirectories: true)
       try JSONCoding.encoder.encode(shift).write(to: shiftsDirectory.appending(path: "\(shift.id).json"), options: .atomic)
@@ -84,7 +91,8 @@ final class ShiftStore {
       status: status,
       decidedAt: status == .pending ? nil : Date(),
       photoFilename: nil,
-      notes: []
+      notes: [],
+      serverTime: serverNow()
     )
     if let jpeg = photo {
       let filename = "\(id).jpg"
@@ -153,8 +161,8 @@ final class ShiftStore {
       let photo = photoURL(for: flag, in: shift).flatMap { try? Data(contentsOf: $0) }
       return ShiftReport.ReportFlag(
         id: flag.id,
-        createdAt: flag.createdAt,
-        timestamp: flag.createdAt,
+        createdAt: flag.serverTime ?? flag.createdAt,
+        timestamp: flag.serverTime ?? flag.createdAt,
         facility: flag.facility,
         trigger: flag.source,
         type: flag.type,
@@ -169,9 +177,11 @@ final class ShiftStore {
     return ShiftReport(
       shiftId: shift.id,
       clientId: UUID(),
-      date: Date.ISO8601FormatStyle(timeZone: .current).year().month().day().format(shift.startedAt),
-      startedAt: shift.startedAt,
-      endedAt: shift.endedAt,
+      dataset: shift.dataset,
+      date: shift.serverStartedAt.map { Date.ISO8601FormatStyle(timeZone: .gmt).year().month().day().format($0) }
+        ?? Date.ISO8601FormatStyle(timeZone: .current).year().month().day().format(shift.startedAt),
+      startedAt: shift.serverStartedAt ?? shift.startedAt,
+      endedAt: shift.serverEndedAt ?? shift.endedAt,
       flags: flags,
       notes: shift.notes,
       generatedAt: Date()

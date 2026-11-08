@@ -31,6 +31,7 @@ struct SettingsView: View {
   @State private var apiKeyText = ""
   @State private var apiKeySaved: String?
   @AppStorage(Config.Keys.defaultSystem) private var defaultSystem = ""
+  @AppStorage(Config.Keys.briefingAtShiftStart) private var briefingAtShiftStart = true
 
   var body: some View {
     VStack(spacing: 0) {
@@ -180,6 +181,10 @@ struct SettingsView: View {
       FlatButton(title: "Test voice", icon: "speaker.wave.2.fill", kind: .secondary) {
         Speaker.shared.say("NightShift voice check. Possible leak at S five Facility C.")
       }
+      // Off: Start Shift goes straight to the first alert (PLAY AGAIN on SHIFT still reads it).
+      Toggle("Read the briefing at shift start", isOn: $briefingAtShiftStart)
+        .font(.ns(.body))
+        .tint(NS.primary)
     }
   }
 

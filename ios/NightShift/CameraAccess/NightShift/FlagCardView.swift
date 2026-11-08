@@ -77,7 +77,7 @@ struct FlagCardView: View {
       Text(place)
         .font(.ns(.headline, .semibold))
         .foregroundStyle(NS.textPrimary)
-      Text(flag.createdAt.formatted(date: .omitted, time: .standard))
+      Text(flag.timeText)
         .font(.nsMono(.subheadline))
         .foregroundStyle(NS.textMuted)
     }

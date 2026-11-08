@@ -126,6 +126,9 @@ final class NightShiftController {
     voice.onUnrecognized = { [weak self] transcript in
       self?.handleUnrecognized(transcript)
     }
+    // Shift and flag times follow the backend's clock (the dashboard's time), not the phone's.
+    store.serverNow = { [weak self] in self?.serverClock?.nowDate }
+    store.serverDataset = { [weak self] in self?.serverClock?.dataset }
     vision.facility = { [weak self] in self?.currentFacilityID }
     vision.isEnabled = { [weak self] in self?.isOnShift ?? false }
     vision.onFlag = { [weak self] type, description, facility, photo in
@@ -156,8 +159,19 @@ final class NightShiftController {
   /// Start time of a shift left open by an earlier launch, while awaiting Resume.
   var unfinishedShiftStart: Date? { isAwaitingResume ? store.current?.startedAt : nil }
 
-  /// Opens the shift record, turns on voice commands, refreshes, then speaks the
-  /// handoff and the first alert.
+  /// True while the start-of-shift briefing is being read (SKIP BRIEFING shows).
+  private(set) var isPlayingBriefing = false
+
+  /// Stops the briefing; Start Shift goes straight on to the first alert.
+  func skipBriefing() {
+    guard isPlayingBriefing else { return }
+    isPlayingBriefing = false
+    Speaker.shared.stopAll()
+  }
+
+  /// Opens the shift record at the backend's current time (fresh GET /clock), turns on
+  /// voice commands, refreshes, then speaks the handoff (unless turned off in Settings
+  /// or skipped) and the first alert.
   func startShift() async {
     // A new shift starts with an empty to-do progress.
     if store.current == nil {
@@ -165,6 +179,7 @@ final class NightShiftController {
       cache.save(todo, as: CacheKey.todo)
     }
     isAwaitingResume = false
+    await refreshClock()
     store.startShift()
     await voice.start()
     await refresh()
@@ -172,8 +187,10 @@ final class NightShiftController {
     if let topFacility = alerts.first?.facility {
       setCurrentFacility(topFacility)
     }
-    if let briefing = handoff?.spokenText {
+    if Config.briefingAtShiftStart, let briefing = handoff?.spokenText {
+      isPlayingBriefing = true
       await Speaker.shared.speak(briefing)
+      isPlayingBriefing = false
     }
     nextAlertIndex = 0
     await speakNextAlert()
@@ -199,6 +216,7 @@ final class NightShiftController {
   /// short summary built from this shift's flags only (no handoff text, plans or costs).
   func endShift() async {
     isAwaitingResume = false
+    await refreshClock()
     guard let ended = store.endShift() else { return }
     uploads.enqueue(store.makeReport(for: ended))
     voice.stop()

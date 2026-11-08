@@ -126,6 +126,7 @@ enum Config {
     static let supervisorPhone = "NightShift.supervisorPhone"
     static let picoAddress = "NightShift.picoAddress"
     static let defaultSystem = "NightShift.defaultSystem"
+    static let briefingAtShiftStart = "NightShift.briefingAtShiftStart"
   }
 
   /// Pico buzzer address (PICO_IP, optionally with :port), or nil if not set.
@@ -140,6 +141,11 @@ enum Config {
   /// System the map starts on (nil = the system of the top-ranked facility).
   static var defaultSystem: String? {
     UserDefaults.standard.string(forKey: Keys.defaultSystem).flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// Read the handoff briefing aloud at Start Shift. Defaults to on.
+  static var briefingAtShiftStart: Bool {
+    UserDefaults.standard.object(forKey: Keys.briefingAtShiftStart) as? Bool ?? true
   }
 
   /// How often GET /alarm is polled while the app is open.
