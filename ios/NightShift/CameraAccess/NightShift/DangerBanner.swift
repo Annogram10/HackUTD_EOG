@@ -82,7 +82,7 @@ struct DangerBanner: View {
         .foregroundStyle(NS.onFill)
         .lineLimit(1)
         .minimumScaleFactor(0.7)
-        .frame(maxWidth: .infinity, minHeight: 24)
+        .frame(maxWidth: .infinity, minHeight: 44)
         .background(NS.red)
     }
     .buttonStyle(.plain)

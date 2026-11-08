@@ -576,9 +576,11 @@ private struct AlarmOverlayView: View {
     .accessibilityAddTraits(.isModal)
   }
 
-  /// Pulses between dark and bright red about once a second (slowly with Reduce Motion).
+  /// Pulses between dark and bright red about once a second; steady red with Reduce
+  /// Motion (no pulsing).
   private func background(at date: Date) -> Color {
-    let period = reduceMotion ? 4.0 : 1.0
+    if reduceMotion { return Color(red: 0.85, green: 0.07, blue: 0.07) }
+    let period = 1.0
     let t = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
     let mix = (1 - cos(2 * .pi * t)) / 2
     return Color(red: 0.35 + 0.65 * mix, green: 0.0 + 0.08 * mix, blue: 0.0 + 0.08 * mix)
