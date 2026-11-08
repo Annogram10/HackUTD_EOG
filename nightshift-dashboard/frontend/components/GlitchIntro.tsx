@@ -4,8 +4,8 @@
 // Original drawing code, no external assets.
 // Plays on the first load of a browser session and when the dataset changes. Click or any key skips it.
 // prefers-reduced-motion: a plain 300 ms fade instead.
-// Safety: the backdrop stays dark the whole time (no full-screen bright flash); bright colours only on thin bars
-// (~30% of them), so overall brightness stays roughly level from one redraw to the next.
+// Calm on purpose: the app's own dark palette, few bars, muted accents on ~1 bar in 8 at half opacity, and a slow
+// redraw, so it reads as a soft signal coming in rather than a flashing screen. The backdrop stays dark throughout.
 // It draws straight to a canvas and never sets React state, so it cannot change data or re-render the dashboard.
 
 import { useEffect, useRef } from "react";
@@ -15,10 +15,10 @@ const SESSION_KEY = "nightshift.intro.played";
 const P1 = 600; // bars
 const P2 = 1100; // bars thin out
 const END = 1500; // bars slide off, overlay removed
-const STEP = 70; // bars are re-drawn every ~70 ms
-const BACKDROP = "#05061a";
-const DARK = ["#0A0F3C", "#000000", "#0A0F3C", "#1B2BFF"];
-const BRIGHT = ["#FF2BD6", "#19E6FF", "#FFD319", "#4BFF6B"];
+const STEP = 140; // bars are re-drawn every ~140 ms (slower = less flicker)
+const BACKDROP = "#1a0710"; // the page background (deep wine)
+const DARK = ["#2a1f25", "#342b30", "#3f3238", "#2a1f25", "#5a3a42"]; // mauve panel tones
+const BRIGHT = ["#8e95b5", "#ad6564", "#bc7579"]; // periwinkle, dusty rose, salmon (muted, never neon)
 
 interface Bar {
   y: number;
@@ -36,16 +36,16 @@ const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 
 function makeBars(n: number, W: number, H: number): Bar[] {
   return Array.from({ length: n }, () => {
-    const bright = Math.random() < 0.3;
+    const bright = Math.random() < 0.12;
     const w = W * rand(0.3, 1);
     return {
       y: rand(0, H),
-      h: bright ? rand(2, 14) : rand(2, 40), // bright bars stay thin
+      h: bright ? rand(2, 6) : rand(3, 28), // accent bars stay thin
       x: rand(-0.2 * W, W - w * 0.5),
       w,
       color: bright ? pick(BRIGHT) : pick(DARK),
-      stripe: Math.random() < 0.35 ? pick(bright ? DARK : BRIGHT) : null,
-      alpha: bright ? 0.8 : rand(0.7, 1),
+      stripe: Math.random() < 0.15 ? pick(DARK) : null,
+      alpha: bright ? rand(0.35, 0.5) : rand(0.5, 0.85),
       dir: Math.random() < 0.5 ? -1 : 1,
     };
   });
@@ -110,7 +110,7 @@ export default function GlitchIntro() {
       };
     }
 
-    const N = Math.round(Math.max(60, H / 9));
+    const N = Math.round(Math.max(24, H / 22));
     let bars = makeBars(N, W, H);
     let lastStep = 0;
     let slide: Bar[] | null = null;
