@@ -22,9 +22,13 @@ final class NightShiftController {
   private(set) var handoff: Handoff?
   private(set) var isRefreshing = false
 
-  /// Result text of the last "Test connection".
-  private(set) var connectionTestResult: String?
+  /// Result of the last "Test connection": `ok` is true when GET /alerts succeeded.
+  private(set) var connectionTestResult: (text: String, ok: Bool)?
   private(set) var isTestingConnection = false
+
+  /// Backend address in use (Config.baseURL), kept here so the Shift screen updates on change.
+  private(set) var backendURL: URL = Config.baseURL
+  private(set) var isUsingDefaultBackend = Config.savedBaseURL == nil
 
   /// Facility the operator is at: the one from the last alert or status spoken.
   /// Sent with vision checks and saved on flags.
@@ -39,6 +43,7 @@ final class NightShiftController {
   @ObservationIgnored let api: any NightShiftAPI
   @ObservationIgnored private let cache: DataCache
   @ObservationIgnored private var nextAlertIndex = 0
+  @ObservationIgnored private var connectionTestID = 0
 
   private enum CacheKey {
     static let alerts = "alerts"
@@ -140,16 +145,50 @@ final class NightShiftController {
     }
   }
 
-  /// GET /alerts once and reports success or the error text.
+  /// GET /alerts once on the current address and reports success or the error text.
   func testConnection() async {
+    // A newer test (e.g. after the address changed) supersedes this one's result.
+    connectionTestID += 1
+    let testID = connectionTestID
     isTestingConnection = true
-    defer { isTestingConnection = false }
+    let result: (text: String, ok: Bool)
     do {
       let alerts = try await api.fetchAlerts()
-      connectionTestResult = "Connected: \(alerts.count) alerts"
+      result = ("Connected, \(alerts.count) alerts", true)
     } catch {
-      connectionTestResult = error.localizedDescription
+      result = (NightShiftAPIError.describe(error), false)
     }
+    guard testID == connectionTestID else { return }
+    isTestingConnection = false
+    connectionTestResult = result
+    if result.ok {
+      // The address works: send any reports queued while it didn't.
+      await uploads.drain()
+    }
+  }
+
+  // MARK: - Backend address
+
+  /// Normalizes and saves a new backend address, then tests it.
+  /// Returns false (nothing saved) if the address is invalid.
+  func saveBackendAddress(_ input: String) async -> Bool {
+    guard Config.saveBaseURL(input) != nil else { return false }
+    await backendAddressChanged()
+    return true
+  }
+
+  /// Goes back to the built-in address, then tests it.
+  func resetBackendAddress() async {
+    Config.resetBaseURL()
+    await backendAddressChanged()
+  }
+
+  private func backendAddressChanged() async {
+    backendURL = Config.baseURL
+    isUsingDefaultBackend = Config.savedBaseURL == nil
+    connectionTestResult = nil
+    BackendStatus.shared.reset()
+    await testConnection()
   }
 
   // MARK: - Spoken output

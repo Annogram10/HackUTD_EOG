@@ -10,7 +10,10 @@ import SwiftUI
 struct ShiftView: View {
   var controller: NightShiftController
   var network = NetworkMonitor.shared
+  var backend = BackendStatus.shared
   @State private var confirmEndShift = false
+  @State private var addressText = ""
+  @State private var addressError: String?
 
   var body: some View {
     NavigationStack {
@@ -63,6 +66,7 @@ struct ShiftView: View {
         }
       }
     }
+    .task { await controller.testConnection() }
   }
 
   private var statusSection: some View {
@@ -75,21 +79,92 @@ struct ShiftView: View {
         Label(reason, systemImage: "mic.slash")
           .foregroundStyle(.red)
       }
+      if backend.isUnreachable && !Config.useMock {
+        Label("Backend unreachable. Ask for the new tunnel address and paste it here.", systemImage: "exclamationmark.triangle")
+          .font(.subheadline)
+          .foregroundStyle(.red)
+      }
       VStack(alignment: .leading, spacing: 4) {
-        Text(Config.useMock ? "Mock data (offline demo)" : Config.baseURL.absoluteString)
+        Text(Config.useMock ? "Mock data (offline demo)" : backendHostText)
           .font(.caption.monospaced())
           .textSelection(.enabled)
-        if let result = controller.connectionTestResult {
-          Text(result)
+        if controller.isTestingConnection {
+          Text("Testing…")
             .font(.caption)
             .foregroundStyle(.secondary)
+        } else if let result = controller.connectionTestResult {
+          Text(result.text)
+            .font(.caption)
+            .foregroundStyle(result.ok ? .green : .red)
         }
       }
+      addressEditor
       Button("Test connection", systemImage: "network") {
         Task { await controller.testConnection() }
       }
       .disabled(controller.isTestingConnection)
     }
+  }
+
+  private var backendHostText: String {
+    let host = controller.backendURL.host() ?? controller.backendURL.absoluteString
+    return controller.isUsingDefaultBackend ? "\(host) (default)" : host
+  }
+
+  /// Field and buttons for changing the backend tunnel address without a rebuild.
+  private var addressEditor: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      TextField("New tunnel address", text: $addressText)
+        .font(.callout.monospaced())
+        .keyboardType(.URL)
+        .textContentType(.URL)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .submitLabel(.done)
+        .onSubmit { saveAddress() }
+        .onChange(of: addressText) { addressError = nil }
+      if let addressError {
+        Text(addressError)
+          .font(.caption)
+          .foregroundStyle(.red)
+      }
+      // Borderless styles keep each button separately tappable inside a List row.
+      HStack(spacing: 16) {
+        PasteButton(payloadType: String.self) { strings in
+          guard let pasted = strings.first else { return }
+          Task { @MainActor in
+            addressText = pasted
+            saveAddress()
+          }
+        }
+        .labelStyle(.titleOnly)
+        .buttonBorderShape(.capsule)
+        Button("Save") { saveAddress() }
+          .buttonStyle(.borderless)
+          .disabled(addressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        Spacer()
+        Button("Reset to default", role: .destructive) {
+          addressText = ""
+          addressError = nil
+          Task { await controller.resetBackendAddress() }
+        }
+        .buttonStyle(.borderless)
+        .disabled(controller.isUsingDefaultBackend)
+      }
+      .font(.callout)
+    }
+  }
+
+  /// Normalizes and saves the typed address, then tests it; shows a red message if invalid.
+  private func saveAddress() {
+    let input = addressText
+    guard Config.normalizedBaseURL(from: input) != nil else {
+      addressError = "Not a valid https address."
+      return
+    }
+    addressError = nil
+    addressText = ""
+    Task { _ = await controller.saveBackendAddress(input) }
   }
 
   private func facilityName(for id: String?) -> String? {
