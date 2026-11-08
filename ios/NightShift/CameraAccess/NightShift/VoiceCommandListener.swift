@@ -46,6 +46,9 @@ final class VoiceCommandListener {
   private static let utteranceSilence: Duration = .milliseconds(1500)
   /// How long after the speaker stops before the mic is trusted again.
   private static let speakerEchoGuard: TimeInterval = 0.6
+  /// Within this long after speaking, a phrase made only of words the app just said
+  /// is treated as its own echo (recognition can lag the speaker by a second or more).
+  private static let echoWindow: TimeInterval = 5
 
   @ObservationIgnored private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
   @ObservationIgnored private var engine: AVAudioEngine?
@@ -250,7 +253,7 @@ final class VoiceCommandListener {
     guard isListening else { return }
     startRecognitionTask()
 
-    guard !transcript.isEmpty, !overlapsSpeaker else { return }
+    guard !transcript.isEmpty, !overlapsSpeaker, !isEchoOfSpeaker(transcript) else { return }
     lastHeard = transcript
     guard let command = VoiceCommand.parse(transcript) else {
       onUnrecognized?(transcript)
@@ -259,6 +262,22 @@ final class VoiceCommandListener {
     Self.logger.info("Command: \(command.summary, privacy: .public)")
     let handler = onCommand
     Task { @MainActor in await handler?(command) }
+  }
+
+  /// True if `transcript` has two or more words, all from something the app said in
+  /// the last few seconds ("leak flagged", "confirm or dismiss"). A lone word such as
+  /// "confirm" is kept, since that is how the operator answers a prompt.
+  private func isEchoOfSpeaker(_ transcript: String) -> Bool {
+    guard Speaker.shared.isBusy || Date().timeIntervalSince(Speaker.shared.lastFinishedAt) < Self.echoWindow else {
+      return false
+    }
+    func words(_ text: String) -> [String] {
+      text.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+    }
+    let heard = words(transcript)
+    guard heard.count >= 2 else { return false }
+    let spoken = Set(Speaker.shared.recentlySpoken.flatMap(words))
+    return heard.allSatisfy(spoken.contains)
   }
 
   // MARK: - Recovery

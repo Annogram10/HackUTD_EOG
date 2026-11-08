@@ -59,6 +59,10 @@ enum VoiceCommand: Equatable, Sendable {
       let trigger = triggers[normalized[index]]
     else { return nil }
 
+    // "confirm or dismiss" (e.g. the app's own prompt picked up by the mic) is ambiguous.
+    let decisions = Set(normalized.compactMap { triggers[$0] }.filter { $0 == .confirm || $0 == .dismiss })
+    if decisions.count > 1 { return nil }
+
     let rest = words[(index + 1)...]
     switch trigger {
     case .next:

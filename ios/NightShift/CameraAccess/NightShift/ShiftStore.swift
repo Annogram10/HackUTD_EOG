@@ -56,9 +56,9 @@ final class ShiftStore {
 
   // MARK: - Flags
 
-  /// The newest flag still waiting for confirm/dismiss. Voice commands act on this one.
+  /// The newest pending flag. Voice confirm/dismiss act on this one only.
   var currentFlag: Flag? {
-    current?.flags.last { $0.status == .waiting }
+    current?.flags.last { $0.status == .pending }
   }
 
   /// Saves a flag and, if given, its evidence photo (JPEG, already scaled). Returns nil
@@ -82,7 +82,7 @@ final class ShiftStore {
       type: type,
       description: description,
       status: status,
-      decidedAt: status == .waiting ? nil : Date(),
+      decidedAt: status == .pending ? nil : Date(),
       photoFilename: nil,
       notes: []
     )
@@ -146,7 +146,7 @@ final class ShiftStore {
         id: flag.id,
         createdAt: flag.createdAt,
         facility: flag.facility,
-        source: flag.source,
+        trigger: flag.source,
         type: flag.type,
         description: flag.description,
         status: flag.status,

@@ -153,7 +153,7 @@ final class NightShiftController {
     let flags = ended.flags
     let confirmed = flags.count(where: { $0.status == .confirmed })
     let dismissed = flags.count(where: { $0.status == .dismissed })
-    let waiting = flags.count(where: { $0.status == .waiting })
+    let waiting = flags.count(where: { $0.status == .pending })
     await Speaker.shared.speak(
       "Shift ended. \(flags.count) flags: \(confirmed) confirmed, \(dismissed) dismissed, \(waiting) waiting. Report queued for upload."
     )
@@ -311,7 +311,7 @@ final class NightShiftController {
   /// and ask for a decision.
   private func handleCameraFlag(type: String, description: String?, facility: String, photo: Data) async {
     // The shift may have ended while the check was in flight.
-    guard store.addFlag(type: type, source: "camera", status: .waiting, photo: photo, facility: facility, description: description) != nil else { return }
+    guard store.addFlag(type: type, source: "camera", status: .pending, photo: photo, facility: facility, description: description) != nil else { return }
     await Speaker.shared.announce("possible \(type), confirm or dismiss")
   }
 

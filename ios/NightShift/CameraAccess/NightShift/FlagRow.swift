@@ -26,6 +26,13 @@ struct FlagRow: View {
         HStack {
           Text(flag.type)
             .font(.subheadline.bold())
+          if flag.source == "voice" {
+            Text("voice")
+              .font(.caption2)
+              .padding(.horizontal, 5)
+              .padding(.vertical, 1)
+              .background(.secondary.opacity(0.2), in: Capsule())
+          }
           Spacer()
           Text(flag.status.rawValue)
             .font(.caption.bold())
@@ -50,7 +57,7 @@ struct FlagRow: View {
 
   private var statusColor: Color {
     switch flag.status {
-    case .waiting: return .orange
+    case .pending: return .orange
     case .confirmed: return .red
     case .dismissed: return .secondary
     }

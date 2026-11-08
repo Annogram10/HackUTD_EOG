@@ -7,15 +7,17 @@
 
 import Foundation
 
+/// Camera flags start `.pending`; voice flags are saved `.confirmed` (the operator's
+/// own call). Only confirm/dismiss (voice or on-screen) changes a pending flag.
 enum FlagStatus: String, Codable, Sendable {
-  case waiting
+  case pending
   case confirmed
   case dismissed
 
-  /// Unknown values (including older saved data) decode as `.waiting`.
+  /// "waiting" (older saved data) and unknown values decode as `.pending`.
   init(from decoder: Decoder) throws {
     let raw = try? decoder.singleValueContainer().decode(String.self)
-    self = raw.flatMap(FlagStatus.init(rawValue:)) ?? .waiting
+    self = raw.flatMap(FlagStatus.init(rawValue:)) ?? .pending
   }
 }
 
@@ -71,7 +73,8 @@ struct ShiftReport: Codable, Sendable {
     let id: UUID
     let createdAt: Date
     let facility: String?
-    let source: String
+    /// "camera" or "voice", as stored in `Flag.source`.
+    let trigger: String
     let type: String
     /// Omitted from the JSON when nil.
     let description: String?

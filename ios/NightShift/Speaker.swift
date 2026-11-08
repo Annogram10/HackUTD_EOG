@@ -26,6 +26,8 @@ final class Speaker: NSObject {
     var isBusy: Bool { pendingCount > 0 }
     /// When the last queued announcement finished.
     private(set) var lastFinishedAt: Date = .distantPast
+    /// The most recent phrases spoken (newest last), for rejecting the mic's echo of them.
+    private(set) var recentlySpoken: [String] = []
 
     override private init() {
         super.init()
@@ -69,6 +71,7 @@ final class Speaker: NSObject {
     }
 
     private func speakNow(_ text: String) async {
+        recentlySpoken = Array((recentlySpoken + [text]).suffix(3))
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice
         utterance.rate = 0.46
