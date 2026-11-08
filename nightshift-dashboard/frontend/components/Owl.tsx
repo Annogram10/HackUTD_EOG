@@ -13,6 +13,17 @@ import type { RiskLevel } from "@/lib/types";
 // each time danger starts. Calm and check-soon: glasses sit still. Reduced motion: no hop. Original drawing.
 // The owl's right wing (on the viewer's right) is cybernetic: chrome plates, ball joints, red cable inlays and
 // metal finger-feathers.
+// A more natural owl: teardrop body, feathered ear tufts, heart-shaped facial disc with ring feathering,
+// hooked beak, barred chest, layered wing, talons on a branch. Greys only, so colour still means status.
+const BODY = "M24 7 C32.5 7 38.6 12.6 38.6 21.5 C38.6 32 34.5 42 24 44 C13.5 42 9.4 32 9.4 21.5 C9.4 12.6 15.5 7 24 7 Z";
+const DISC = "M24 13.2 C20.6 9.8 10.4 10.3 10.2 19.6 C10.1 25.6 15.4 28.6 24 29.2 C32.6 28.6 37.9 25.6 37.8 19.6 C37.6 10.3 27.4 9.8 24 13.2 Z";
+const TUFT = "M13.4 11.8 C11.8 8.8 10.4 6.4 9.4 3.6 C11.2 5 12.4 6 13.4 7.2 C13.4 5.6 13.7 4.3 14.3 3 C15.3 5.8 16.3 8.4 17.6 10.6 Z";
+const BARS: string[] = [];
+for (let r = 0; r < 6; r++) {
+  const y = 30.6 + r * 2.1;
+  const half = 7.6 - Math.abs(r - 2.2) * 1.2; // the chest narrows toward the bottom
+  for (let x = 24 - half + (r % 2) * 1.4; x < 24 + half - 1.2; x += 2.8) BARS.push(`M${x.toFixed(2)} ${y.toFixed(2)} q0.7 0.8 1.4 0`);
+}
 const LENS_L = "M10 15.4 Q16.4 14.3 22.6 15.7 Q23.1 21 20.1 24.6 Q16.2 27.6 12.1 24.7 Q8.9 21.6 10 15.4 Z";
 const LENS_R = "M38 15.4 Q31.6 14.3 25.4 15.7 Q24.9 21 27.9 24.6 Q31.8 27.6 35.9 24.7 Q39.1 21.6 38 15.4 Z";
 
@@ -83,6 +94,7 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       role="img"
       aria-label={LABEL[level]}
       className={red ? "owl-shake" : ""}
+      style={{ overflow: "visible" }}
     >
       <title>{LABEL[level]}</title>
       <defs>
@@ -99,61 +111,82 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
           <stop offset="0.6" stopColor="#e3e7eb" />
           <stop offset="1" stopColor="#6b727c" />
         </linearGradient>
+        <radialGradient id={`${uid}-body`} cx="0.45" cy="0.3" r="0.8">
+          <stop offset="0" stopColor="#6c717a" />
+          <stop offset="0.55" stopColor="#454951" />
+          <stop offset="1" stopColor="#2a2d33" />
+        </radialGradient>
+        <radialGradient id={`${uid}-disc`} cx="0.5" cy="0.55" r="0.7">
+          <stop offset="0" stopColor="#a7acb3" />
+          <stop offset="1" stopColor="#767c84" />
+        </radialGradient>
+        <linearGradient id={`${uid}-belly`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#8e939a" />
+          <stop offset="1" stopColor="#5f646c" />
+        </linearGradient>
+        <linearGradient id={`${uid}-wing`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#50555d" />
+          <stop offset="1" stopColor="#2c2f35" />
+        </linearGradient>
+        <clipPath id={`${uid}-discclip`}><path d={DISC} /></clipPath>
         <linearGradient id={dark} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#c8ccd2" />
           <stop offset="1" stopColor="#4d535c" />
         </linearGradient>
       </defs>
 
-      {/* ear tufts: flat when calm, standing straight up when freaked out */}
-      <path d={red ? "M10 14 L8 2 L19 10 Z" : "M10 14 L8 6 L18 10 Z"} fill="#4d535c" />
-      <path d={red ? "M38 14 L40 2 L29 10 Z" : "M38 14 L40 6 L30 10 Z"} fill="#4d535c" />
+      {/* branch it perches on */}
+      <path d="M3.5 45.6 Q24 44 44.5 45.9" stroke="#4a4038" strokeWidth="2.2" strokeLinecap="round" fill="none" />
+      <path d="M9 45.2 l-2.4 -1.6 M37 45.5 l2.2 -1.8" stroke="#4a4038" strokeWidth="0.9" strokeLinecap="round" />
 
-      {/* body and belly */}
-      <ellipse cx="24" cy="28" rx="16" ry="17" fill="#32363d" />
-      <ellipse cx="24" cy="34" rx="9" ry="10" fill="#4d535c" />
-      <path d="M18 31 q2 2 4 0 M26 31 q2 2 4 0 M20 37 q2 2 4 0 M24 33 q2 2 4 0" stroke="#8b929c" strokeWidth="1" fill="none" strokeLinecap="round" />
+      {/* ear tufts: they stand up straighter in danger */}
+      <path d={TUFT} fill="#3a3e45" transform={red ? "rotate(-10 14 11)" : undefined} />
+      <path d={TUFT} fill="#3a3e45" transform={red ? "translate(48 0) scale(-1 1) rotate(-10 14 11)" : "translate(48 0) scale(-1 1)"} />
 
-      {/* wings: down when calm, up in panic. The right one (viewer's right) is cybernetic. */}
-      {red ? <path d="M9 22 L2 12 L8 34 Z" fill="#4d535c" /> : <path d="M9 26 Q5 34 11 41 Q12 33 12 27 Z" fill="#4d535c" />}
+      {/* body, chest and barring */}
+      <path d={BODY} fill={`url(#${uid}-body)`} />
+      <ellipse cx="24" cy="35.2" rx="9.4" ry="8.4" fill={`url(#${uid}-belly)`} opacity="0.9" />
+      <path d={BARS.join(" ")} stroke="#3a3e45" strokeWidth="0.45" fill="none" strokeLinecap="round" opacity="0.8" />
+      <path d="M18.4 9.6 q1 -0.8 2 0 M22 8.5 q1 -0.8 2 0 M26 8.5 q1 -0.8 2 0 M29.6 9.6 q-1 -0.8 -2 0" stroke="#2c3036" strokeWidth="0.4" fill="none" strokeLinecap="round" />
+
+      {/* wings: folded when calm, raised in danger. The right one (viewer's right) is cybernetic. */}
+      {red ? (
+        <>
+          <path d="M11.6 21.6 C7.2 18 3.6 13.4 2.2 9.2 C2.6 15.5 5.2 25.6 10.4 32.2 Z" fill={`url(#${uid}-wing)`} />
+          <path d="M4.2 13.4 L9.4 24.4 M3.4 17.4 L8.4 27.4 M5.8 12.2 L10.6 21.4" stroke="#1f2226" strokeWidth="0.4" strokeLinecap="round" />
+        </>
+      ) : (
+        <>
+          <path d="M11.2 22.5 C7.8 27 7.6 35.5 11.6 41.5 C12.6 36 13.4 29 13 23.2 Z" fill={`url(#${uid}-wing)`} />
+          <path d="M9.4 30 L11.8 38.6 M8.8 34 L11.2 40.6 M10.4 26.4 L12.4 34" stroke="#1f2226" strokeWidth="0.4" strokeLinecap="round" />
+        </>
+      )}
       <CyberWing raised={red} chrome={chrome} dark={dark} />
 
+      {/* facial disc: heart-shaped, with ring feathering around each eye and a dark ruff at the rim */}
+      <path d={DISC} fill={`url(#${uid}-disc)`} stroke="#25282d" strokeWidth="0.8" />
+      <g clipPath={`url(#${uid}-discclip)`} fill="none" stroke="#5d636b" strokeWidth="0.35" strokeDasharray="0.9 0.7" opacity="0.8">
+        {[16.4, 31.6].map((cx) => [6.6, 8, 9.4].map((r) => <circle key={`${cx}-${r}`} cx={cx} cy="20.4" r={r} />))}
+      </g>
+      <path d="M24 13.6 L21.7 21 L24 24.2 L26.3 21 Z" fill="#c3c7cc" opacity="0.5" />
+
       {/* eyes (under the glasses; they show when the glasses lift in danger) */}
-      {level === "green" && (
-        <>
-          <circle cx="16.4" cy="20.4" r="5.4" fill="#dfe2e6" />
-          <circle cx="31.6" cy="20.4" r="5.4" fill="#dfe2e6" />
-          <path d="M13.2 21.4 q3.2 -4.5 6.4 0" stroke="#0e0f11" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-          <path d="M28.4 21.4 q3.2 -4.5 6.4 0" stroke="#0e0f11" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-          <ellipse cx="11.6" cy="28.6" rx="2.4" ry="1.3" fill="#8b929c" opacity="0.7" />
-          <ellipse cx="36.4" cy="28.6" rx="2.4" ry="1.3" fill="#8b929c" opacity="0.7" />
-        </>
-      )}
+      {[16.4, 31.6].map((cx) => (
+        <g key={cx}>
+          <circle cx={cx} cy="20.4" r="4.9" fill="#16181b" />
+          <circle cx={cx} cy="20.4" r="4.1" fill={red ? "#e5484d" : "#b9bdc3"} />
+          <circle cx={cx} cy="20.4" r={red ? 0.8 : amber ? 2.6 : 2} fill="#0b0c0e" />
+          <circle cx={cx - 1.3} cy="19" r="0.6" fill="#ffffff" opacity="0.8" />
+          {level === "green" && <path d={`M${cx - 4.9} 20.2 A4.9 4.9 0 0 1 ${cx + 4.9} 20.2 Z`} fill="#6f757d" />}
+        </g>
+      ))}
+
+      {/* feather "brows": worried in check soon, angry in danger */}
       {amber && (
-        <>
-          <circle cx="16.4" cy="20.4" r="5.4" fill="#dfe2e6" />
-          <circle cx="31.6" cy="20.4" r="5.4" fill="#dfe2e6" />
-          <circle cx="17.6" cy="21.2" r="2.2" fill="#0e0f11" />
-          <circle cx="32.8" cy="21.2" r="2.2" fill="#0e0f11" />
-          {/* worried brows and a sweat drop */}
-          <path d="M11 13.2 L20 10.6" stroke="#dfe2e6" strokeWidth="1.6" strokeLinecap="round" />
-          <path d="M37 13.2 L28 10.6" stroke="#dfe2e6" strokeWidth="1.6" strokeLinecap="round" />
-          <path d="M42 13 q2.5 3.6 0 5.2 q-2.5 -1.6 0 -5.2 Z" fill="#a9afb8" />
-        </>
+        <path d="M10.8 13.4 L20.6 10.8 L20.9 12.4 L11.3 14.8 Z M37.2 13.4 L27.4 10.8 L27.1 12.4 L36.7 14.8 Z" fill="#1f2226" />
       )}
       {red && (
-        <>
-          {/* red irises, pinpoint pupils */}
-          <circle cx="16.4" cy="20.4" r="5.4" fill="#dfe2e6" />
-          <circle cx="31.6" cy="20.4" r="5.4" fill="#dfe2e6" />
-          <circle cx="16.4" cy="20.6" r="3.4" fill="#e5484d" />
-          <circle cx="31.6" cy="20.6" r="3.4" fill="#e5484d" />
-          <circle cx="16.4" cy="20.6" r="0.8" fill="#0e0f11" />
-          <circle cx="31.6" cy="20.6" r="0.8" fill="#0e0f11" />
-          {/* angry brows */}
-          <path d="M10.5 10.2 L20.6 14.2" stroke="#dfe2e6" strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M37.5 10.2 L27.4 14.2" stroke="#dfe2e6" strokeWidth="1.8" strokeLinecap="round" />
-        </>
+        <path d="M10.4 10.4 L21 13.8 L20.6 15.3 L10.2 11.9 Z M37.6 10.4 L27 13.8 L27.4 15.3 L37.8 11.9 Z" fill="#1f2226" />
       )}
 
       {/* aviator sunglasses, every state */}
@@ -173,18 +206,18 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
         </g>
       </g>
 
-      {/* beak: closed; a scowl when angry */}
-      {red ? (
-        <>
-          <path d="M21.5 27.4 L26.5 27.4 L24 31.6 Z" fill="#a9afb8" />
-          <path d="M21 33 Q24 31.6 27 33" stroke="#0e0f11" strokeWidth="0.9" fill="none" strokeLinecap="round" />
-        </>
-      ) : (
-        <path d={amber ? "M21.5 26.5 L26.5 26.5 L24 31 Z" : "M21.5 26 L26.5 26 L24 31 Z"} fill="#a9afb8" />
-      )}
+      {/* hooked beak */}
+      <path d="M22.7 24.2 Q24 22.8 25.3 24.2 Q25.3 27 24 29.2 Q22.7 27 22.7 24.2 Z" fill="#b9b2a2" />
+      <path d="M24 29.2 Q23.6 28.4 23.9 27.6" stroke="#4a4540" strokeWidth="0.35" fill="none" />
 
-      {/* feet */}
-      <path d="M17 44 l-2 3 M17 44 l1 3 M17 44 l3 2.5 M31 44 l2 3 M31 44 l-1 3 M31 44 l-3 2.5" stroke="#a9afb8" strokeWidth="1.4" strokeLinecap="round" />
+      {/* feathered feet with dark talons gripping the branch */}
+      {[19.6, 28.4].map((x) => (
+        <g key={x}>
+          <ellipse cx={x} cy="43.4" rx="2.2" ry="1.1" fill="#7a7f87" />
+          <path d={`M${x - 1.6} 43.8 q-0.6 1.2 -1.4 1.9 M${x - 0.4} 44 q-0.1 1.2 -0.5 2 M${x + 0.8} 43.9 q0.4 1.1 1.2 1.8`} stroke="#a8a092" strokeWidth="0.75" fill="none" strokeLinecap="round" />
+          <path d={`M${x - 3} 45.7 l-0.4 0.5 M${x - 0.9} 46 l-0.2 0.6 M${x + 2} 45.7 l0.3 0.5`} stroke="#141517" strokeWidth="0.6" strokeLinecap="round" />
+        </g>
+      ))}
     </svg>
   );
 }
