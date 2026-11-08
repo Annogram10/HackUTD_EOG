@@ -90,7 +90,7 @@ html[data-alarm="red"] body::after {
 }
 @media (prefers-reduced-motion: reduce) { .owl-shake { animation: none; } }
 
-/* Red alert, "going crazy": three pairs of eyes, each flickering in and out on its own loop (different lengths and
+/* Red alert, "going crazy": three pairs of eyes, each flickering fully in and out (off = gone) on its own loop (different lengths and
    offsets, so they never line up), with a small sideways glitch when one comes back. The orange ghost jitters.
    Small area, dims to dark (never a bright flash). Reduced motion: all pairs steady. */
 .owl-pair { animation: owl-pair 1.4s step-end infinite; }
@@ -103,7 +103,7 @@ html[data-alarm="red"] body::after {
   18% { opacity: 0; }
   30% { opacity: 1; transform: translateX(1.5px); }
   36% { opacity: 1; transform: translateX(0); }
-  55% { opacity: 0.3; }
+  55% { opacity: 0; }
   61% { opacity: 1; transform: translateX(-1px); }
   67% { opacity: 1; transform: translateX(0); }
   80% { opacity: 0; }

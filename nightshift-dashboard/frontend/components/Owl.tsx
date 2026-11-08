@@ -7,16 +7,20 @@
 import { useId } from "react";
 import type { RiskLevel } from "@/lib/types";
 
-// Red alert, "going crazy": the owl wears cyber glasses with three pairs of neon lenses (a slim top row, the main
-// lenses over its eyes, a slim bottom row), all inside the face. Each lens pair flickers in and out on its own loop,
-// out of sync, with an orange colour-split ghost. Loops while the level is red; reduced motion holds them steady.
+// Red alert, angry and "going crazy": a solid black wraparound visor (its V-shaped top reads as angry brows) with
+// three pairs of glowing slit eyes, all the same size. Each pair flickers on its own loop, out of sync; when a pair
+// is off it is simply gone (only black glass remains). Reduced motion: all pairs steady.
 // The owl's right wing (on the viewer's right) is cybernetic: chrome plates, ball joints, red cable inlays and
 // metal finger-feathers. Original drawing.
-const LENSES = [
-  { y: 12.2, h: 2.2, w: 6, x: [12.5, 29.5], rx: 0.6 }, // top row
-  { y: 15.6, h: 8.8, w: 12, x: [10, 26], rx: 1.6 }, // main lenses
-  { y: 25.4, h: 2, w: 5.5, x: [11, 31.5], rx: 0.6 }, // bottom row
-];
+const EYE_ROWS = [16.6, 20.2, 23.8]; // one pair per row, same size
+const EYE_X = 14.6; // centre of the left eyes; right eyes mirror it
+const VISOR = "M7.6 12.2 L24 17 L40.4 12.2 L40.4 26.2 Q33 28.6 25.6 26.6 L24 25.6 L22.4 26.6 Q15 28.6 7.6 26.2 Z";
+
+// A slanted slit, inner end lower (angry). side -1 = left eye, 1 = right eye.
+function slit(cx: number, cy: number, side: number) {
+  const w = 2.6, h = 0.95, tilt = 0.7 * side;
+  return `${cx - w},${cy - h - tilt} ${cx + w},${cy - h + tilt} ${cx + w},${cy + h + tilt} ${cx - w},${cy + h - tilt}`;
+}
 
 // Cybernetic wing, down (calm) or raised (red).
 function CyberWing({ raised, chrome, dark }: { raised: boolean; chrome: string; dark: string }) {
@@ -135,46 +139,34 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       )}
       {red && (
         <>
-          {/* wide eyes with pinpoint pupils, seen through the main lenses */}
-          <circle cx="16" cy="20" r="4.3" fill="#dfe2e6" />
-          <circle cx="32" cy="20" r="4.3" fill="#dfe2e6" />
-          <circle cx="16" cy="20" r="1" fill="#0e0f11" />
-          <circle cx="32" cy="20" r="1" fill="#0e0f11" />
+          {/* the visor: fully tinted black, always visible */}
+          <path d={VISOR} fill="#050608" stroke="#2a2f36" strokeWidth="0.6" strokeLinejoin="round" />
+          <path d="M9.5 14.2 L21 17.6" stroke="#3a3f46" strokeWidth="0.5" strokeLinecap="round" opacity="0.8" />
+          <path d="M7.6 18.5 L5.6 17.4 M40.4 18.5 L42.4 17.4" stroke="#2a2f36" strokeWidth="1" strokeLinecap="round" />
 
-          {/* the glasses: gunmetal frame, bridge, arms to the sides, mounts for the slim rows */}
-          {LENSES.map((l, i) =>
-            l.x.map((x) => (
-              <rect key={`f${i}${x}`} x={x - 0.5} y={l.y - 0.5} width={l.w + 1} height={l.h + 1} rx={l.rx + 0.4}
-                fill={i === 1 ? "none" : "#0b1620"} stroke="#8b929c" strokeWidth="0.7" />
-            )),
-          )}
-          <path d="M22.5 19.2 Q24 18 25.5 19.2" stroke="#8b929c" strokeWidth="0.9" fill="none" />
-          <path d="M9.5 19 L7 17.6 M38.5 19 L41 17.6" stroke="#8b929c" strokeWidth="0.9" strokeLinecap="round" />
-          <path d="M15.5 14.9 V15.1 M32.5 14.9 V15.1 M13.8 24.9 V25 M34.2 24.9 V25" stroke="#8b929c" strokeWidth="0.8" />
-
-          {/* neon lenses: each pair flickers in and out on its own loop */}
-          {LENSES.map((l, i) => (
-            <g key={i} className={`owl-pair owl-pair-${i}`}>
-              {l.x.map((x) => (
-                <g key={x}>
-                  <g className="owl-ghost">
-                    <rect x={x} y={l.y} width={l.w} height={l.h} rx={l.rx} fill="none" stroke="#FF7A2B" strokeWidth="0.6" opacity="0.8" />
+          {/* three pairs of glowing slit eyes; a pair that flickers out leaves nothing behind */}
+          {EYE_ROWS.map((y, i) => (
+            <g key={y} className={`owl-pair owl-pair-${i}`}>
+              {[-1, 1].map((side) => {
+                const cx = 24 + side * (24 - EYE_X);
+                return (
+                  <g key={side}>
+                    <polygon points={slit(cx + 0.7, y, side)} fill="#FF7A2B" opacity="0.55" className="owl-ghost" />
+                    <polygon points={slit(cx, y, side)} fill="#19E6FF" filter={`url(#${glow})`} />
+                    <polygon points={slit(cx, y, side)} fill="#E6FDFF" transform={`translate(${cx} ${y}) scale(0.45 0.35) translate(${-cx} ${-y})`} />
                   </g>
-                  <rect x={x} y={l.y} width={l.w} height={l.h} rx={l.rx} fill="#19E6FF" fillOpacity={i === 1 ? 0.4 : 0.85}
-                    stroke="#19E6FF" strokeWidth="0.5" filter={`url(#${glow})`} />
-                  {i === 1 && <path d={`M${x + 1.6} ${l.y + 1.6} l3 -0.1`} stroke="#E6FDFF" strokeWidth="0.6" strokeLinecap="round" />}
-                </g>
-              ))}
+                );
+              })}
             </g>
           ))}
         </>
       )}
 
-      {/* beak: small and closed, or wide open */}
+      {/* beak: closed; a scowl when angry */}
       {red ? (
         <>
-          <path d="M20.5 27 L27.5 27 L24 37 Z" fill="#0e0f11" />
-          <path d="M21.5 27 L26.5 27 L24 31 Z" fill="#a9afb8" />
+          <path d="M21.5 27.4 L26.5 27.4 L24 31.6 Z" fill="#a9afb8" />
+          <path d="M21 33 Q24 31.6 27 33" stroke="#0e0f11" strokeWidth="0.9" fill="none" strokeLinecap="round" />
         </>
       ) : (
         <path d={amber ? "M21.5 26.5 L26.5 26.5 L24 31 Z" : "M21.5 26 L26.5 26 L24 31 Z"} fill="#a9afb8" />
