@@ -6,7 +6,6 @@ import { useState } from "react";
 import FlagCard from "@/components/FlagCard";
 import { useApp } from "@/components/AppProvider";
 import { PageSkeleton } from "@/components/Skeleton";
-import { formatDate } from "@/lib/api";
 import type { FlagStatus, FlagType } from "@/lib/types";
 
 type StatusFilter = FlagStatus | "all";
@@ -58,24 +57,26 @@ function Pills<T extends string>({
 const systemOf = (equipmentId: string) => equipmentId.match(/^(S\d+)_/)?.[1] ?? "Other";
 
 export default function Flags() {
-  const { shift, loading, asOf } = useApp();
+  const { shifts, loading } = useApp();
   const [status, setStatus] = useState<StatusFilter>("all");
   const [type, setType] = useState<TypeFilter>("all");
   const [system, setSystem] = useState<string>("all");
 
   if (loading) return <PageSkeleton cards={3} />;
-  if (!shift)
+  // Every flag from every phone upload for this dataset, newest first. Flags stay until someone deletes them.
+  const all = shifts.flatMap((s) => s.flags);
+  if (!all.length)
     return (
       <div className="space-y-4">
         <h1 className="text-3xl font-bold">Flags</h1>
-        <div className="rounded-xl border border-dashed border-zinc-800 p-12 text-center text-lg text-zinc-500">
-          {asOf !== null ? "No shift had started yet at this time. " : "No phone report for this dataset yet. "}Flags the operator raises on the phone appear here after they end the shift.
+        <div className="border border-dashed border-zinc-800 p-12 text-center text-lg text-zinc-500">
+          No flags yet. Flags the operator raises on the phone or glasses appear here after they end the shift.
         </div>
       </div>
     );
 
-  const sorted = [...shift.flags].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  const systems = [...new Set(shift.flags.map((f) => systemOf(f.equipment_id)))].sort((a, b) =>
+  const sorted = [...all].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const systems = [...new Set(all.map((f) => systemOf(f.equipment_id)))].sort((a, b) =>
     a === "Other" ? 1 : b === "Other" ? -1 : a.localeCompare(b, undefined, { numeric: true }),
   );
   const systemOptions = [{ value: "all", label: "All systems" }, ...systems.map((x) => ({ value: x, label: x }))];
@@ -90,9 +91,9 @@ export default function Flags() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Flags: {formatDate(shift.date)} night</h1>
+        <h1 className="text-3xl font-bold">Flags</h1>
         <p className="mt-1 text-lg text-zinc-400">
-          Each flag is something for a person to check. Showing {shown.length} of {shift.flags.length}.
+          Every flag from the phone and glasses, newest first. Each stays until it is deleted. Showing {shown.length} of {all.length}.
         </p>
       </div>
 
@@ -104,12 +105,12 @@ export default function Flags() {
 
       {shown.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-800 p-12 text-center text-lg text-zinc-500">
-          {shift.flags.length === 0 ? "No flags this shift." : "No flags match these filters."}
+          No flags match these filters.
         </div>
       ) : (
         <div className="space-y-4">
           {shown.map((f) => (
-            <FlagCard key={f.id} flag={f} allowNote />
+            <FlagCard key={f.id} flag={f} allowNote showDate />
           ))}
         </div>
       )}

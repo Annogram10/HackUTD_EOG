@@ -48,6 +48,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from app import agent as agent_mod
@@ -341,10 +342,9 @@ def upload_shift(shift: ShiftUpload):
 
 
 def seen_by(flags: list, now: Optional[int]) -> list:
-    """Flags that already existed at `now` (unix seconds). None = no time limit."""
-    if now is None:
-        return flags
-    return [f for f in flags if parse_ts(f["timestamp"]) <= now]
+    """Flags stay visible until someone deletes them, whatever time the slider shows (the phone's clock and the
+    recorded data's clock differ, so hiding 'future' flags made real uploads disappear)."""
+    return flags
 
 
 def one_flag(c, flag_id: str) -> dict:
@@ -687,7 +687,9 @@ async def vision_check(request: Request):
     if not data:
         raise HTTPException(400, "empty body: send the raw JPEG bytes")
     try:
-        r = vision.check_image("data:image/jpeg;base64," + base64.b64encode(data).decode())
+        # The model call blocks for seconds. Run it in a worker thread: inside this async handler it would freeze
+        # the whole server, so /alarm, /flag/.../prioritize and every other request would queue behind it.
+        r = await run_in_threadpool(vision.check_image, "data:image/jpeg;base64," + base64.b64encode(data).decode())
     except Exception as e:  # never a 500 for the phone
         r = {"available": False, "error": str(e)[:120], "message": vision.UNAVAILABLE}
     if not r.get("available"):
@@ -932,7 +934,8 @@ def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None
                     rows = c.execute("SELECT id, started_at FROM shifts WHERE dataset = ? AND id NOT LIKE 'alarms-%'",
                                      (dataset,)).fetchall()
                     before = sorted((r for r in rows if _unix_of(r["started_at"]) <= eff), key=lambda r: _unix_of(r["started_at"]), reverse=True)
-                    shift_id = before[0]["id"] if before else None
+                    # no shift before this moment (e.g. the phone's real-clock uploads): use the newest one
+                    shift_id = before[0]["id"] if before else (rows and max(rows, key=lambda r: _unix_of(r["started_at"]))["id"]) or None
             shift = get_shift(c, shift_id, dataset)
         except HTTPException:
             if shift_id:

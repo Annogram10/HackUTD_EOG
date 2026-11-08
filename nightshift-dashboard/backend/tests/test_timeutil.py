@@ -17,7 +17,8 @@ def test_fractional_and_date():
     assert parse_ts("2026-10-08") == E - 30 * 60
 
 
-def test_seen_by_handles_offsets():
+def test_flags_are_never_hidden_by_time():
+    """Flags stay visible until deleted, even ones stamped later than the replay moment."""
     import main
-    flags = [{"timestamp": "2026-10-07T18:30:00-06:00"}, {"timestamp": "2026-10-08T00:31:00"}]
-    assert main.seen_by(flags, E) == flags[:1]
+    flags = [{"timestamp": "2026-10-07T18:30:00-06:00"}, {"timestamp": "2026-11-08T15:02:14Z"}]
+    assert main.seen_by(flags, E) == flags

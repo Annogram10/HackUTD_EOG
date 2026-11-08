@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { addControlNote, clearFlagPhoto, replaceFlagPhoto, setFlagStatus, formatDate, formatTime, photoSrc } from "@/lib/api";
+import { addControlNote, clearFlagPhoto, deleteFlag, replaceFlagPhoto, setFlagStatus, formatDate, formatTime, photoSrc } from "@/lib/api";
 import type { Flag } from "@/lib/types";
 import { StatusBadge, TriggerBadge, TypeBadge } from "./Badges";
 import { useApp } from "./AppProvider";
@@ -21,7 +21,12 @@ function sectionOf(equipmentId: string) {
 }
 
 export default function FlagCard({ flag, showDate = false, allowNote = false, linkEquipment = true }: Props) {
-  const { patchFlag } = useApp();
+  const { patchFlag, removeFlag } = useApp();
+  const remove = async () => {
+    if (!window.confirm(`Delete this ${flag.type} flag at ${flag.location}? This cannot be undone.`)) return;
+    if (await deleteFlag(flag.id)) removeFlag(flag.id);
+    else window.alert("Could not delete the flag. Is the backend running?");
+  };
   const [imgOk, setImgOk] = useState(Boolean(flag.photo_url));
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
@@ -168,6 +173,10 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
                 }}
               />
             </label>
+            <button onClick={remove} disabled={deciding}
+              className="border border-zinc-700 px-4 py-2 text-base font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50">
+              Delete flag
+            </button>
             {flag.photo_url && (
               <button onClick={() => photoAction(() => clearFlagPhoto(flag.id))} disabled={deciding}
                 className="rounded-lg border border-zinc-700 px-4 py-2 text-base font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50">

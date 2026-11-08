@@ -70,6 +70,16 @@ export async function setFlagStatus(flagId: string, action: "confirm" | "dismiss
   }
 }
 
+// Delete a flag for good (and its photo). Returns true if it worked.
+export async function deleteFlag(flagId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/flag/${flagId}`, { method: "DELETE", headers: writeHeaders() });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // Replace a flag's photo with a new JPEG, or clear it. Return the updated flag, or null if it failed.
 export async function replaceFlagPhoto(flagId: string, file: Blob): Promise<Flag | null> {
   try {

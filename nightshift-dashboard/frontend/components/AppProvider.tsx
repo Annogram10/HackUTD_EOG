@@ -25,6 +25,7 @@ interface Ctx {
   shift: Shift | null; // selected shift (default: newest)
   select: (id: string) => void;
   patchFlag: (flag: Flag) => void;
+  removeFlag: (id: string) => void;
   loading: boolean;
   offline: boolean; // the backend failed twice in a row (or never answered): what is on screen may be stale
   lastOk: Date | null; // when the backend last answered
@@ -57,14 +58,13 @@ const toUnix = (iso: string) => Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? is
 // Which shift to show: the newest at the latest data; during a replay, the shift in progress at that moment
 // (or the last one that started before it). Nothing from a shift that has not started yet.
 // In a replay a flag does not exist before its own time: hide the ones from later than the moment on screen.
-function seenAt(s: Shift | null, asOf: number | null): Shift | null {
-  if (!s || asOf === null) return s;
-  return { ...s, flags: s.flags.filter((f) => toUnix(f.timestamp) <= asOf) };
-}
+// Flags stay visible until they are deleted, whatever time the slider shows (the phone uses its real clock).
+const seenAt = (s: Shift | null): Shift | null => s;
 
 function shiftAt(shifts: Shift[], asOf: number | null): Shift | null {
   if (asOf === null) return shifts[0] ?? null;
-  return [...shifts].filter((s) => toUnix(s.started_at) <= asOf).sort((a, b) => toUnix(b.started_at) - toUnix(a.started_at))[0] ?? null;
+  const before = [...shifts].filter((s) => toUnix(s.started_at) <= asOf).sort((a, b) => toUnix(b.started_at) - toUnix(a.started_at));
+  return before[0] ?? shifts[0] ?? null; // nothing before this moment (phone uploads use its real clock): the newest
 }
 
 export default function AppProvider({ children }: { children: React.ReactNode }) {
@@ -207,10 +207,11 @@ export default function AppProvider({ children }: { children: React.ReactNode })
   const value = useMemo<Ctx>(
     () => ({
       datasets, dataset, setDataset, overview, asOf, setAsOf, risk, riskLevel, playing, setPlaying, shifts,
-      shift: seenAt(shifts.find((s) => s.id === selectedId) ?? shiftAt(shifts, asOf), asOf),
+      shift: seenAt(shifts.find((s) => s.id === selectedId) ?? shiftAt(shifts, asOf)),
       select: (id: string) => dataset && setSelected({ dataset, id }),
       patchFlag: (flag) =>
         setShifts((all) => all.map((s) => ({ ...s, flags: s.flags.map((f) => (f.id === flag.id ? { ...f, ...flag } : f)) }))),
+      removeFlag: (id: string) => setShifts((all) => all.map((s) => ({ ...s, flags: s.flags.filter((f) => f.id !== id) }))),
       loading, offline, lastOk: health.lastOk, mode, alarmId, acked, acknowledge,
     }),
     [datasets, dataset, setDataset, overview, asOf, setAsOf, risk, riskLevel, playing, setPlaying, shifts, selectedId, loading, offline, health.lastOk, mode, alarmId, acked, acknowledge],
