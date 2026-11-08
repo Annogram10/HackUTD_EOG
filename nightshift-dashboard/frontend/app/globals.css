@@ -131,6 +131,42 @@ html[data-alarm="red"] body::after {
   93%, 100% { opacity: 0; transform: translateX(0); }
 }
 @media (prefers-reduced-motion: reduce) { .owl-extra-eyes { display: none; } }
+
+/* Red alert main eyes, "going crazy": neon flicker + colour-split jitter + glitch slice, looping.
+   Small area and mostly dims (never a bright full flash). The two eyes run at different speeds so they are out of
+   sync. Reduced motion: steady neon eyes, no flicker. */
+.owl-crazy-0 { animation: owl-crazy 1.3s step-end infinite; }
+.owl-crazy-1 { animation: owl-crazy 1.05s step-end infinite 0.2s; }
+.owl-crazy-ghost-0 { animation: owl-ghost 0.9s step-end infinite; }
+.owl-crazy-ghost-1 { animation: owl-ghost 0.75s step-end infinite 0.3s; }
+.owl-crazy-slice-0 { animation: owl-slice 1.7s step-end infinite 0.4s; }
+.owl-crazy-slice-1 { animation: owl-slice 1.4s step-end infinite; }
+@keyframes owl-crazy {
+  0% { opacity: 1; transform: translateX(0); }
+  14% { opacity: 0.35; }
+  20% { opacity: 1; transform: translateX(1px); }
+  27% { opacity: 1; transform: translateX(0); }
+  52% { opacity: 0.55; transform: translateX(-1.5px); }
+  58% { opacity: 1; transform: translateX(0); }
+  81% { opacity: 0.2; }
+  86% { opacity: 1; }
+}
+@keyframes owl-ghost {
+  0% { transform: translateX(1px); }
+  25% { transform: translateX(-1.5px); }
+  50% { transform: translateX(2px); }
+  75% { transform: translateX(-0.5px); }
+}
+@keyframes owl-slice {
+  0% { opacity: 0; transform: translate(0, 0); }
+  40% { opacity: 0.9; transform: translate(2px, -2px); }
+  46% { opacity: 0.9; transform: translate(-2px, 2.5px); }
+  52% { opacity: 0; transform: translate(0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .owl-crazy-0, .owl-crazy-1, .owl-crazy-ghost-0, .owl-crazy-ghost-1 { animation: none; }
+  .owl-crazy-slice-0, .owl-crazy-slice-1 { animation: none; opacity: 0; }
+}
 .alarm-flash { animation: alarm-flash 0.9s ease-in-out 3; }
 
 /* header: one thin line, red on alarm */

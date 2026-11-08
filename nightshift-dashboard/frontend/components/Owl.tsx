@@ -7,7 +7,7 @@
 import { useId } from "react";
 import type { RiskLevel } from "@/lib/types";
 
-// Red alert: small extra eyes open around the face (forehead, above the brows, both cheeks). Sizes are 30-60% of
+// Red alert: the main eyes turn neon and keep flickering (going crazy), and small extra eyes open around the face (forehead, above the brows, both cheeks). Sizes are 30-60% of
 // the main eye (r 8). They mount when the level turns red, so the CSS sequence in globals.css plays once per entry:
 // out-of-sync flickers with small sideways glitches, all open together ~300 ms, then fade out. Reduced motion: hidden.
 const EXTRA_EYES = [
@@ -97,11 +97,21 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       )}
       {red && (
         <>
-          {/* huge glowing red eyes with pinpoint pupils: the steady glare */}
-          <circle cx="16.5" cy="20" r="8" fill="#e5484d" filter={`url(#${glow})`} />
-          <circle cx="31.5" cy="20" r="8" fill="#e5484d" filter={`url(#${glow})`} />
-          <circle cx="16.5" cy="20" r="1.1" fill="#0e0f11" />
-          <circle cx="31.5" cy="20" r="1.1" fill="#0e0f11" />
+          {/* going crazy: dark sockets with neon cyan eyes that keep flickering, an orange colour-split ghost that
+              jitters sideways, and a thin glitch slice. Loops while the level is red (steady with reduced motion). */}
+          {[16.5, 31.5].map((cx, i) => (
+            <g key={cx}>
+              <circle cx={cx} cy="20" r="8" fill="#0e0f11" />
+              <g className={`owl-crazy-ghost owl-crazy-ghost-${i}`}>
+                <circle cx={cx} cy="20" r="5" fill="none" stroke="#FF7A2B" strokeWidth="1.6" opacity="0.75" />
+              </g>
+              <g className={`owl-crazy owl-crazy-${i}`} filter={`url(#${glow})`}>
+                <circle cx={cx} cy="20" r="5" fill="none" stroke="#19E6FF" strokeWidth="1.8" />
+                <circle cx={cx} cy="20" r="1.3" fill="#E6FDFF" />
+              </g>
+              <rect className={`owl-crazy-slice owl-crazy-slice-${i}`} x={cx - 7} y="19" width="14" height="1.2" fill="#19E6FF" opacity="0" />
+            </g>
+          ))}
           <path d="M9 14.5 L21 9.5" stroke="#dfe2e6" strokeWidth="2" strokeLinecap="round" />
           <path d="M39 14.5 L27 9.5" stroke="#dfe2e6" strokeWidth="2" strokeLinecap="round" />
         </>
@@ -122,8 +132,9 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
           {EXTRA_EYES.map((e, i) => (
             <g key={i} className={`owl-eye owl-eye-${e.v}`} style={{ animationDelay: `${(i % 3) * 25}ms` }}>
               <circle cx={e.cx} cy={e.cy} r={e.r} fill="#0e0f11" />
-              <circle cx={e.cx} cy={e.cy} r={e.r * 0.8} fill="#e5484d" filter={`url(#${glow})`} />
-              <circle cx={e.cx} cy={e.cy} r={Math.max(0.5, e.r * 0.22)} fill="#0e0f11" />
+              <circle cx={e.cx + 0.6} cy={e.cy} r={e.r * 0.62} fill="none" stroke="#FF7A2B" strokeWidth="0.8" opacity="0.7" />
+              <circle cx={e.cx} cy={e.cy} r={e.r * 0.62} fill="none" stroke="#19E6FF" strokeWidth="0.9" filter={`url(#${glow})`} />
+              <circle cx={e.cx} cy={e.cy} r={Math.max(0.45, e.r * 0.2)} fill="#E6FDFF" />
             </g>
           ))}
         </g>
