@@ -75,7 +75,7 @@ def _ask_ai(sections: list, now: int) -> dict:
                        "temperature": 0.2, "chat_template_kwargs": {"enable_thinking": False}}).encode()
     req = urllib.request.Request(URL, body, {"Authorization": f"Bearer {k}", "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=45) as r:
+        with urllib.request.urlopen(req, timeout=8) as r:
             text = json.loads(r.read())["choices"][0]["message"].get("content") or ""
         picked = json.loads(re.search(r"\{.*\}", text, re.S).group(0))["charts"]
         return {"available": True, "model": MODEL, "charts": picked}

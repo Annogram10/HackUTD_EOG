@@ -29,6 +29,7 @@ App format (phone/glasses): GET /alerts, GET /facility/{id}, GET /handoff, POST 
 
 import base64
 import json
+import os
 import sqlite3
 import uuid
 from datetime import date, datetime, timedelta
@@ -52,7 +53,7 @@ from app.handoff import build_handoff, spoken
 from app.triage import events_json, fac_name, facility_status, money, run_triage
 
 BASE = Path(__file__).parent
-DB_PATH = BASE / "nightshift.db"
+DB_PATH = Path(os.environ.get("NIGHTSHIFT_DB", BASE / "nightshift.db"))
 PHOTOS = BASE / "photos"
 PHOTOS.mkdir(exist_ok=True)
 
@@ -911,9 +912,22 @@ def record_alarm(ds, out: dict, live: bool, cleanup: bool = True) -> None:
                  out["as_of"], "pending", "data", reason))
 
 
+@app.get("/risk/note")
+def get_risk_note(dataset: Optional[str] = None, now: Optional[int] = None):
+    """
+    The AI second opinion for this moment, without waiting for it: starts it in the background if needed.
+    status: "ready" (note filled in), "pending" (ask again in a few seconds), "unavailable", or "none" (nothing to judge).
+    """
+    ds = ds_for(dataset)
+    out = risk_mod.assess(ds, now, use_ai=True)
+    ai = out["ai"]
+    status = "none" if ai is None else "pending" if ai.get("pending") else "ready" if ai.get("available") else "unavailable"
+    return {"dataset": ds.name, "as_of": out["as_of"], "level": out["level"], "status": status, "note": out["note"], "ai": ai}
+
+
 @app.get("/risk")
 def get_risk(dataset: Optional[str] = None, now: Optional[int] = None, ai: bool = True):
-    """Is this moment dangerous? Rules plus a Nemotron second opinion (it can raise the level, never lower it)."""
+    """Is this moment dangerous? The rules decide; a Nemotron note is added when it is ready (it never changes the level)."""
     ds = ds_for(dataset)
     out = risk_mod.assess(ds, now, use_ai=ai)
     record_alarm(ds, out, live=(now is None and ds.name not in CLOCK))
@@ -944,9 +958,9 @@ def get_alarm(dataset: Optional[str] = None, now: Optional[int] = None):
     """
     ds = ds_for(dataset)
     eff = now if now is not None else CLOCK.get(ds.name)
-    out = risk_mod.assess(ds, eff, use_ai=True)
+    out = risk_mod.assess(ds, eff, use_ai=False, peek_ai=True)  # rules only: no model call on this path, ever
     record_alarm(ds, out, live=(eff is None), cleanup=False)
-    return {k: out[k] for k in ("dataset", "as_of", "level", "alarm", "alarm_id", "headline", "spoken_text")} | {
+    return {k: out[k] for k in ("dataset", "as_of", "level", "alarm", "alarm_id", "headline", "spoken_text", "note")} | {
         "live": ds.name not in CLOCK, "reasons": [r["text"] for r in out["reasons"]],
         "facility_ids": [f["facility_id"] for f in out["flaggable"] if f["level"] == "red"]}
 

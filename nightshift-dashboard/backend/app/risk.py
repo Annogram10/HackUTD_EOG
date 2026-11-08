@@ -3,8 +3,8 @@ Danger check at any moment in time.
 
 1. Rules (always on, instant): RED = a pump failure whose tank will reach shutdown before the repair ends (or already has).
    AMBER = something to check soon (a leak, a worn pump, or a failure the tank can wait out). GREEN = nothing wrong.
-2. The AI (Nemotron) reads the same facts and gives its own verdict and a short reason. It may RAISE the level
-   but never lower it below the rules, so a bad moment can never be hidden by the model.
+2. The AI (Nemotron) reads the same facts and adds a short second opinion (`note`). It runs in the background with
+   a short timeout and never changes the level, the alarm or any number.
 
 It only flags. It never says to operate equipment.
 """
@@ -12,7 +12,10 @@ It only flags. It never says to operate equipment.
 import json
 import os
 import re
+import threading
+import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from . import dataset as D
@@ -124,14 +127,54 @@ def _money(tri: dict) -> dict:
             "trip_price": rows[0]["trucks"]["trip_price"], "trip_bbl": rows[0]["trucks"]["trip_bbl"]}
 
 
-_ai_cache: dict = {}
+AI_TIMEOUT_S = 8          # one model call never holds anything longer than this
+AI_FAIL_TTL_S = 60        # a failed call is remembered this long, so a dead model is not retried on every poll
+_ai_cache: dict = {}      # key -> (result, time stored)
+_ai_inflight: set = set()
+_ai_lock = threading.Lock()
+_ai_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="nemotron")
+
+
+def _ai_key(tri: dict, rules: dict) -> tuple:
+    return (tri["dataset"], tri["now"], rules["level"], len(tri["alerts"]))
+
+
+def cached_ai(tri: dict, rules: dict):
+    """The AI opinion for this moment if one is already known (success, or a failure younger than AI_FAIL_TTL_S)."""
+    with _ai_lock:
+        hit = _ai_cache.get(_ai_key(tri, rules))
+    if hit is None:
+        return None
+    res, stored = hit
+    if not res.get("available") and time.time() - stored > AI_FAIL_TTL_S:
+        return None
+    return res
+
+
+def request_ai(tri: dict, rules: dict) -> None:
+    """Start the AI second opinion in the background (never blocks the caller). No-op if known or already running."""
+    key = _ai_key(tri, rules)
+    if cached_ai(tri, rules) is not None:
+        return
+    with _ai_lock:
+        if key in _ai_inflight:
+            return
+        _ai_inflight.add(key)
+
+    def job():
+        try:
+            res = ai_check(tri, rules)
+        except Exception as e:  # never let a background failure go unrecorded
+            res = {"available": False, "error": str(e)[:120]}
+        with _ai_lock:
+            _ai_cache[key] = (res, time.time())
+            _ai_inflight.discard(key)
+
+    _ai_pool.submit(job)
 
 
 def ai_check(tri: dict, rules: dict) -> dict:
-    """Nemotron's verdict on the same facts. Cached per moment."""
-    key = (tri["dataset"], tri["now"], rules["level"], len(tri["alerts"]))
-    if key in _ai_cache:
-        return _ai_cache[key]
+    """Nemotron's opinion on the same facts. Blocking: only ever called from the background pool."""
     k = os.environ.get("NVIDIA_API_KEY")
     if not k:
         return {"available": False, "error": "NVIDIA_API_KEY is not set"}
@@ -167,38 +210,42 @@ def ai_check(tri: dict, rules: dict) -> dict:
                        "temperature": 0.2, "chat_template_kwargs": {"enable_thinking": False}}).encode()
     req = urllib.request.Request(URL, body, {"Authorization": f"Bearer {k}", "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=45) as r:
+        with urllib.request.urlopen(req, timeout=AI_TIMEOUT_S) as r:
             text = json.loads(r.read())["choices"][0]["message"].get("content") or ""
         out = json.loads(re.search(r"\{.*\}", text, re.S).group(0))
         lv = out.get("level") if out.get("level") in ORDER else "green"
-        res = {"available": True, "model": MODEL, "level": lv, "headline": str(out.get("headline", ""))[:120],
-               "why": str(out.get("why", ""))[:300], "money": str(out.get("money", ""))[:300]}
-        _ai_cache[key] = res
-        return res
+        return {"available": True, "model": MODEL, "level": lv, "headline": str(out.get("headline", ""))[:120],
+                "why": str(out.get("why", ""))[:300], "money": str(out.get("money", ""))[:300]}
     except Exception as e:
         return {"available": False, "error": str(e)[:120]}
 
 
-def assess(ds, now=None, use_ai: bool = True) -> dict:
+def assess(ds, now=None, use_ai: bool = True, peek_ai: bool = False) -> dict:
+    """
+    The danger level is the rules' level, always. The AI never raises or lowers it and never touches alarm_id.
+    use_ai=True: use the AI opinion if it is already known, otherwise start it in the background (never waits).
+    peek_ai=True: only use an AI opinion that is already known (no network work started at all).
+    """
     tri = run_triage(ds, now)
     rules = rules_risk(tri)
     active = [a for a in tri["alerts"] if _alert_level(a, tri["now"], ds)[0] != "green"]
-    ai = ai_check(tri, rules) if (use_ai and active) else None  # nothing new or urgent: nothing for the AI to judge
+    ai = None
+    if active and (use_ai or peek_ai):  # nothing new or urgent: nothing for the AI to judge
+        ai = cached_ai(tri, rules)
+        if ai is None and use_ai:
+            request_ai(tri, rules)
+            ai = {"available": False, "pending": True}
     level = rules["level"]
-    if ai and ai.get("available"):
-        level = BY_RANK[max(ORDER[level], ORDER[ai["level"]])]
     red = [r for r in rules["reasons"] if r["level"] == "red"]
     alarm_ids = sorted((a["facility_id"], a["onset_unix"]) for a in tri["alerts"]
                        if _alert_level(a, tri["now"], ds)[0] == "red")
-    if ai and ai.get("available") and level == "red" and not red:
-        headline = ai["headline"]
-    elif red:
-        headline = (ai.get("headline") if ai and ai.get("available") and ai["level"] == "red" else None) or red[0]["text"]
+    note = ai["why"] if ai and ai.get("available") and ai.get("why") else None
+    if red:
+        headline = red[0]["text"]
     else:
         known = len(tri["alerts"]) - len(active)
-        headline = (ai.get("headline") if ai and ai.get("available") else None) or (
-            rules["reasons"][0]["text"] if active and rules["reasons"] else
-            (f"Nothing urgent. {known} minor issue{'s' if known != 1 else ''} to keep an eye on" if known else "All clear"))
+        headline = (rules["reasons"][0]["text"] if active and rules["reasons"] else
+                    (f"Nothing urgent. {known} minor issue{'s' if known != 1 else ''} to keep an eye on" if known else "All clear"))
     flaggable = []
     for a in tri["alerts"]:
         lv, text = _alert_level(a, tri["now"], ds)
@@ -223,7 +270,7 @@ def assess(ds, now=None, use_ai: bool = True) -> dict:
         "alarm": level == "red",
         "alarm_id": (f"{ds.name}:" + ",".join(f"{f}@{o}" for f, o in alarm_ids)) if level == "red" else None,
         "headline": headline, "reasons": rules["reasons"], "facilities": rules["facilities"],
-        "ai": ai, "money": money, "flaggable": flaggable, "spoken_text": speak,
+        "ai": ai, "note": note, "money": money, "flaggable": flaggable, "spoken_text": speak,
     }
 
 
