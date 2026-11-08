@@ -35,9 +35,14 @@ struct ShiftAlert: Codable, Identifiable, Hashable, Sendable {
   let type: String?
   let severity: String?
   let spokenText: String?
+  /// The server's cheapest plan, e.g. "send 1 truck, 1 trip each" (shown as received).
+  let bestPlan: String?
+  /// Plan cost in dollars, if sent.
+  let cost: Double?
+  let hoursToShutdown: Double?
 
   private enum CodingKeys: String, CodingKey {
-    case id, facility, facilityName, system, type, severity, spokenText
+    case id, facility, facilityName, system, type, severity, spokenText, bestPlan, cost, hoursToShutdown
   }
 
   init(from decoder: Decoder) throws {
@@ -49,6 +54,10 @@ struct ShiftAlert: Codable, Identifiable, Hashable, Sendable {
     type = c.lenientString(.type)
     severity = c.lenientString(.severity)
     spokenText = c.lenientString(.spokenText)
+    // best_plan may be a string or an object; only a string is shown.
+    bestPlan = c.lenientString(.bestPlan)
+    cost = c.lenientDouble(.cost)
+    hoursToShutdown = c.lenientDouble(.hoursToShutdown)
   }
 }
 

@@ -41,6 +41,7 @@ struct RootTabView: View {
       AppHeader(alarmActive: alarmActive) {
         LinkStatusChip(cameraVM: cameraVM, wearablesVM: wearablesVM) { showConnection = true }
       }
+      DangerBanner(controller: controller)
       HStack(spacing: 8) {
         ModePill(clock: controller.serverClock, reachable: controller.isBackendReachable)
         if let dataset = controller.serverClock?.dataset {
