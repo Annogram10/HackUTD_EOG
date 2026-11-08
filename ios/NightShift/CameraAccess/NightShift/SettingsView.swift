@@ -32,6 +32,7 @@ struct SettingsView: View {
   @State private var apiKeySaved: String?
   @AppStorage(Config.Keys.defaultSystem) private var defaultSystem = ""
   @AppStorage(Config.Keys.briefingAtShiftStart) private var briefingAtShiftStart = true
+  @AppStorage(Config.Keys.audioToPhone) private var audioToPhone = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -167,6 +168,20 @@ struct SettingsView: View {
   /// Voice speed and a test line.
   private var voiceOutputCard: some View {
     SysCard(label: "SYS//VOICE OUT") {
+      Text("AUDIO OUT").font(.nsMono(.caption, .semibold)).foregroundStyle(NS.textSecondary)
+      Picker("Audio out", selection: Binding(
+        get: { audioToPhone },
+        set: { toPhone in Task { await controller.setAudioToPhone(toPhone) } }
+      )) {
+        Text("Glasses").tag(false)
+        Text("Phone speaker").tag(true)
+      }
+      .pickerStyle(.segmented)
+      if audioToPhone {
+        Text("Alerts, chime and alarm play from the iPhone. Voice commands use the phone's mic.")
+          .font(.ns(.subheadline))
+          .foregroundStyle(NS.textMuted)
+      }
       HStack {
         Text("VOICE SPEED").font(.nsMono(.caption, .semibold)).foregroundStyle(NS.textSecondary)
         Spacer()

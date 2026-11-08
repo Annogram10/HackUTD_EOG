@@ -186,6 +186,11 @@ final class Speaker: NSObject {
             try? session.setCategory(.playAndRecord, mode: mode, options: options)
         }
         try? session.setActive(true)
+        // Settings > Audio out: "Phone" plays through the iPhone speaker instead of the
+        // glasses (for demos). Re-applied every time, since iOS drops the override when the
+        // route or category changes. The glasses' Bluetooth headset link carries mic and
+        // speaker together, so in this mode the phone's mic is used too.
+        try? session.overrideOutputAudioPort(Config.audioToPhone ? .speaker : .none)
     }
 }
 

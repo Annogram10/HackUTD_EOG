@@ -145,8 +145,13 @@ final class VoiceCommandListener {
     stopEngine()
     Speaker.activateAudioSession()
     let session = AVAudioSession.sharedInstance()
-    // Prefer the glasses mic (Bluetooth HFP) over the phone's.
-    if let glassesInput = session.availableInputs?.first(where: { $0.portType == .bluetoothHFP }) {
+    // Prefer the glasses mic (Bluetooth HFP) over the phone's, unless audio is set to
+    // play from the phone: choosing the glasses mic would pull the output back to them.
+    if Config.audioToPhone {
+      let builtIn = session.availableInputs?.first(where: { $0.portType == .builtInMic })
+      try? session.setPreferredInput(builtIn)
+      try? session.overrideOutputAudioPort(.speaker)
+    } else if let glassesInput = session.availableInputs?.first(where: { $0.portType == .bluetoothHFP }) {
       try? session.setPreferredInput(glassesInput)
     }
 

@@ -205,6 +205,19 @@ final class NightShiftController {
     await voice.start()
   }
 
+  /// Settings > Audio out: route speech, chime and siren to the phone speaker or the
+  /// glasses. Applies now, and restarts listening so the mic follows (phone mic with the
+  /// phone speaker, glasses mic with the glasses).
+  func setAudioToPhone(_ toPhone: Bool) async {
+    UserDefaults.standard.set(toPhone, forKey: Config.Keys.audioToPhone)
+    Speaker.activateAudioSession()
+    if voice.isRunning {
+      voice.stop()
+      await voice.start()
+    }
+    await Speaker.shared.speak(toPhone ? "Audio from the phone." : "Audio from the glasses.")
+  }
+
   /// Turns voice commands on or off, independent of the shift.
   func setVoiceEnabled(_ enabled: Bool) async {
     if enabled {

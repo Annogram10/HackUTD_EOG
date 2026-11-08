@@ -127,6 +127,7 @@ enum Config {
     static let picoAddress = "NightShift.picoAddress"
     static let defaultSystem = "NightShift.defaultSystem"
     static let briefingAtShiftStart = "NightShift.briefingAtShiftStart"
+    static let audioToPhone = "NightShift.audioToPhone"
   }
 
   /// Pico buzzer address (PICO_IP, optionally with :port), or nil if not set.
@@ -141,6 +142,12 @@ enum Config {
   /// System the map starts on (nil = the system of the top-ranked facility).
   static var defaultSystem: String? {
     UserDefaults.standard.string(forKey: Keys.defaultSystem).flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// Play speech, chime and siren through the iPhone speaker instead of the glasses
+  /// (Settings > Audio out). Defaults to off (glasses).
+  static var audioToPhone: Bool {
+    UserDefaults.standard.bool(forKey: Keys.audioToPhone)
   }
 
   /// Read the handoff briefing aloud at Start Shift. Defaults to on.
