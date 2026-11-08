@@ -40,10 +40,12 @@ export const SEVERITY: Record<Severity | "none", { label: string; cls: string; t
   low: { label: "Minor", cls: "bg-zinc-800 text-zinc-300 ring-zinc-600", tone: "ok" },
   none: { label: "Normal", cls: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40", tone: "ok" },
 };
-export const SeverityBadge = ({ severity }: { severity: Severity | "none" }) => (
-  <span className={`${base} gap-1.5 font-semibold uppercase ${SEVERITY[severity].cls}`}>
+// Look up a severity safely: an older backend (or a missing field) shows as "Normal" instead of crashing the page.
+export const sevInfo = (s: string | null | undefined) => SEVERITY[(s ?? "none") as Severity | "none"] ?? SEVERITY.none;
+export const SeverityBadge = ({ severity }: { severity?: Severity | "none" | null }) => (
+  <span className={`${base} gap-1.5 font-semibold uppercase ${sevInfo(severity).cls}`}>
     {(severity === "high" || severity === "medium") && <WarningIcon />}
-    {SEVERITY[severity].label}
+    {sevInfo(severity).label}
   </span>
 );
 
@@ -64,8 +66,8 @@ export const CategoryBadge = ({ category }: { category: Category }) => (
   <span className={`${base} bg-zinc-800 text-zinc-200 ring-zinc-600`}>{CATEGORY[category].label}</span>
 );
 // A facility's status, coloured by the backend's severity.
-export const FacStatusBadge = ({ status, severity }: { status: FacilityStatus; severity: Severity | "none" }) => (
-  <span className={`${base} ${SEVERITY[severity].cls}`}>
+export const FacStatusBadge = ({ status, severity }: { status: FacilityStatus; severity?: Severity | "none" | null }) => (
+  <span className={`${base} ${sevInfo(severity).cls}`}>
     {FAC_STATUS[status].label}{severity === "low" ? ", minor" : ""}
   </span>
 );

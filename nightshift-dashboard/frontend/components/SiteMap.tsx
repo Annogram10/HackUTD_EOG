@@ -8,7 +8,7 @@
 import Link from "next/link";
 import { fmtHours } from "@/lib/api";
 import type { FacilityCard, Shift, System } from "@/lib/types";
-import { SEVERITY } from "./Badges";
+import { sevInfo } from "./Badges";
 
 type Tone = "ok" | "amber" | "orange" | "red";
 const BORDER: Record<Tone, string> = { ok: "border-emerald-500", amber: "border-amber-400", orange: "border-amber-500", red: "border-red-500" };
@@ -16,7 +16,7 @@ const DOT: Record<Tone, string> = { ok: "bg-emerald-500", amber: "bg-amber-400",
 const STROKE: Record<Tone, string> = { ok: "#4d535c", amber: "#f2b33d", orange: "#f2b33d", red: "#e5484d" };
 
 // Chip colour = the backend's severity for this facility (never worked out here).
-const tone = (f: FacilityCard): Tone => SEVERITY[f.severity].tone;
+const tone = (f: FacilityCard): Tone => sevInfo(f.severity).tone;
 
 const W = 100;
 const H = 56.25;
@@ -149,7 +149,7 @@ export default function SiteMap({ system, shift }: { system: System; shift: Shif
               {f.status === "tripped" && <span className="ml-1 font-semibold text-red-300">· tripped</span>}
             </div>
             <div className="mt-1 text-sm font-semibold text-zinc-200">
-              {SEVERITY[f.severity].label}{flagCount ? ` · ${flagCount} flag${flagCount > 1 ? "s" : ""}` : ""}
+              {sevInfo(f.severity).label}{flagCount ? ` · ${flagCount} flag${flagCount > 1 ? "s" : ""}` : ""}
             </div>
             {isMissed && <div className="text-sm text-zinc-400">stop missed</div>}
           </Link>
