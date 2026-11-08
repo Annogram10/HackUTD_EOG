@@ -28,6 +28,8 @@ final class FrameGrabber {
   @ObservationIgnored var onFlag: (@MainActor (_ type: String, _ description: String?, _ facility: String, _ photo: Data) async -> Void)?
   /// Facility id sent with each check; nil means none chosen yet, so nothing is sent.
   @ObservationIgnored var facility: @MainActor () -> String? = { nil }
+  /// False while no shift is active: no checks are sent and no flags raised.
+  @ObservationIgnored var isEnabled: @MainActor () -> Bool = { false }
 
   @ObservationIgnored private let api: any NightShiftAPI
   @ObservationIgnored private var loopTask: Task<Void, Never>?
@@ -91,7 +93,7 @@ final class FrameGrabber {
   }
 
   private func tick() {
-    guard !isRequestPending, let frame = latestFrame, frame !== lastSentFrame else { return }
+    guard isEnabled(), !isRequestPending, let frame = latestFrame, frame !== lastSentFrame else { return }
     guard let facility = facility() else {
       // No facility chosen: flags are blocked, so don't send.
       lastCheck = (.skipped, Date())

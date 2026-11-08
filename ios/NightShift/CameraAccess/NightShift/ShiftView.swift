@@ -20,7 +20,19 @@ struct ShiftView: View {
     NavigationStack {
       List {
         Section {
-          if controller.isOnShift {
+          if let since = controller.unfinishedShiftStart {
+            Label(
+              "Shift in progress since \(since.formatted(date: .abbreviated, time: .shortened))",
+              systemImage: "clock.badge.exclamationmark"
+            )
+            .foregroundStyle(.orange)
+            Button("Resume", systemImage: "play") {
+              Task { await controller.resumeShift() }
+            }
+            Button("End Shift", systemImage: "moon.zzz", role: .destructive) {
+              confirmEndShift = true
+            }
+          } else if controller.isOnShift {
             Button("End Shift", systemImage: "moon.zzz", role: .destructive) {
               confirmEndShift = true
             }
@@ -147,6 +159,11 @@ struct ShiftView: View {
 
   private var voiceSection: some View {
     Section("Voice") {
+      // Reflects the recognizer's real state; works with or without a shift.
+      Toggle("Voice commands", isOn: Binding(
+        get: { controller.voice.isRunning },
+        set: { enabled in Task { await controller.setVoiceEnabled(enabled) } }
+      ))
       Label(
         controller.voice.isRunning ? "Listening: on" : "Listening: off",
         systemImage: controller.voice.isRunning ? "mic.fill" : "mic.slash"

@@ -61,8 +61,8 @@ final class ShiftStore {
     current?.flags.last { $0.status == .waiting }
   }
 
-  /// Saves a flag and, if given, its evidence photo (JPEG, already scaled). Starts a
-  /// shift if none is running so no evidence is lost.
+  /// Saves a flag and, if given, its evidence photo (JPEG, already scaled). Returns nil
+  /// (saving nothing) if no shift is open: only Start Shift opens one.
   @discardableResult
   func addFlag(
     type: String,
@@ -71,8 +71,8 @@ final class ShiftStore {
     photo: Data?,
     facility: String,
     description: String? = nil
-  ) -> Flag {
-    let shift = startShift()
+  ) -> Flag? {
+    guard let shift = current else { return nil }
     let id = UUID()
     var flag = Flag(
       id: id,
@@ -111,9 +111,11 @@ final class ShiftStore {
 
   // MARK: - Notes
 
-  /// Attaches the note to `flagID` if given, otherwise to the shift.
-  func addNote(_ text: String, to flagID: Flag.ID?) {
-    startShift()
+  /// Attaches the note to `flagID` if given, otherwise to the shift. Returns false
+  /// (saving nothing) if no shift is open.
+  @discardableResult
+  func addNote(_ text: String, to flagID: Flag.ID?) -> Bool {
+    guard current != nil else { return false }
     let note = VoiceNote(text: text)
     if let flagID, let index = current?.flags.firstIndex(where: { $0.id == flagID }) {
       current?.flags[index].notes.append(note)
@@ -121,6 +123,7 @@ final class ShiftStore {
       current?.notes.append(note)
     }
     save()
+    return true
   }
 
   // MARK: - Photos

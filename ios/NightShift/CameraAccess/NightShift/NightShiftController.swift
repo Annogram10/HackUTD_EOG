@@ -71,6 +71,8 @@ final class NightShiftController {
     alerts = cache.load([ShiftAlert].self, from: CacheKey.alerts) ?? []
     facilities = cache.load([FacilityStatus].self, from: CacheKey.facilities) ?? []
     handoff = cache.load(Handoff.self, from: CacheKey.handoff)
+    // A shift saved by an earlier launch is not continued automatically.
+    isAwaitingResume = store.current != nil
 
     voice.onCommand = { [weak self] command in
       await self?.handle(command)
@@ -79,6 +81,7 @@ final class NightShiftController {
       self?.handleUnrecognized(transcript)
     }
     vision.facility = { [weak self] in self?.currentFacilityID }
+    vision.isEnabled = { [weak self] in self?.isOnShift ?? false }
     vision.onFlag = { [weak self] type, description, facility, photo in
       await self?.handleCameraFlag(type: type, description: description, facility: facility, photo: photo)
     }
@@ -97,11 +100,20 @@ final class NightShiftController {
 
   // MARK: - Shift
 
-  var isOnShift: Bool { store.current != nil }
+  /// True when the saved shift was left open by an earlier launch and the operator
+  /// hasn't chosen Resume or End Shift yet. Flags are blocked meanwhile.
+  private(set) var isAwaitingResume = false
+
+  /// A shift is open and active. Only Start Shift (or Resume) makes this true.
+  var isOnShift: Bool { store.current != nil && !isAwaitingResume }
+
+  /// Start time of a shift left open by an earlier launch, while awaiting Resume.
+  var unfinishedShiftStart: Date? { isAwaitingResume ? store.current?.startedAt : nil }
 
   /// Opens the shift record, turns on voice commands, refreshes, then speaks the
   /// handoff and the first alert.
   func startShift() async {
+    isAwaitingResume = false
     store.startShift()
     await voice.start()
     await refresh()
@@ -116,8 +128,25 @@ final class NightShiftController {
     await speakNextAlert()
   }
 
+  /// Continues a shift left open by an earlier launch and turns voice on.
+  func resumeShift() async {
+    guard isAwaitingResume else { return }
+    isAwaitingResume = false
+    await voice.start()
+  }
+
+  /// Turns voice commands on or off, independent of the shift.
+  func setVoiceEnabled(_ enabled: Bool) async {
+    if enabled {
+      await voice.start()
+    } else {
+      voice.stop()
+    }
+  }
+
   /// Speaks the flag counts, archives the shift, and queues its report for upload.
   func endShift() async {
+    isAwaitingResume = false
     guard let ended = store.endShift() else { return }
     uploads.enqueue(store.makeReport(for: ended))
     voice.stop()
@@ -281,7 +310,8 @@ final class NightShiftController {
   /// Backend flagged a frame: save it with the facility the check was sent for, chime,
   /// and ask for a decision.
   private func handleCameraFlag(type: String, description: String?, facility: String, photo: Data) async {
-    store.addFlag(type: type, source: "camera", status: .waiting, photo: photo, facility: facility, description: description)
+    // The shift may have ended while the check was in flight.
+    guard store.addFlag(type: type, source: "camera", status: .waiting, photo: photo, facility: facility, description: description) != nil else { return }
     await Speaker.shared.announce("possible \(type), confirm or dismiss")
   }
 
@@ -315,6 +345,10 @@ final class NightShiftController {
       store.setStatus(status, for: flag.id)
       await reply(status == .confirmed ? "Confirmed" : "Dismissed")
     case .note(let text):
+      guard isOnShift else {
+        await reply("Start a shift first", ok: false)
+        return
+      }
       store.addNote(text, to: store.currentFlag?.id)
       await reply("Note saved")
     case .flag(let type):
@@ -327,6 +361,10 @@ final class NightShiftController {
       await reply("Voice commands are off", ok: false)
       return
     }
+    guard isOnShift else {
+      await reply("Start a shift first", ok: false)
+      return
+    }
     guard let facility = currentFacilityID else {
       await reply("Pick a facility first", ok: false)
       return
@@ -336,7 +374,7 @@ final class NightShiftController {
     guard let frame = vision.latestFrame else {
       // No frame: keep the flag anyway, marked as having no photo.
       let flag = store.addFlag(type: type, source: "voice", status: .confirmed, photo: nil, facility: facility)
-      store.addNote("no photo", to: flag.id)
+      store.addNote("no photo", to: flag?.id)
       await reply("\(label) flagged, no photo. Start the camera first", ok: false)
       return
     }
