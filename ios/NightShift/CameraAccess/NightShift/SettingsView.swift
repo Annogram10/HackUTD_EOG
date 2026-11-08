@@ -24,6 +24,10 @@ struct SettingsView: View {
   @State private var addressError: String?
   @AppStorage(Config.Keys.supervisorPhone) private var supervisorPhone = ""
   @AppStorage(Config.Keys.picoAddress) private var picoAddress = ""
+  @State private var picoText = ""
+  @State private var picoError: String?
+  @State private var apiKeyText = ""
+  @State private var apiKeySaved: String?
   @AppStorage(Config.Keys.defaultSystem) private var defaultSystem = ""
   @AppStorage(Config.Keys.showDemoMapLayers) private var showDemoLayers = true
 
@@ -94,8 +98,10 @@ struct SettingsView: View {
       Button("Cancel", role: .cancel) {}
     }
     .task {
+      picoText = picoAddress
       addressText = controller.backendURL.absoluteString
       await controller.testConnection()
+      await controller.refreshClock()
     }
     // Keep the field showing the address in use after Save, Paste or Reset.
     .onChange(of: controller.backendURL) { addressText = controller.backendURL.absoluteString }
@@ -119,12 +125,20 @@ struct SettingsView: View {
 
   private var picoSection: some View {
     Section("Pico buzzer") {
-      TextField("Pico address, e.g. 192.168.1.50", text: $picoAddress)
-        .keyboardType(.URL)
+      TextField("Pico address, e.g. 192.168.1.50", text: $picoText)
+        .keyboardType(.numbersAndPunctuation)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .font(.body.monospaced())
+        .submitLabel(.done)
+        .onSubmit { savePico() }
+        .onChange(of: picoText) { picoError = nil }
         .accessibilityLabel("Pico address")
+      if let picoError {
+        Text(picoError).font(.subheadline).foregroundStyle(NS.redText)
+      }
+      FlatButton(title: "Save Pico address", icon: "checkmark") { savePico() }
+        .buttonStyle(.borderless)
       HStack(spacing: 10) {
         ForEach(1...3, id: \.self) { level in
           FlatButton(title: "Level \(level)", accessibilityLabel: "Test nudge level \(level)") {
@@ -138,6 +152,51 @@ struct SettingsView: View {
         .foregroundStyle(NS.textSecondary)
     }
     .listRowBackground(NS.surface)
+  }
+
+  private func savePico() {
+    let text = picoText.trimmingCharacters(in: .whitespacesAndNewlines)
+    if text.isEmpty {
+      picoAddress = ""
+      picoError = nil
+      return
+    }
+    guard let address = Config.normalizedPicoAddress(text) else {
+      picoError = "Not an IP address. Use four numbers like 192.168.1.50 (optionally :port)."
+      return
+    }
+    picoAddress = address
+    picoText = address
+    picoError = nil
+  }
+
+  /// Optional shared key for backend writes; stored in the Keychain only.
+  private var apiKeyRows: some View {
+    Group {
+      SecureField(Config.apiKey == nil ? "API key (optional)" : "API key saved (enter a new one to replace)", text: $apiKeyText)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .font(.body.monospaced())
+        .accessibilityLabel("Backend API key")
+      HStack(spacing: 10) {
+        FlatButton(title: "Save key", icon: "key.fill") {
+          let key = apiKeyText.trimmingCharacters(in: .whitespacesAndNewlines)
+          apiKeySaved = Keychain.set(key, for: Config.Keys.apiKeyAccount)
+            ? (key.isEmpty ? "Key removed." : "Key saved in the Keychain.")
+            : "Couldn't save the key."
+          apiKeyText = ""
+        }
+        FlatButton(title: "Remove key", icon: "trash") {
+          apiKeySaved = Keychain.set(nil, for: Config.Keys.apiKeyAccount) ? "Key removed." : "Couldn't remove the key."
+          apiKeyText = ""
+        }
+        .disabled(Config.apiKey == nil)
+      }
+      .buttonStyle(.borderless)
+      Text(apiKeySaved ?? "Sent as X-API-Key on every write when the server requires it.")
+        .font(.subheadline)
+        .foregroundStyle(NS.textSecondary)
+    }
   }
 
   private var developerSection: some View {
@@ -265,9 +324,20 @@ struct SettingsView: View {
           .foregroundStyle(.red)
       }
       VStack(alignment: .leading, spacing: 4) {
-        Text(Config.useMock ? "Mock data (offline demo)" : backendHostText)
-          .font(.caption.monospaced())
-          .textSelection(.enabled)
+        HStack(spacing: 8) {
+          // Reachable dot from the last GET /clock check (text too, not color alone).
+          let reachable = controller.isBackendReachable
+          Rectangle()
+            .fill(reachable == true ? NS.green : (reachable == false ? NS.red : NS.textMuted))
+            .frame(width: 10, height: 10)
+          Text(reachable == true ? "Reachable" : (reachable == false ? "Not reachable" : "Checking…"))
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(reachable == true ? NS.green : (reachable == false ? NS.redText : NS.textMuted))
+          Text(Config.useMock ? "Mock data (offline demo)" : backendHostText)
+            .font(.caption.monospaced())
+            .textSelection(.enabled)
+        }
+        .accessibilityElement(children: .combine)
         if controller.isTestingConnection {
           Text("Testing…")
             .font(.caption)
@@ -279,6 +349,7 @@ struct SettingsView: View {
         }
       }
       addressEditor
+      apiKeyRows
       Button("Test connection", systemImage: "network") {
         Task { await controller.testConnection() }
       }
@@ -433,7 +504,7 @@ struct SettingsView: View {
   /// Normalizes and saves the typed address, then tests it; shows a red message if invalid.
   private func saveAddress() {
     guard let url = Config.normalizedBaseURL(from: addressText) else {
-      addressError = "Not a valid https address."
+      addressError = "Not a valid address. Use https (plain http only for a local IP)."
       return
     }
     save(url)

@@ -325,6 +325,11 @@ struct AlarmStatus: Codable, Hashable, Sendable {
   let alarmId: String?
   /// Backend data time (ISO 8601), shown as the alarm's timestamp.
   let asOf: String?
+  /// Older servers: true when following live data, false in replay.
+  let live: Bool?
+  /// Newer servers: "live" or "replay".
+  let mode: String?
+  let dataset: String?
   let level: String?
   let headline: String?
   /// Written for speech (numbers spelled out); spoken as received.
@@ -333,7 +338,7 @@ struct AlarmStatus: Codable, Hashable, Sendable {
   let facilityIds: [String]
 
   private enum CodingKeys: String, CodingKey {
-    case alarm, alarmId, asOf, level, headline, spokenText, reasons, facilityIds
+    case alarm, alarmId, asOf, live, mode, dataset, level, headline, spokenText, reasons, facilityIds
   }
 
   init(from decoder: Decoder) throws {
@@ -341,6 +346,9 @@ struct AlarmStatus: Codable, Hashable, Sendable {
     alarm = (try? c.decodeIfPresent(Bool.self, forKey: .alarm)) ?? false
     alarmId = c.lenientString(.alarmId).flatMap { $0.isEmpty ? nil : $0 }
     asOf = c.lenientString(.asOf)
+    live = try? c.decodeIfPresent(Bool.self, forKey: .live)
+    mode = c.lenientString(.mode)?.lowercased()
+    dataset = c.lenientString(.dataset)
     level = c.lenientString(.level)
     headline = c.lenientString(.headline)
     spokenText = c.lenientString(.spokenText).flatMap { $0.isEmpty ? nil : $0 }
@@ -411,5 +419,53 @@ struct IssueReport: Codable, Hashable, Sendable {
     spokenText = c.lenientString(.spokenText).flatMap { $0.isEmpty ? nil : $0 }
     flag = try? c.decodeIfPresent(BackendFlag.self, forKey: .flag)
     options = (try? c.decodeIfPresent([String].self, forKey: .options)) ?? []
+  }
+}
+
+// MARK: - GET /clock
+
+/// GET /clock: which data the server is on. Older servers don't have GET /clock; the
+/// app then builds this from GET /alarm (`live`, `as_of`, `dataset`).
+struct ServerClock: Codable, Hashable, Sendable {
+  let dataset: String?
+  /// ISO 8601 time the server considers "now".
+  let now: String?
+  /// The same time as Unix seconds.
+  let nowTs: Double?
+  /// "live" or "replay".
+  let mode: String?
+
+  var isReplay: Bool { mode?.lowercased() == "replay" }
+
+  /// The server's "now" as a date, from now_ts or the ISO string.
+  var nowDate: Date? {
+    if let nowTs { return Date(timeIntervalSince1970: nowTs) }
+    guard let now else { return nil }
+    return ISO8601DateFormatter().date(from: now)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case dataset, now, nowTs, mode
+  }
+
+  init(dataset: String?, now: String?, nowTs: Double?, mode: String?) {
+    self.dataset = dataset
+    self.now = now
+    self.nowTs = nowTs
+    self.mode = mode
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    dataset = c.lenientString(.dataset)
+    // `now` may be an ISO string or a number.
+    if let text = try? c.decodeIfPresent(String.self, forKey: .now) {
+      now = text
+      nowTs = c.lenientDouble(.nowTs)
+    } else {
+      now = nil
+      nowTs = c.lenientDouble(.nowTs) ?? c.lenientDouble(.now)
+    }
+    mode = c.lenientString(.mode)?.lowercased()
   }
 }

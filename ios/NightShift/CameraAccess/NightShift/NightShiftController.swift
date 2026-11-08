@@ -264,11 +264,48 @@ final class NightShiftController {
   }
 
   @ObservationIgnored private var mapPollTask: Task<Void, Never>?
+  @ObservationIgnored private var clockPollTask: Task<Void, Never>?
+
+  // MARK: - Server clock (LIVE / REPLAY / OFFLINE)
+
+  /// What the server says "now" is, and whether it's live or replay.
+  private(set) var serverClock: ServerClock?
+  /// nil until the first check; then whether the backend answered.
+  private(set) var isBackendReachable: Bool?
+  private(set) var clockCheckedAt: Date?
+
+  /// GET /clock; servers without GET /clock (404/405) fall back to GET /alarm's
+  /// live, as_of and dataset.
+  func refreshClock() async {
+    do {
+      serverClock = try await api.fetchClock()
+      isBackendReachable = true
+    } catch NightShiftAPIError.badStatus(let code, _) where code == 404 || code == 405 {
+      if let status = try? await api.fetchAlarm() {
+        let mode = status.mode ?? (status.live == false ? "replay" : "live")
+        serverClock = ServerClock(dataset: status.dataset, now: status.asOf, nowTs: nil, mode: mode)
+        isBackendReachable = true
+      } else {
+        isBackendReachable = false
+      }
+    } catch {
+      isBackendReachable = false
+    }
+    clockCheckedAt = Date()
+  }
 
   /// Starts the app-wide polls: GET /alarm every 4 s and GET /map every 10 s. Called
   /// once from the app root; safe to call again.
   func startPolling() {
     alarm.startPolling()
+    if clockPollTask == nil {
+      clockPollTask = Task { @MainActor [weak self] in
+        while !Task.isCancelled {
+          await self?.refreshClock()
+          try? await Task.sleep(for: Config.clockRefreshInterval)
+        }
+      }
+    }
     guard mapPollTask == nil else { return }
     mapPollTask = Task { @MainActor [weak self] in
       while !Task.isCancelled {
@@ -335,6 +372,7 @@ final class NightShiftController {
 
   private func backendAddressChanged() async {
     backendURL = Config.baseURL
+    Task { await refreshClock() }
     isUsingDefaultBackend = Config.savedBaseURL == nil
     connectionTestResult = nil
     BackendStatus.shared.reset()

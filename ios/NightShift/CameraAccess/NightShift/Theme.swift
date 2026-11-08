@@ -306,6 +306,31 @@ struct OfflineBanner: View {
   }
 }
 
+/// LIVE / REPLAY (time) / OFFLINE pill, shown at the top of every tab.
+struct ModePill: View {
+  let clock: ServerClock?
+  let reachable: Bool?
+
+  private var tone: Tone {
+    guard reachable != false else { return .red }
+    guard clock != nil else { return .grey }
+    return clock?.isReplay == true ? .amber : .green
+  }
+
+  private var text: String {
+    guard reachable != false else { return "OFFLINE" }
+    guard let clock else { return "CHECKING…" }
+    guard clock.isReplay else { return "LIVE" }
+    let time = clock.nowDate.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? clock.now ?? ""
+    return time.isEmpty ? "REPLAY" : "REPLAY · \(time)"
+  }
+
+  var body: some View {
+    Badge(text: text, tone: tone, icon: reachable == false ? "wifi.slash" : (clock?.isReplay == true ? "clock.arrow.circlepath" : "dot.radiowaves.left.and.right"))
+      .accessibilityLabel(reachable == false ? "Offline" : (clock?.isReplay == true ? "Replay mode, \(text)" : "Live"))
+  }
+}
+
 /// Persistent red banner while GET /alarm keeps failing; stays until a poll succeeds.
 struct MonitoringLostBanner: View {
   let lastSuccess: Date?

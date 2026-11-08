@@ -42,6 +42,18 @@ enum Config {
 
   /// Trims whitespace, adds "https://" if no scheme, drops path/query/fragment and any
   /// trailing slash. Returns nil unless the result is an https URL with a host.
+  /// True for private IPv4 (10/8, 172.16/12, 192.168/16, 127/8), link-local and *.local.
+  static func isLocalHost(_ host: String) -> Bool {
+    if host.hasSuffix(".local") { return true }
+    let parts = host.split(separator: ".").compactMap { Int($0) }
+    guard parts.count == 4 else { return false }
+    switch (parts[0], parts[1]) {
+    case (10, _), (127, _), (192, 168), (169, 254): return true
+    case (172, 16...31): return true
+    default: return false
+    }
+  }
+
   static func normalizedBaseURL(from input: String) -> URL? {
     var text = input.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return nil }
@@ -50,10 +62,12 @@ enum Config {
     }
     guard
       var components = URLComponents(string: text),
-      components.scheme?.lowercased() == "https",
+      let scheme = components.scheme?.lowercased(), scheme == "https" || scheme == "http",
       let host = components.host, host.contains("."), !host.hasPrefix("."), !host.hasSuffix(".")
     else { return nil }
-    components.scheme = "https"
+    // Plain http only reaches local addresses (ATS allows local networking only).
+    if scheme == "http" && !isLocalHost(host.lowercased()) { return nil }
+    components.scheme = scheme
     components.host = host.lowercased()
     components.user = nil
     components.password = nil
@@ -77,7 +91,31 @@ enum Config {
 
   // MARK: - On-phone settings (Settings tab), stored in UserDefaults
 
+  /// Optional shared key for backend writes (X-API-Key), kept in the Keychain.
+  static var apiKey: String? {
+    Keychain.string(for: Keys.apiKeyAccount).flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// Validates "a.b.c.d" or "a.b.c.d:port" (each part 0–255, port 1–65535). Trims
+  /// whitespace, a leading http:// and trailing slashes. nil if it doesn't parse.
+  static func normalizedPicoAddress(_ input: String) -> String? {
+    var text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    if text.lowercased().hasPrefix("http://") { text.removeFirst(7) }
+    while text.hasSuffix("/") { text.removeLast() }
+    let parts = text.split(separator: ":", omittingEmptySubsequences: false)
+    guard parts.count == 1 || parts.count == 2 else { return nil }
+    let octets = parts[0].split(separator: ".", omittingEmptySubsequences: false)
+    guard octets.count == 4, octets.allSatisfy({ part in
+      !part.isEmpty && part.count <= 3 && part.allSatisfy(\.isNumber) && (Int(part) ?? 256) <= 255
+    }) else { return nil }
+    if parts.count == 2 {
+      guard let port = Int(parts[1]), (1...65535).contains(port) else { return nil }
+    }
+    return text
+  }
+
   enum Keys {
+    static let apiKeyAccount = "backendAPIKey"
     static let supervisorPhone = "NightShift.supervisorPhone"
     static let picoAddress = "NightShift.picoAddress"
     static let defaultSystem = "NightShift.defaultSystem"
@@ -108,6 +146,9 @@ enum Config {
   static let alarmPollInterval: Duration = .seconds(4)
   /// How often an unacknowledged alarm's spoken_text is repeated.
   static let alarmRepeatInterval: Duration = .seconds(15)
+  /// How often GET /clock is read (also on launch and after an address change).
+  static let clockRefreshInterval: Duration = .seconds(60)
+
   /// How often GET /map is reloaded while the app is open.
   static let mapRefreshInterval: Duration = .seconds(10)
 

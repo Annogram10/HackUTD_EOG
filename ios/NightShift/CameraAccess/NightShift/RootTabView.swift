@@ -37,6 +37,20 @@ struct RootTabView: View {
 
   var body: some View {
     VStack(spacing: 0) {
+      HStack(spacing: 8) {
+        ModePill(clock: controller.serverClock, reachable: controller.isBackendReachable)
+        if let dataset = controller.serverClock?.dataset {
+          Text(dataset)
+            .font(.caption.monospaced())
+            .foregroundStyle(NS.textMuted)
+            .lineLimit(1)
+            .truncationMode(.middle)
+        }
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, 16)
+      .padding(.vertical, 4)
+      .background(NS.background)
       if controller.alarm.monitoringLost {
         MonitoringLostBanner(lastSuccess: controller.alarm.lastSuccess)
       } else if isOffline {

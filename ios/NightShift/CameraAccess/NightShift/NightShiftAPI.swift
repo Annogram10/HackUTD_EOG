@@ -16,6 +16,8 @@ protocol NightShiftAPI: Sendable {
   func fetchMap() async throws -> FacilityMap
   /// GET /alarm: the current alarm state.
   func fetchAlarm() async throws -> AlarmStatus
+  /// GET /clock: live or replay, and which dataset.
+  func fetchClock() async throws -> ServerClock
   /// GET /issue[?facility=]: without a facility the backend picks the most urgent one.
   func fetchIssue(facility: String?) async throws -> IssueReport
   /// POST /flag/{id}/dismiss or /prioritize. Returns the updated flag.
@@ -183,6 +185,10 @@ struct RealAPI: NightShiftAPI {
     try JSONCoding.decoder.decode(AlarmStatus.self, from: try await send(makeRequest("alarm"), path: "alarm"))
   }
 
+  func fetchClock() async throws -> ServerClock {
+    try JSONCoding.decoder.decode(ServerClock.self, from: try await send(makeRequest("clock"), path: "clock"))
+  }
+
   func fetchIssue(facility: String?) async throws -> IssueReport {
     var request = makeRequest("issue")
     if let facility, let url = request.url {
@@ -245,6 +251,10 @@ struct RealAPI: NightShiftAPI {
     // Stops ngrok's browser-warning HTML page from replacing the JSON response.
     request.setValue("true", forHTTPHeaderField: "ngrok-skip-browser-warning")
     let isWrite = (request.httpMethod ?? "GET") != "GET"
+    // Servers with NIGHTSHIFT_KEY set require the shared key on every write.
+    if isWrite, let key = Config.apiKey {
+      request.setValue(key, forHTTPHeaderField: "X-API-Key")
+    }
     let session: any HTTPTransport = transport ?? (isWrite ? Self.writeSession : Self.pollSession)
     do {
       let (data, response) = try await session.perform(request)
@@ -306,6 +316,11 @@ struct MockAPI: NightShiftAPI {
       BackendFlag.self,
       from: Data(#"{"id": "\#(id)", "status": "\#(status)", "priority": \#(action == .prioritize ? 1 : 0)}"#.utf8)
     )
+  }
+
+  func fetchClock() async throws -> ServerClock {
+    try await simulateNetwork()
+    return ServerClock(dataset: "mock", now: nil, nowTs: nil, mode: "live")
   }
 
   /// The mock never raises an alarm.
