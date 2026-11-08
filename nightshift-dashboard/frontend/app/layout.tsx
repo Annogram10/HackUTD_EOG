@@ -5,7 +5,7 @@ import Nav from "@/components/Nav";
 import AlarmStrip from "@/components/AlarmStrip";
 import AppProvider from "@/components/AppProvider";
 import GlitchIntro from "@/components/GlitchIntro";
-import OwlCorner from "@/components/OwlCorner";
+import OwlBuddy from "@/components/OwlBuddy";
 import TopBar from "@/components/TopBar";
 import "./globals.css";
 
@@ -29,7 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </Suspense>
           <TopBar />
           <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8 pb-56">{children}</main>
-          <OwlCorner />
+          <Suspense fallback={null}>
+            <OwlBuddy />
+          </Suspense>
           <GlitchIntro />
         </AppProvider>
       </body>

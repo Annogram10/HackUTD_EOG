@@ -247,3 +247,34 @@ html[data-acked] .danger-pulse { animation: none !important; }
 /* key panels (danger card, map, timeline) use the crimson border unless a status colour applies */
 .key-panel { border-color: #a83c47; }
 @media (prefers-reduced-motion: reduce) { .danger-pulse { animation: none; } }
+
+/* ---------- the owl as a working part of the screen ---------- */
+/* speech bubble: neon outline, quote marks, an angled tail; solid panel behind real text (AA) */
+.owl-bubble {
+  position: relative; margin-top: 12px; padding: 12px 14px 12px 22px; background: #342b30; color: #f8eed7;
+  border: 2px solid #19e6ff; box-shadow: 0 0 6px rgba(25, 230, 255, 0.55), inset 0 0 4px rgba(25, 230, 255, 0.25);
+}
+.owl-bubble::after { /* tail pointing up-right toward the perched owl */
+  content: ""; position: absolute; right: 34px; top: -14px; width: 18px; height: 14px; background: #19e6ff;
+  clip-path: polygon(0 100%, 100% 0, 60% 100%);
+}
+.owl-bubble-home { position: absolute; right: 0; bottom: 100%; margin: 0 0 14px; width: min(340px, calc(100vw - 32px)); }
+.owl-bubble-home::after { top: auto; bottom: -14px; right: 40px; clip-path: polygon(0 0, 100% 0, 70% 100%); }
+.owl-quote { position: absolute; font-family: var(--font-mono); font-size: 18px; line-height: 1; color: #19e6ff; }
+.owl-quote-open { left: 6px; top: 6px; }
+.owl-quote-close { right: 8px; bottom: 2px; }
+.owl-prop { position: absolute; left: -10px; bottom: 34px; width: 28px; height: 32px; z-index: 1; }
+.owl-flying { transition: left 0.9s cubic-bezier(0.4, 0, 0.2, 1), top 0.9s cubic-bezier(0.4, 0, 0.2, 1), width 0.9s; }
+.owl-speaking svg { animation: owl-speak 0.9s ease-in-out infinite; }
+@keyframes owl-speak { 50% { filter: drop-shadow(0 0 6px rgba(142, 149, 181, 0.9)); } }
+.owl-talk { animation: owl-talk 0.28s steps(2, end) infinite; }
+@keyframes owl-talk { 50% { opacity: 0; } }
+.owl-lean { transform: rotate(7deg); transform-origin: 50% 95%; }
+.owl-nod { animation: owl-nod 0.7s ease-in-out 1; }
+@keyframes owl-nod { 30% { transform: rotate(0deg) translateY(2.5px); } 60% { transform: rotate(0deg) translateY(-0.5px); } }
+.buddy-hop { animation: buddy-hop 0.6s ease-out 1; }
+@keyframes buddy-hop { 0% { transform: translate(-50%, 0); } 40% { transform: translate(-50%, -12px); } 70% { transform: translate(-50%, 0); } 85% { transform: translate(-50%, -3px); } 100% { transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .owl-flying { transition: none; }
+  .owl-speaking svg, .owl-talk, .owl-nod, .buddy-hop { animation: none; }
+}

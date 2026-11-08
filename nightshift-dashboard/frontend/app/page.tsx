@@ -59,7 +59,7 @@ export default function Now() {
         </section>
       )}
       {overview.alerts.length > 0 && (
-        <section className="space-y-4">
+        <section id="plan" className="scroll-mt-28 space-y-4">
           <div>
             <p className="hud">SYS//PLAN</p>
             <h2 className="text-2xl font-semibold">What to do</h2>
@@ -80,7 +80,7 @@ export default function Now() {
               {overview.systems.map((s) => {
                 const bad = s.facilities.some((f) => f.status !== "ok");
                 return (
-                  <button key={s.id} onClick={() => setPicked(s.id)}
+                  <button key={s.id} onClick={() => setPicked(s.id)} data-system-bad={bad ? "" : undefined}
                     className={`px-4 py-1.5 text-base font-medium ring-1 ${s.id === system.id ? "bg-zinc-800 text-zinc-100 ring-sky-400" : "bg-zinc-900 text-zinc-300 ring-zinc-700 hover:bg-zinc-800"}`}>
                     {bad && <span className="mr-2 inline-block h-2 w-2 rounded-full bg-red-500" />}
                     {s.id}

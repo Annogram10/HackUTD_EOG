@@ -53,7 +53,7 @@ export default function AlertCard({ a, compact = false }: { a: Alert; compact?: 
             ) : (
               <>
                 <p className="text-sm uppercase tracking-wide text-zinc-500">Tank reaches shutdown in</p>
-                <p className={`text-5xl font-bold tabular-nums ${urgent ? "text-red-400" : "text-amber-300"}`}>
+                <p data-countdown className={`text-5xl font-bold tabular-nums ${urgent ? "text-red-400" : "text-amber-300"}`}>
                   {a.hours_to_limit ? fmtHours(a.hours_to_limit.p50) : "n/a"}
                 </p>
                 {a.hours_to_limit && (

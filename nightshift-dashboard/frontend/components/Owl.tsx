@@ -72,7 +72,13 @@ const LABEL: Record<RiskLevel, string> = {
   red: "Owl is freaked out: danger",
 };
 
-export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: number }) {
+export default function Owl({ level, size = 40, look = 0, speaking = false, nod = false }: {
+  level: RiskLevel;
+  size?: number;
+  look?: number; // head turn toward what matters, degrees (clamped to +-35)
+  speaking?: boolean; // beak opens while it reads the summary aloud
+  nod?: boolean; // a short nod (after the operator acknowledges)
+}) {
   const uid = useId().replace(/:/g, "");
   const glasses = useRef<SVGGElement>(null);
   const glow = `owl-glow-${uid}`;
@@ -80,6 +86,9 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
   const dark = `owl-chrome-dark-${uid}`;
   const red = level === "red";
   const amber = level === "amber";
+  const turn = Math.max(-35, Math.min(35, look));
+  // the head (hair, face, glasses, beak) turns as one piece around the neck
+  const head: React.CSSProperties = { transform: `rotate(${turn}deg)`, transformOrigin: "24px 26px", transition: "transform 0.45s ease-out" };
   // Each time the level enters danger, restart the hop: remove the class, force a reflow, add it back.
   useEffect(() => {
     const g = glasses.current;
@@ -97,7 +106,7 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       height={size}
       role="img"
       aria-label={LABEL[level]}
-      className={red ? "owl-shake" : ""}
+      className={`${red ? "owl-shake" : ""} ${amber ? "owl-lean" : ""}`}
       style={{ overflow: "visible" }}
     >
       <title>{LABEL[level]}</title>
@@ -148,10 +157,13 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       <path d="M3.5 45.6 Q24 44 44.5 45.9" stroke="#4a4038" strokeWidth="2.2" strokeLinecap="round" fill="none" />
       <path d="M9 45.2 l-2.4 -1.6 M37 45.5 l2.2 -1.8" stroke="#4a4038" strokeWidth="0.9" strokeLinecap="round" />
 
+      <g style={head}>
       {/* long dark head feathers, behind the face */}
       <path d={HAIR_BACK} fill="#1c1d22" />
       <path d="M10 14 Q7.8 22 9.6 32 M12.2 11.4 Q9.6 19 10.8 28 M38 14 Q40.2 22 38.4 32 M35.8 11.4 Q38.4 19 37.2 28 M19 6.8 Q14 8.6 11.2 13 M29 6.8 Q34 8.6 36.8 13"
         stroke="#4a4d56" strokeWidth="0.35" fill="none" strokeLinecap="round" />
+
+      </g>
 
       {/* body, chest and barring */}
       <path d={BODY} fill={`url(#${uid}-body)`} />
@@ -182,6 +194,7 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       )}
       <CyberWing raised={red} chrome={chrome} dark={dark} />
 
+      <g style={head} className={nod ? "owl-nod" : undefined}>
       {/* facial disc: heart-shaped, with ring feathering around each eye and a dark ruff at the rim */}
       <path d={DISC} fill={`url(#${uid}-disc)`} stroke="#25282d" strokeWidth="0.8" />
       <g clipPath={`url(#${uid}-discclip)`} fill="none" stroke="#5d636b" strokeWidth="0.35" strokeDasharray="0.9 0.7" opacity="0.8">
@@ -245,6 +258,9 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       {/* hooked beak */}
       <path d="M22.7 24.2 Q24 22.8 25.3 24.2 Q25.3 27 24 29.2 Q22.7 27 22.7 24.2 Z" fill="#b9b2a2" />
       <path d="M24 29.2 Q23.6 28.4 23.9 27.6" stroke="#4a4540" strokeWidth="0.35" fill="none" />
+
+      {speaking && <path d="M23 29.3 Q24 31.2 25 29.3 Z" fill="#1a0710" className="owl-talk" />}
+      </g>
 
       {/* feathered feet with dark talons gripping the branch */}
       {[19.6, 28.4].map((x) => (

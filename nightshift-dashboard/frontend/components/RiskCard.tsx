@@ -34,7 +34,8 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
 
   return (
     <section id="danger-card" key={risk.alarm_id ?? risk.level} className={`scroll-mt-28 brackets ${risk.level === "red" ? "brackets-red" : ""} border-2 p-5 ${look.box} ${risk.alarm && !acked ? "card-pulse" : ""}`}>
-      <div className="flex flex-wrap items-center gap-3">
+      {/* in danger the header keeps a free gutter on the right for the owl to perch over */}
+      <div className={`flex flex-wrap items-center gap-3 ${risk.alarm ? "pr-24" : ""}`}>
         <span className={`inline-flex items-center gap-2 px-3 py-1 text-lg font-bold uppercase ${look.pill}`}>
           {risk.level !== "green" && <WarningIcon />}
           {look.label}
@@ -43,6 +44,7 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
           {risk.level === "green" ? "Quiet night in Avon, choom." : risk.headline}
         </h2>
       </div>
+      {risk.alarm && <div id="owl-slot" className="pr-24" />}
       {risk.level === "green" && risk.headline !== "All clear" && <p className="mt-2 text-base text-zinc-300">{risk.headline}.</p>}
       {risk.note && <p className="mt-2 text-lg text-zinc-300"><span className="text-zinc-500">AI note: </span>{risk.note}</p>}
       {mine.length > 0 && (

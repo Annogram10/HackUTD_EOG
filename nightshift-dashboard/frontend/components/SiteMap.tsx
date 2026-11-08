@@ -253,6 +253,7 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
         const run = f.pump_status === 1;
         return (
           <Link key={`${f.id}-${f.severity}`} href={`/facility/${f.id}`} draggable={false}
+            data-fac-hours={f.hours_to_limit && f.status !== "tripped" ? f.hours_to_limit.p50 : f.status === "tripped" ? 0 : undefined}
             onPointerEnter={() => setHover({ kind: "fac", id: f.id })} onPointerLeave={() => setHover(null)}
             style={{ ...at(pos.get(f.id)!), transform: `scale(${cardScale})` }}
             className={`fac-card absolute w-44 -translate-x-1/2 -translate-y-1/2 border-2 bg-zinc-950 p-2.5 ${BORDER[t]} ${isMissed ? "border-dashed" : ""} ${t === "red" ? "fac-danger" : ""}`}>

@@ -30,6 +30,7 @@ export default function TimeTravel({ bare = false }: { bare?: boolean }) {
   const [follow, setFollow] = useState(true);
   const [speed, setSpeed] = useState(1000);
   const [pauseOnAlarm, setPauseOnAlarm] = useState(true);
+  const [hopTo, setHopTo] = useState<number | null>(null); // the alarm the replay buddy last hopped onto
   const [attempt, setAttempt] = useState(0);
   const loaded = got && got.dataset === dataset;
   const tl = loaded ? got.data : null;
@@ -74,6 +75,7 @@ export default function TimeTravel({ bare = false }: { bare?: boolean }) {
       if (hit !== undefined) {
         setAsOf(hit, follow);
         setPlaying(false);
+        setHopTo(hit); // the replay buddy hops onto the alarm marker
         return;
       }
       setAsOf(next, follow);
@@ -165,6 +167,15 @@ export default function TimeTravel({ bare = false }: { bare?: boolean }) {
             return <span key={t} className={`absolute top-0 w-px ${day ? "h-2 bg-[#AD6564]" : "h-1 bg-[#AD6564]/60"}`} style={{ left: pct(t) }} />;
           })}
         </div>
+        {/* replay buddy: a mini owl on the playhead; it hops onto an alarm marker when replay pauses there */}
+        <span aria-hidden key={hopTo ?? "buddy"} className={`pointer-events-none absolute -top-5 -translate-x-1/2 ${hopTo === value ? "buddy-hop" : ""}`}
+          style={{ left: pct(value) }}>
+          <svg viewBox="0 0 20 18" width="20" height="18">
+            <path d="M4 7 L3 1 L7 5 Q10 3.6 13 5 L17 1 L16 7 Q17.5 15 10 17 Q2.5 15 4 7 Z" fill="#c9b8b0" />
+            <path d="M4.6 7.4 Q7 6.2 9.4 7.4 Q9.6 9.8 7 10.2 Q4.4 9.8 4.6 7.4 Z M10.6 7.4 Q13 6.2 15.4 7.4 Q15.6 9.8 13 10.2 Q10.4 9.8 10.6 7.4 Z" fill="#1a0710" />
+            <path d="M9.2 10.6 L10.8 10.6 L10 12.4 Z" fill="#bc7579" />
+          </svg>
+        </span>
         <input type="range" min={tl.first} max={tl.last} step={tl.step_s} value={value}
           onChange={(e) => { setPlaying(false); setDraft(Number(e.target.value)); }}
           aria-label="Time travel slider" className="timeslider absolute inset-0 w-full" />
