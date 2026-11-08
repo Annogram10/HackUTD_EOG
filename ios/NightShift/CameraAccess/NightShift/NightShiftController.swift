@@ -409,6 +409,51 @@ final class NightShiftController {
     }
   }
 
+  /// "status" alone: everything in progress at the server's current time (live, or the
+  /// moment the dashboard slider set with POST /clock). Fetches fresh /clock, /alerts and
+  /// /map first, then speaks the time (in replay), every alert's spoken_text in the
+  /// backend's order, and this shift's flag counts. Falls back to the saved data, and
+  /// says so, when the console can't be reached.
+  func speakStatusAtServerTime() async {
+    await refreshClock()
+    var reachedConsole = isBackendReachable == true
+    if let fresh = try? await api.fetchAlerts() {
+      alerts = fresh
+      cache.save(fresh, as: CacheKey.alerts)
+    } else {
+      reachedConsole = false
+    }
+    await refreshMap()
+    if mapError != nil { reachedConsole = false }
+
+    var parts: [String] = []
+    if !reachedConsole {
+      parts.append("Can't reach the console. This is the last saved status.")
+    }
+    if let clock = serverClock, clock.isReplay, let date = clock.nowDate {
+      parts.append("Replay, \(date.formatted(.dateTime.weekday(.wide).hour().minute())).")
+    }
+    // Alerts as the server wrote them, in its order; /map's when /alerts is empty.
+    let alertTexts = alerts.compactMap(\.spokenText)
+    let mapTexts = (map?.facilities ?? []).filter(\.needsCheck).compactMap(\.spokenText)
+    let items = alertTexts.isEmpty ? mapTexts : alertTexts
+    if items.isEmpty {
+      parts.append("No problems in progress.")
+    } else {
+      parts.append("\(items.count) alert\(items.count == 1 ? "" : "s").")
+      parts.append(contentsOf: items)
+    }
+    let flags = store.current?.flags ?? []
+    if !flags.isEmpty {
+      let waiting = flags.count(where: { $0.status == .pending })
+      let confirmed = flags.count(where: { $0.status == .confirmed })
+      parts.append("Flags this shift: \(waiting) waiting, \(confirmed) confirmed.")
+    }
+    let text = parts.joined(separator: " ")
+    lastSpokenContent = text
+    await Speaker.shared.speak(text)
+  }
+
   /// Answers "status of <name>" from cached facility data.
   func speakStatus(of spokenName: String) async {
     guard !spokenName.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -690,14 +735,8 @@ final class NightShiftController {
       }
     case .status(let name):
       if name.isEmpty {
-        // "status" alone: what to check first (rank 1), as the server wrote it.
         voiceFeedback = ("Status", true)
-        if let first = map?.facilities.first, first.needsCheck, let text = first.spokenText {
-          lastSpokenContent = text
-          await Speaker.shared.speak(text)
-        } else {
-          await reply("No problems in progress")
-        }
+        await speakStatusAtServerTime()
       } else {
         voiceFeedback = ("Status of \(name)", true)
         await speakStatus(of: name)

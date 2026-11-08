@@ -590,6 +590,8 @@ extension UploadQueue.State {
 /// Persistent red banner while GET /alarm keeps failing; stays until a poll succeeds.
 struct MonitoringLostBanner: View {
   let lastSuccess: Date?
+  /// Plain-words cause, e.g. "Tunnel offline…".
+  var reason: String? = nil
 
   private var text: String {
     let last = lastSuccess.map { $0.formatted(date: .omitted, time: .standard) } ?? "never"
@@ -597,13 +599,21 @@ struct MonitoringLostBanner: View {
   }
 
   var body: some View {
-    Label(text, systemImage: "exclamationmark.triangle.fill")
-      .font(.nsMono(.headline))
-      .foregroundStyle(NS.textPrimary)
-      .padding(.vertical, 8)
-      .frame(maxWidth: .infinity, minHeight: 44)
-      .background(NS.red)
-      .accessibilityLabel(text)
+    VStack(spacing: 2) {
+      Label(text, systemImage: "exclamationmark.triangle.fill")
+        .font(.nsMono(.headline, .bold))
+      if let reason {
+        Text(reason)
+          .font(.ns(.subheadline, .semibold))
+          .multilineTextAlignment(.center)
+      }
+    }
+    .foregroundStyle(NS.onFill)
+    .padding(.vertical, 8)
+    .padding(.horizontal, 12)
+    .frame(maxWidth: .infinity, minHeight: 44)
+    .background(NS.red)
+    .accessibilityElement(children: .combine)
   }
 }
 

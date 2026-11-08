@@ -112,6 +112,8 @@ final class AlarmMonitor {
   private(set) var lastSuccess: Date?
   /// True after `failuresBeforeLost` failed polls in a row, until one succeeds.
   private(set) var monitoringLost = false
+  /// Why the last poll failed, in plain words (e.g. "Tunnel offline…").
+  private(set) var lastFailureReason: String?
   @ObservationIgnored private(set) var consecutiveFailures = 0
   /// Number of GET /alarm requests started (for tests and diagnostics).
   @ObservationIgnored private(set) var pollsStarted = 0
@@ -217,6 +219,7 @@ final class AlarmMonitor {
     do {
       status = try await api.fetchAlarm()
     } catch {
+      lastFailureReason = NightShiftAPIError.describe(error)
       recordFailure()
       // A failed poll changes nothing else: keep flashing (or stay quiet).
       return
@@ -247,6 +250,7 @@ final class AlarmMonitor {
 
   private func recordSuccess() {
     lastSuccess = clock.now
+    lastFailureReason = nil
     consecutiveFailures = 0
     guard monitoringLost else { return }
     monitoringLost = false

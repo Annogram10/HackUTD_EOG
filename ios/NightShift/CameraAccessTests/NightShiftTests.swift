@@ -81,17 +81,19 @@ final class MockTransport: HTTPTransport, @unchecked Sendable {
   private var _requests: [URLRequest] = []
   let status: Int
   let body: Data
+  let headers: [String: String]
 
-  init(status: Int = 200, body: String = "{}") {
+  init(status: Int = 200, body: String = "{}", headers: [String: String] = [:]) {
     self.status = status
     self.body = Data(body.utf8)
+    self.headers = headers
   }
 
   var requests: [URLRequest] { lock.withLock { _requests } }
 
   func perform(_ request: URLRequest) async throws -> (Data, URLResponse) {
     lock.withLock { _requests.append(request) }
-    let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+    let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: headers)!
     return (body, response)
   }
 }
@@ -410,6 +412,18 @@ private func freshDefaults() -> UserDefaults {
     #expect(alarm.alarm)
     #expect(AlarmMonitor.identity(of: alarm) == "F9:red")
     #expect(transport.requests.first?.timeoutInterval == Config.pollRequestTimeout)
+  }
+
+  /// ngrok's "endpoint offline" page (what the phone saw when monitoring was lost).
+  @Test func ngrokOfflineIsTunnelOffline() async {
+    let transport = MockTransport(status: 404, body: "<html>offline</html>", headers: ["ngrok-error-code": "ERR_NGROK_3200"])
+    do {
+      _ = try await RealAPI(transport: transport).fetchAlarm()
+      Issue.record("Expected an error")
+    } catch {
+      #expect(NightShiftAPIError.isBackendUnreachable(error))
+      #expect(NightShiftAPIError.describe(error).contains("Tunnel offline"))
+    }
   }
 
   @Test func unauthorizedHasAHumanMessage() {

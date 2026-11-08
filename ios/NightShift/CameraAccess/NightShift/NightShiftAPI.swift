@@ -39,6 +39,9 @@ enum NightShiftAPIError: LocalizedError {
   case badStatus(Int, path: String)
   /// Cloudflare error page (e.g. 1033: the tunnel behind this address is gone).
   case cloudflare(Int)
+  /// ngrok answered for a tunnel that isn't running (header ngrok-error-code, e.g.
+  /// ERR_NGROK_3200 "endpoint offline"): the backend Mac's ngrok is stopped.
+  case tunnelOffline(String)
   case missingMockResource(String)
   case unknownFacility(String)
 
@@ -49,6 +52,7 @@ enum NightShiftAPIError: LocalizedError {
     case .badStatus(404, let path): return "Not found (HTTP 404 on /\(path))."
     case .badStatus(let code, _): return "Server returned HTTP \(code)."
     case .cloudflare(let code): return "Cloudflare error \(code): tunnel is offline."
+    case .tunnelOffline(let code): return "Tunnel offline (\(code)). Start ngrok on the backend Mac, or paste the new address in Settings."
     case .missingMockResource(let name): return "Mock resource \(name) is missing from the app bundle."
     case .unknownFacility(let id): return "No facility with id \(id)."
     }
@@ -60,7 +64,7 @@ enum NightShiftAPIError: LocalizedError {
     switch error {
     case NightShiftAPIError.badStatus(let code, let path):
       return code == 530 || code == 502 || (code == 404 && path == "alerts")
-    case NightShiftAPIError.cloudflare:
+    case NightShiftAPIError.cloudflare, NightShiftAPIError.tunnelOffline:
       return true
     case let urlError as URLError:
       return [
@@ -289,6 +293,10 @@ struct RealAPI: NightShiftAPI {
         (data, response) = try await Self.writeSession.upload(for: upload, from: body, delegate: UploadProgressDelegate(progress))
       } else {
         (data, response) = try await session.perform(request)
+      }
+      // ngrok marks its own error pages (tunnel not running) with this header.
+      if let http = response as? HTTPURLResponse, let code = http.value(forHTTPHeaderField: "ngrok-error-code") {
+        throw NightShiftAPIError.tunnelOffline(code)
       }
       if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
         // Cloudflare's tunnel errors carry their code in the body, e.g. "error code: 1033".

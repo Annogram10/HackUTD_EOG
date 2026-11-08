@@ -57,7 +57,7 @@ struct RootTabView: View {
       .padding(.vertical, 4)
       .background(NS.background)
       if controller.alarm.monitoringLost {
-        MonitoringLostBanner(lastSuccess: controller.alarm.lastSuccess)
+        MonitoringLostBanner(lastSuccess: controller.alarm.lastSuccess, reason: controller.alarm.lastFailureReason)
       } else if isOffline {
         OfflineBanner()
       }
