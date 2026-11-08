@@ -9,8 +9,60 @@ from . import optimize as opt
 from .dataset import Dataset, iso
 from .detect import detect_events
 from .forecast import current_state, forecast_shutdown
+from .lru import LRU
+from .timeutil import parse_ts
 
-_cache: dict = {}
+_cache = LRU(256)  # one entry per (dataset, moment)
+
+# ---------- one severity scale for everything (map, next shift, risk colour, alarm, handoff, dashboard) ----------
+# high   -> red, the alarm fires:  the tank already tripped, or a pump failure whose tank reaches shutdown before
+#                                  the repair ends
+# medium -> amber, check soon:     a pump failure the tank can wait out, or a sizeable pipeline leak
+# low    -> green, keep an eye on: a worn pump, or a small leak (or one that cannot be measured while the pump is off)
+FORECAST_QUANTILE = "p10"  # early-warning forecast decides "before the repair ends": a missed alarm costs more than a false one
+LEAK_MISSING_MEDIUM = 0.06  # a leak is "check soon" when 6% or more of the water the pump sends never arrives
+SEVERITY_RANK = {"high": 3, "medium": 2, "low": 1}
+SEVERITY_COLOR = {"high": "red", "medium": "amber", "low": "green"}
+
+
+_unix = parse_ts
+
+
+def drop(ds: Dataset, a: dict, now: int):
+    """(share of water missing, share of rated flow lost) over the last 3 h of running readings, or None."""
+    fac = ds.facilities[a["facility_id"]]
+    pump, pipe = fac.pump["id"], fac.pipeline["id"]
+    lo = now - 3 * 3600
+    run = ds.wide[(pump, "status")].loc[lo:now] == 1
+    fl = ds.wide[(pump, "flow_bpd")].loc[lo:now][run]
+    rv = ds.wide[(pipe, "receive_flow_bpd")].loc[lo:now][run]
+    if len(fl) < 4:
+        return None
+    flow = float(fl.mean())
+    return 1 - float(rv.mean()) / max(flow, 1.0), 1 - flow / fac.pump["max_flow_bpd"]
+
+
+def repair_hours_left(a: dict, now: int):
+    return (_unix(a["repair_end_ts"]) - now) / 3600 if a.get("repair_end_ts") else None
+
+
+def severity(a: dict, now: int, ds: Dataset) -> str:
+    """"high" | "medium" | "low" for one alert. The single rule every screen and the alarm derive from."""
+    if a["category"] == "pump_failure":
+        if a.get("tripped"):
+            return "high"
+        h, left = a.get("hours_to_limit"), repair_hours_left(a, now)
+        if h and left is not None and h[FORECAST_QUANTILE] < left:
+            return "high"
+        return "medium"
+    if a["category"] == "pipeline_leak":
+        d = drop(ds, a, now)
+        return "medium" if d is not None and d[0] >= LEAK_MISSING_MEDIUM else "low"
+    return "low"  # pump_degradation
+
+
+def worst_severity(alerts: list):
+    return max((a["severity"] for a in alerts), key=SEVERITY_RANK.get, default=None)
 
 
 def fac_name(fac_id: str) -> str:
@@ -63,13 +115,13 @@ def _describe(plan: dict) -> str:
     bits = []
     if plan["trucks"]:
         t, k = plan["trucks"], plan["trips_per_truck"]
-        bits.append(f"send {t} truck{'s' if t > 1 else ''}, {k} trip{'s' if k > 1 else ''} each")
+        bits.append(f"send {t} truck{'s' if t > 1 else ''} ({k} trip{'s' if k > 1 else ''} each)")
     for s in plan["shut_ins"]:
         when = "now" if s["start_after_min"] <= 0 else f"in {s['start_after_min']} min"
         bits.append(f"shut in {s['well']} {when}")
     if not bits:
-        bits.append("let the tank trip" if plan["tank_trips"] else "no action needed")
-    return " and ".join(bits)
+        bits.append("no action, the tank reaches shutdown" if plan["tank_trips"] else "no action needed")
+    return "Proposed plan for supervisor approval: " + ", ".join(bits)
 
 
 def _timeline(c: opt.Ctx, p: dict, now: int) -> list:
@@ -93,8 +145,9 @@ def _marks(c: opt.Ctx, p: dict) -> list:
 def run_triage(ds: Dataset, now: Optional[int] = None) -> dict:
     now = ds.t_last if now is None else min(int(now), ds.t_last)
     key = (ds.name, ds.token, now)
-    if key in _cache:
-        return _cache[key]
+    hit = _cache.get(key)
+    if hit is not None:
+        return hit
 
     events = detect_events(ds, now)
     alerts, by_sys = [], {}
@@ -120,7 +173,7 @@ def run_triage(ds: Dataset, now: Optional[int] = None) -> dict:
         else:
             a.update(hours_to_limit=None, level_pct=None,
                      recommended_actions=[{"type": "field_inspection", "asset_id": e["asset_id"]}],
-                     action_text="Send an inspector to " + e["asset_id"],
+                     action_text="Proposed for supervisor approval: an inspector checks " + e["asset_id"],
                      plan=None, options=[])
         alerts.append(a)
 
@@ -146,7 +199,7 @@ def run_triage(ds: Dataset, now: Optional[int] = None) -> dict:
             a["options"] = opts
             a["recommended_actions"] = plan["actions"]
             a["trucks_shared_with"] = [x for x in shared[sid]["events"] if x != a["event_id"]]
-            a["action_text"] = _describe(plan) + f" ({money(plan['cost'])})"
+            a["action_text"] = _describe(plan) + f", {money(plan['cost'])}"
             a["whatif"] = {
                 "shutdown_pct": c.shutdown_pct, "warning_pct": ds.limits["warning"],
                 "repair_end_ts": a["repair_end_ts"],
@@ -167,6 +220,7 @@ def run_triage(ds: Dataset, now: Optional[int] = None) -> dict:
     alerts.sort(key=order)
     for i, a in enumerate(alerts, 1):
         a["order"] = i
+        a["severity"] = severity(a, now, ds)
 
     out = {
         "dataset": ds.name, "now": now, "now_ts": iso(now), "t_first": ds.t_first, "t_first_ts": iso(ds.t_first),

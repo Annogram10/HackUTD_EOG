@@ -79,7 +79,7 @@ export default function PriorityList({ initial }: { initial: Priority[] }) {
               <ul className="space-y-0.5">
                 {p.reasons.map((r) => (
                   <li key={r} className="text-base text-zinc-300">
-                    <span className="mr-2 text-zinc-600">•</span>
+                    <span className="mr-2 text-zinc-500">•</span>
                     {r}
                   </li>
                 ))}

@@ -1,11 +1,14 @@
 "use client";
 
-// Loads the dataset list, the selected dataset's overview and its uploaded shifts, and shares them
-// with every page. Nothing is live: this fetches on load and whenever the dataset changes.
+// Loads the dataset list, the selected dataset's overview, danger check and uploaded shifts, and shares them
+// with every page. All three refresh through one polling loop (usePoll). Two failed polls in a row = stale.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { getDatasets, getOverview, getRisk, getShifts, setClock } from "@/lib/api";
-import type { DatasetInfo, Flag, Overview, Risk, RiskLevel, Shift } from "@/lib/types";
+import { CONFIG_ERROR, getClock, getDatasets, getOverview, getRisk, getShifts, setClock } from "@/lib/api";
+import { usePoll } from "@/lib/usePoll";
+import type { DatasetInfo, Flag, Mode, Overview, Risk, RiskLevel, Shift } from "@/lib/types";
+
+const POLL_MS = 8000;
 
 interface Ctx {
   datasets: DatasetInfo[];
@@ -23,7 +26,12 @@ interface Ctx {
   select: (id: string) => void;
   patchFlag: (flag: Flag) => void;
   loading: boolean;
-  offline: boolean;
+  offline: boolean; // the backend failed twice in a row (or never answered): what is on screen may be stale
+  lastOk: Date | null; // when the backend last answered
+  mode: Mode | null; // live or replay, as the backend reports it
+  alarmId: string | null; // the danger situation on screen (null when not in danger)
+  acked: boolean; // the operator acknowledged this alarm: no more motion, no top strip
+  acknowledge: () => void;
 }
 
 const AppContext = createContext<Ctx | null>(null);
@@ -70,71 +78,89 @@ export default function AppProvider({ children }: { children: React.ReactNode })
   const [playing, setPlaying] = useState(false);
   const [riskState, setRiskState] = useState<{ dataset: string; data: Risk } | null>(null);
   const [noData, setNoData] = useState(false);
-  const [offline, setOffline] = useState(false);
+  const [health, setHealth] = useState<{ fails: number; lastOk: Date | null }>({ fails: 0, lastOk: null });
+  const report = useCallback((ok: boolean) => {
+    setHealth((h) => (ok ? { fails: 0, lastOk: new Date() } : { ...h, fails: h.fails + 1 }));
+  }, []);
 
+  // The dataset comes from the backend's clock (the same one the phone uses), else the last one picked here.
   useEffect(() => {
-    getDatasets()
-      .then((list) => {
+    Promise.all([getDatasets(), getClock().catch(() => null)])
+      .then(([list, clock]) => {
         setDatasets(list);
         let saved: string | null = null;
         try {
           saved = localStorage.getItem(KEY);
         } catch {}
-        setDatasetState(list.find((d) => d.name === saved)?.name ?? list[0]?.name ?? null);
+        const pick = [clock?.dataset, saved].find((n) => n && list.some((d) => d.name === n));
+        setDatasetState(pick ?? list[0]?.name ?? null);
         if (!list.length) setNoData(true);
+        report(true);
       })
-      .catch(() => setOffline(true));
-  }, []);
+      .catch(() => setHealth((h) => ({ ...h, fails: Math.max(h.fails + 1, 2) })));
+  }, [report]);
 
   const asOf = dataset ? (asOfState && asOfState.dataset === dataset ? asOfState.now : startOf(datasets, dataset)) : null;
 
-  useEffect(() => {
-    if (!dataset) return;
-    let alive = true;
-    Promise.all([getOverview(dataset, startOf(datasets, dataset) ?? undefined), getShifts(dataset)])
-      .then(([o, s]) => {
-        if (!alive) return;
-        setOverview(o);
-        setShifts(s);
-        setOffline(false);
-        setLoadedFor(dataset);
-      })
-      .catch(() => alive && setOffline(true));
-    return () => {
-      alive = false;
-    };
-  }, [dataset, datasets]);
-
-  // Time travel: reload the overview as of the chosen moment.
-  useEffect(() => {
-    if (!dataset || loadedFor !== dataset) return;
-    let alive = true;
-    getOverview(dataset, asOf ?? undefined)
-      .then((o) => alive && setOverview(o))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [dataset, asOf, loadedFor]);
+  // Overview (facilities, alerts, map) at the chosen moment; refreshes every few seconds.
+  usePoll(
+    dataset && datasets.length ? `${dataset}|${asOf ?? "live"}` : null,
+    async (signal) => {
+      if (!dataset) return;
+      const o = await getOverview(dataset, asOf ?? undefined, signal);
+      setOverview(o);
+      setLoadedFor(dataset);
+    },
+    POLL_MS,
+    report,
+  );
 
   // The danger check for the danger card, the owl and the alarm border, on every page. If one check fails,
-  // the last good one stays on screen.
-  const riskKey = dataset ? `${dataset}|${asOf ?? "live"}|${playing ? "rules" : "ai"}` : null;
-  useEffect(() => {
-    if (!dataset || !riskKey || loadedFor !== dataset) return;
-    let alive = true;
-    getRisk(dataset, asOf ?? undefined, !playing)
-      .then((r) => alive && setRiskState({ dataset, data: r }))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [dataset, asOf, playing, riskKey, loadedFor]);
+  // the last good one stays on screen (and the stale banner says so).
+  const riskKey = dataset && loadedFor === dataset ? `${dataset}|${asOf ?? "live"}|${playing ? "rules" : "ai"}` : null;
+  usePoll(
+    riskKey,
+    async (signal) => {
+      if (!dataset) return;
+      const r = await getRisk(dataset, asOf ?? undefined, !playing, signal);
+      setRiskState({ dataset, data: r });
+    },
+    POLL_MS,
+    report,
+  );
   const risk = riskState && riskState.dataset === dataset ? riskState.data : null;
   const riskLevel = risk ? risk.level : null;
   useEffect(() => {
     document.documentElement.dataset.alarm = riskLevel === "red" ? "red" : "";
   }, [riskLevel]);
+
+  // The alarm moment, once per new danger situation: for ~2 s the neon sign and skyline windows tint red and the
+  // danger card pulses; then the page scrolls to the danger card and the #1 plan is highlighted. Acknowledge stops it.
+  const alarmId = risk?.alarm ? risk.alarm_id : null;
+  const [ackedId, setAckedId] = useState<string | null>(null);
+  const acked = alarmId !== null && ackedId === alarmId;
+  const acknowledge = useCallback(() => setAckedId(alarmId), [alarmId]);
+  useEffect(() => {
+    const html = document.documentElement;
+    if (!alarmId || acked) {
+      delete html.dataset.burst;
+      delete html.dataset.focus;
+      return;
+    }
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    html.dataset.burst = "1";
+    const t = setTimeout(() => {
+      delete html.dataset.burst;
+      document.getElementById("danger-card")?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      html.dataset.focus = "1";
+    }, reduce ? 0 : 2000);
+    return () => clearTimeout(t);
+  }, [alarmId, acked]);
+  useEffect(() => {
+    const html = document.documentElement;
+    if (acked) html.dataset.acked = "1";
+    else delete html.dataset.acked;
+  }, [acked]);
 
   // The phone and glasses start at the same moment the dashboard opens on.
   const clockSet = asOfState !== null && asOfState.dataset === dataset;
@@ -154,16 +180,17 @@ export default function AppProvider({ children }: { children: React.ReactNode })
     [dataset],
   );
 
-  // Pick up new phone uploads and flag decisions without a page reload.
-  useEffect(() => {
-    if (!dataset) return;
-    const id = setInterval(() => {
-      getShifts(dataset)
-        .then((s) => setShifts((old) => (JSON.stringify(old) === JSON.stringify(s) ? old : s)))
-        .catch(() => {});
-    }, 8000);
-    return () => clearInterval(id);
-  }, [dataset]);
+  // Phone uploads and flag decisions, without a page reload.
+  usePoll(
+    dataset,
+    async (signal) => {
+      if (!dataset) return;
+      const s = await getShifts(dataset, signal);
+      setShifts((old) => (JSON.stringify(old) === JSON.stringify(s) ? old : s));
+    },
+    POLL_MS,
+    report,
+  );
 
   const setDataset = useCallback((name: string) => {
     try {
@@ -172,7 +199,9 @@ export default function AppProvider({ children }: { children: React.ReactNode })
     setDatasetState(name);
   }, []);
 
+  const offline = health.fails >= 2;
   const loading = !offline && !noData && loadedFor !== dataset;
+  const mode = overview && overview.dataset === dataset ? overview.mode : null;
   const selectedId = selected && selected.dataset === dataset ? selected.id : null;
 
   const value = useMemo<Ctx>(
@@ -182,10 +211,23 @@ export default function AppProvider({ children }: { children: React.ReactNode })
       select: (id: string) => dataset && setSelected({ dataset, id }),
       patchFlag: (flag) =>
         setShifts((all) => all.map((s) => ({ ...s, flags: s.flags.map((f) => (f.id === flag.id ? { ...f, ...flag } : f)) }))),
-      loading, offline,
+      loading, offline, lastOk: health.lastOk, mode, alarmId, acked, acknowledge,
     }),
-    [datasets, dataset, setDataset, overview, asOf, setAsOf, risk, riskLevel, playing, setPlaying, shifts, selectedId, loading, offline],
+    [datasets, dataset, setDataset, overview, asOf, setAsOf, risk, riskLevel, playing, setPlaying, shifts, selectedId, loading, offline, health.lastOk, mode, alarmId, acked, acknowledge],
   );
 
+  if (CONFIG_ERROR)
+    return (
+      <div role="alert" className="flex min-h-screen items-center justify-center bg-zinc-950 p-8">
+        <div className="max-w-xl border-2 border-red-500 bg-zinc-900 p-8">
+          <h1 className="text-3xl font-bold text-red-300">Backend address not set</h1>
+          <p className="mt-3 text-lg text-zinc-200">
+            This build has no <code>NEXT_PUBLIC_API_URL</code>, so it cannot know where the NightShift backend is.
+            Rebuild with it set, for example <code>NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build</code>, or run{" "}
+            <code>scripts/demo.sh</code>.
+          </p>
+        </div>
+      </div>
+    );
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

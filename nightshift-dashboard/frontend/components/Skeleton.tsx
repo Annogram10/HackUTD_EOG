@@ -38,3 +38,11 @@ export const PageSkeleton = ({ cards = 3 }: { cards?: number }) => (
     {Array.from({ length: cards }, (_, i) => <CardSkeleton key={i} />)}
   </div>
 );
+
+// Shown instead of a view when its data could not be loaded. Plain words, never a raw error.
+export const ErrorState = ({ what }: { what: string }) => (
+  <div role="alert" className="border-2 border-red-500/60 bg-red-500/10 p-6 text-lg text-red-100">
+    <p className="font-semibold">Could not load {what}.</p>
+    <p className="mt-1 text-base text-red-200">The backend did not answer. It will retry by itself; check that the backend is running.</p>
+  </div>
+);

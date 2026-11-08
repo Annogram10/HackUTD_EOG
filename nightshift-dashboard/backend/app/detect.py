@@ -28,6 +28,8 @@ Z_ALERT = 7.0  # how many noise-widths away from normal counts as a real problem
 MIN_RUN = 6  # a problem must hold for this many running samples
 GAP_BRIDGE = 6  # a short return to normal inside a problem doesn't end it
 FAULT_STATUS = 2
+STOP_GAP_S = 3600  # no running reading for over an hour = the pump was stopped (fault or held off)
+SAMPLE_S = 300  # readings come every 5 minutes
 
 
 def _mode(x: np.ndarray, width: float) -> float:
@@ -206,6 +208,12 @@ def _gradual_events(P: _Pump, fault_events: list[dict]) -> list[dict]:
             if not ongoing:
                 nxt = t[b + 1] if b + 1 < len(t) else None
                 end = nxt
+                # The readings are averaged over WINDOW running samples, and that window reaches across a stop.
+                # So when the run ends within one window after a long stop (a fault, or the pump held off), the
+                # flags after the restart are only the window catching up: the problem ended when the pump stopped.
+                gaps = [i for i in range(a, b + 1) if i + 1 < len(t) and t[i + 1] - t[i] > STOP_GAP_S and b - i <= WINDOW]
+                if gaps:
+                    end = int(t[gaps[-1]]) + SAMPLE_S
             # a pump that went on to fail ends its wear event at the fault
             for fe in fault_events:
                 if fe["onset_unix"] >= t[b] and (end is None or fe["onset_unix"] <= end):

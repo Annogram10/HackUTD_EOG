@@ -37,6 +37,7 @@ export type FacilityStatus = "ok" | "worn" | "leak" | "failure" | "tripped";
 
 export interface FacilityCard {
   risk_level?: RiskLevel; // green = nothing to act on (a minor decrease is fine)
+  severity: Severity | "none";
   id: string;
   name: string;
   system_id: string;
@@ -81,6 +82,7 @@ export type Category = "pump_failure" | "pipeline_leak" | "pump_degradation";
 export interface Alert {
   truck_cost?: TruckCost;
   level?: RiskLevel; // red danger, amber check soon, green minor (a small decrease is fine)
+  severity: Severity;
   event_id: string;
   category: Category;
   system_id: string;
@@ -139,6 +141,8 @@ export interface Overview {
   dataset: string;
   now_ts: string;
   first_ts: string;
+  mode: Mode; // from the backend's clock: what everyone (phone and glasses too) is seeing
+  as_of: string;
   systems: System[];
   alerts: Alert[];
   counts: { failures: number; leaks: number; worn: number };
@@ -193,6 +197,7 @@ export interface Priority {
   location: string;
   score: number;
   level: PriorityLevel;
+  severity: Severity | "none";
   reasons: string[];
   latest_flag: Flag | null;
 }
@@ -214,6 +219,7 @@ export interface AgentRun {
   dataset: string;
   status: "running" | "done" | "error";
   mode: "nemotron" | "offline-script";
+  engine: "nemotron" | "offline"; // what really ran: "offline" also when Nemotron failed and the script took over
   model: string | null;
   steps: TraceStep[];
   handoff: string | null;
@@ -229,9 +235,20 @@ export interface Handoff {
   agent_text?: string;
   agent_mode?: string;
   events_count: number;
+  agent_engine?: "nemotron" | "offline";
+  mode?: Mode;
 }
 
 export type RiskLevel = "green" | "amber" | "red";
+// The one severity scale, computed by the backend (triage.severity). The frontend never re-derives it.
+export type Severity = "high" | "medium" | "low";
+export type Mode = "live" | "replay";
+export interface Clock {
+  dataset: string;
+  now: number | null;
+  now_ts: string;
+  mode: Mode;
+}
 
 export interface Timeline {
   dataset: string;
@@ -249,12 +266,15 @@ export interface Risk {
   now: number;
   level: RiskLevel;
   rules_level: RiskLevel;
+  severity: Severity | null;
+  note: string | null; // the AI second opinion, when ready (never changes the level)
+  mode?: Mode;
   alarm: boolean;
   alarm_id: string | null;
   headline: string;
   reasons: { level: RiskLevel; facility_id: string; text: string }[];
   facilities: Record<string, RiskLevel>;
-  ai: { available: boolean; level?: RiskLevel; headline?: string; why?: string; money?: string; model?: string; error?: string } | null;
+  ai: { available: boolean; pending?: boolean; level?: RiskLevel; headline?: string; why?: string; money?: string; model?: string; error?: string } | null;
   money: {
     rows: { facility_id: string; name: string; fix: string; cost: number; do_nothing: number | null; saves: number | null; trucks: TruckCost }[];
     trip_price: number; // what one truck trip costs (ops.json)

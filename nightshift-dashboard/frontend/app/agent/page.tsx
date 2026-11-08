@@ -2,7 +2,7 @@
 
 // AGENT TRACE: what the triage agent concluded, then every tool call it made to get there.
 
-import { PageSkeleton } from "@/components/Skeleton";
+import { ErrorState, PageSkeleton } from "@/components/Skeleton";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { facName, getAgentTrace, money, rerunAgent } from "@/lib/api";
@@ -29,7 +29,7 @@ function summarize(tool: string, raw: string): string | null {
     }
     case "forecast_shutdown":
       return r.tripped ? `${facName(r.facility_id)}: tank already at shutdown`
-        : `${facName(r.facility_id)}: tank ${r.level_pct}% full, reaches shutdown in ${r.hours_to_limit?.p50} h (range ${r.hours_to_limit?.p10} to ${r.hours_to_limit?.p90} h)`;
+        : `${facName(r.facility_id)}: tank ${typeof r.level_pct === "number" ? r.level_pct.toFixed(1) : r.level_pct}% full, reaches shutdown in ${r.hours_to_limit?.p50} h (range ${r.hours_to_limit?.p10} to ${r.hours_to_limit?.p90} h)`;
     case "optimize_plan":
       return (r.plans as { facility_id: string; action: string }[]).map((p) => `${facName(p.facility_id)}: ${p.action}`).join(" · ")
         + (r.shared ? ` · total ${money(r.shared.total_cost)} with ${r.shared.trucks_used} of ${r.shared.fleet} trucks` : "");
@@ -79,14 +79,17 @@ function toRows(steps: TraceStep[]): { rows: Row[]; notes: TraceStep[]; final: T
 }
 
 export default function AgentTrace() {
-  const { dataset } = useApp();
+  const { dataset, offline } = useApp();
   const [loaded, setLoaded] = useState<AgentRun | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
   const run = loaded && loaded.dataset === dataset ? loaded : null; // ignore a trace from another dataset
 
   useEffect(() => {
     if (!dataset) return;
     let alive = true;
-    getAgentTrace(dataset).then((r) => alive && setLoaded(r)).catch(() => {});
+    getAgentTrace(dataset)
+      .then((r) => alive && setLoaded(r))
+      .catch(() => alive && setFailed(dataset));
     return () => {
       alive = false;
     };
@@ -106,8 +109,8 @@ export default function AgentTrace() {
     };
   }, [running, dataset]);
 
-  if (!run) return <PageSkeleton cards={3} />;
-  const live = run.mode === "nemotron";
+  if (!run) return (failed === dataset || offline) ? <ErrorState what="the agent trace" /> : <PageSkeleton cards={3} />;
+  const live = run.engine === "nemotron";
   const { rows, final } = toRows(run.steps);
   const toolCalls = run.steps.filter((s) => s.kind === "tool");
   const seconds = run.steps.length ? run.steps[run.steps.length - 1].t : 0;
@@ -129,7 +132,8 @@ export default function AgentTrace() {
 
       <div className={`flex flex-wrap items-center gap-x-8 gap-y-2 rounded-xl px-5 py-4 text-lg ${live ? "bg-emerald-500/10 text-emerald-100" : "bg-amber-500/10 text-amber-100"}`}>
         <span>
-          {live ? <>Driven by <span className="font-semibold">{run.model}</span></> : <>Fixed script, <span className="font-semibold">not Nemotron</span> (no <code>NVIDIA_API_KEY</code> set)</>}
+          <span className="font-semibold">Engine: {live ? "Nemotron (live model)" : "Offline script (no model)"}</span>
+          {live ? <> · {run.model}</> : <> · {run.error ? "Nemotron failed, so the fixed script ran" : <>no <code>NVIDIA_API_KEY</code> set</>}</>}
         </span>
         <span className="text-zinc-300">{toolCalls.length} tool calls</span>
         <span className="text-zinc-300">{seconds.toFixed(0)} s</span>
@@ -164,7 +168,7 @@ export default function AgentTrace() {
                     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                       <span className="font-mono text-lg font-semibold text-zinc-100">{s.tool}</span>
                       <span className="text-base text-zinc-500">{argsLine(s.args)}</span>
-                      <span className="ml-auto text-sm text-zinc-600">{s.ms} ms</span>
+                      <span className="ml-auto text-sm text-zinc-500">{s.ms} ms</span>
                     </div>
                     {line && <p className="mt-2 text-lg text-zinc-100">{line}</p>}
                     {s.error && <p className="mt-2 text-base text-red-300">{s.error}</p>}

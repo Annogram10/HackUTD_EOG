@@ -11,13 +11,14 @@ import urllib.request
 
 import numpy as np
 
+from .lru import LRU
 from .risk import _alert_level
 from .triage import fac_name, run_triage
 
 URL = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1") + "/chat/completions"
 MODEL = os.environ.get("NEMOTRON_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
 POINTS = 160
-_cache: dict = {}
+_cache = LRU(256)
 
 
 def _candidates(ds, a: dict, now: int) -> list:
@@ -75,7 +76,7 @@ def _ask_ai(sections: list, now: int) -> dict:
                        "temperature": 0.2, "chat_template_kwargs": {"enable_thinking": False}}).encode()
     req = urllib.request.Request(URL, body, {"Authorization": f"Bearer {k}", "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=45) as r:
+        with urllib.request.urlopen(req, timeout=8) as r:
             text = json.loads(r.read())["choices"][0]["message"].get("content") or ""
         picked = json.loads(re.search(r"\{.*\}", text, re.S).group(0))["charts"]
         return {"available": True, "model": MODEL, "charts": picked}
@@ -96,8 +97,9 @@ def build(ds, now=None, use_ai: bool = True) -> dict:
     tri = run_triage(ds, now)
     alerts = tri["alerts"][:4]
     key = (ds.name, ds.token, tri["now"], tuple(a["event_id"] for a in alerts), use_ai)
-    if key in _cache:
-        return _cache[key]
+    hit = _cache.get(key)
+    if hit is not None:
+        return hit
     sections = []
     for a in alerts:
         sections.append({"facility_id": a["facility_id"], "name": fac_name(a["facility_id"]), "system": a["system_id"],

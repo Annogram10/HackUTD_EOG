@@ -95,13 +95,13 @@ export default function FacilityView() {
   const bands = f.events.map((e) => ({
     from: Math.floor(new Date(e.onset_ts).getTime() / 1000),
     to: e.end_ts ? Math.floor(new Date(e.end_ts).getTime() / 1000) : f.now,
-    color: e.category === "pump_failure" ? "#e5484d" : e.category === "pipeline_leak" ? "#f2b33d" : "#f2b33d",
+    color: e.category === "pump_failure" ? "#ff2d2d" : e.category === "pipeline_leak" ? "#ff9f1c" : "#ff9f1c",
     label: `${e.category.replace("_", " ")} (${e.status})`,
   }));
   const lim = (label: string) => f.readings.find((r) => r.label === label);
   const linesFor = (metric: string) =>
-    metric === "level_pct" ? [{ value: f.warning_pct, label: `warning ${f.warning_pct}%`, color: "#f2b33d" }, { value: f.shutdown_pct, label: `shutdown ${f.shutdown_pct}%`, color: "#ef6b6e" }]
-    : metric === "flow_bpd" && lim("Pump flow") ? [{ value: lim("Pump flow")!.limit, label: "rated flow", color: "#3fb97f" }] : [];
+    metric === "level_pct" ? [{ value: f.warning_pct, label: `warning ${f.warning_pct}%`, color: "#ff9f1c" }, { value: f.shutdown_pct, label: `shutdown ${f.shutdown_pct}%`, color: "#ef6b6e" }]
+    : metric === "flow_bpd" && lim("Pump flow") ? [{ value: lim("Pump flow")!.limit, label: "rated flow", color: "#5dd39e" }] : [];
   const flagFacts = shifts.length ? f.flags : [];
   const failure = f.alerts.find((a) => a.category === "pump_failure");
 
@@ -111,7 +111,7 @@ export default function FacilityView() {
         <Link href="/" className="text-base text-sky-400 underline underline-offset-2 hover:text-sky-300">Network map</Link>
         <div className="mt-2 flex flex-wrap items-center gap-4">
           <h1 className="text-4xl font-bold">{f.name}</h1>
-          <FacStatusBadge status={f.status} />
+          <FacStatusBadge status={f.status} severity={f.severity} />
         </div>
         <p className="mt-1 text-lg text-zinc-400">
           {f.system_id} · tank {f.capacity_bbl} bbl · {f.wells.length} wells · up to {money(f.lost_revenue_per_hour)}/h lost if shut in · data to {formatDateTime(new Date(f.now * 1000).toISOString())}

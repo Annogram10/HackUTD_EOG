@@ -12,3 +12,5 @@ backend/nightshift.db-journal
 .DS_Store
 **/.DS_Store
 frontend/.env.local
+backend/nightshift.db-wal
+backend/nightshift.db-shm

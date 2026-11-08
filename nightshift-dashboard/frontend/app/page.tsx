@@ -5,7 +5,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import AlertCard from "@/components/AlertCard";
-import { NowSkeleton } from "@/components/Skeleton";
+import { ErrorState, NowSkeleton } from "@/components/Skeleton";
 import EvidenceCharts from "@/components/EvidenceCharts";
 import RiskCard from "@/components/RiskCard";
 import TimeTravel from "@/components/TimeTravel";
@@ -22,10 +22,10 @@ function plural(n: number, one: string, many: string) {
 }
 
 export default function Now() {
-  const { overview, shift, loading, asOf } = useApp();
+  const { overview, shift, asOf, offline } = useApp();
   const [picked, setPicked] = useState<string | null>(null);
 
-  if (!overview || (loading && !overview)) return <NowSkeleton />;
+  if (!overview) return offline ? <ErrorState what="the facilities" /> : <NowSkeleton />;
 
   const system =
     overview.systems.find((s) => s.id === picked) ??
@@ -44,14 +44,24 @@ export default function Now() {
 
   return (
     <div className="space-y-8">
-      <RiskCard footer={phoneLine}>
-        <TimeTravel bare />
-      </RiskCard>
+      <div className="space-y-1.5">
+        <p className="hud">SYS//STATUS</p>
+        <RiskCard footer={phoneLine}>
+          <TimeTravel bare />
+        </RiskCard>
+      </div>
       <EvidenceCharts />
 
+      {overview.alerts.length === 0 && (
+        <section className="border border-emerald-500/40 bg-emerald-500/5 p-5">
+          <h2 className="text-2xl font-semibold text-emerald-300">No problems in progress</h2>
+          <p className="mt-1 text-base text-zinc-400">Every facility reads normal at this time. Nothing needs a decision.</p>
+        </section>
+      )}
       {overview.alerts.length > 0 && (
-        <section className="space-y-4">
+        <section id="plan" className="scroll-mt-28 space-y-4">
           <div>
+            <p className="hud">SYS//PLAN</p>
             <h2 className="text-2xl font-semibold">What to do</h2>
             <p className="text-base text-zinc-500">Most urgent first. These are suggestions for a person to approve, nothing here operates equipment.</p>
           </div>
@@ -61,13 +71,16 @@ export default function Now() {
 
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-2xl font-semibold">Map</h2>
+          <div>
+            <p className="hud">SYS//NETWORK</p>
+            <h2 className="text-2xl font-semibold">Map</h2>
+          </div>
           {overview.systems.length > 1 && (
             <div className="flex flex-wrap gap-2">
               {overview.systems.map((s) => {
                 const bad = s.facilities.some((f) => f.status !== "ok");
                 return (
-                  <button key={s.id} onClick={() => setPicked(s.id)}
+                  <button key={s.id} onClick={() => setPicked(s.id)} data-system-bad={bad ? "" : undefined}
                     className={`px-4 py-1.5 text-base font-medium ring-1 ${s.id === system.id ? "bg-zinc-800 text-zinc-100 ring-sky-400" : "bg-zinc-900 text-zinc-300 ring-zinc-700 hover:bg-zinc-800"}`}>
                     {bad && <span className="mr-2 inline-block h-2 w-2 rounded-full bg-red-500" />}
                     {s.id}
@@ -99,7 +112,7 @@ export default function Now() {
               {sorted.map((f) => (
                 <tr key={f.id} className="hover:bg-zinc-800/50">
                   <td className="px-4 py-3 font-semibold"><Link href={`/facility/${f.id}`} className="hover:text-amber-300 hover:underline">{f.name}</Link></td>
-                  <td className="px-4 py-3"><FacStatusBadge status={f.status} level={f.risk_level} /></td>
+                  <td className="px-4 py-3"><FacStatusBadge status={f.status} severity={f.severity} /></td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-3">
                       <div className="relative h-3 w-32 rounded bg-zinc-800">
@@ -112,7 +125,7 @@ export default function Now() {
                   <td className="px-4 py-3 text-right">
                     {f.status === "tripped" ? <span className="font-semibold text-red-300">Tripped</span>
                       : f.hours_to_limit ? <span className="font-semibold text-red-300">{fmtHours(f.hours_to_limit.p50)}</span>
-                      : <span className="text-zinc-600">pump is running</span>}
+                      : <span className="text-zinc-500">pump is running</span>}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-zinc-400">{money(f.lost_revenue_per_hour)}/h</td>
                 </tr>

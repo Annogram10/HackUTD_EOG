@@ -23,12 +23,13 @@ from . import dataset as D
 from .detect import detect_events
 from .forecast import forecast_shutdown
 from .handoff import build_handoff
+from .lru import LRU
 from .triage import events_json, fac_name, run_triage
 
 NVIDIA_URL = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1") + "/chat/completions"
 MODEL = os.environ.get("NEMOTRON_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
 
-_runs: dict = {}
+_runs = LRU(32)  # one agent run per (dataset, files, moment)
 _lock = threading.Lock()
 
 
@@ -130,7 +131,8 @@ SYSTEM_PROMPT = (
     "pump_failure call forecast_shutdown, then optimize_plan once per affected system, get_fleet_status for those systems, "
     "get_weather once for a failing facility, then save_alerts with a short handoff (readable in 30 seconds), then export_events. "
     "Rules: never invent or compute a number yourself, only quote numbers returned by tools. You flag things for a human to check; "
-    "never tell anyone to operate or shut down equipment, a human approves every plan. Stop after export_events."
+    "never tell anyone to operate or shut down equipment, a human approves every plan. Word every plan as a proposal, "
+    "starting with 'Proposed plan for supervisor approval:', never as an instruction. Stop after export_events."
 )
 
 
@@ -166,7 +168,9 @@ class Run:
         return res
 
     def public(self):
+        # engine: what really produced this run. "offline" also when Nemotron failed and the script took over.
         return {"dataset": self.dataset, "status": self.status, "mode": self.mode, "model": self.model,
+                "engine": "nemotron" if self.mode == "nemotron" else "offline",
                 "steps": self.steps, "handoff": self.handoff_text, "error": self.error}
 
 
@@ -250,6 +254,11 @@ def _execute(run: Run):
         run.status, run.error = "error", str(e)[:200]
 
 
+def find_run(dataset_name: str, now: Optional[int] = None) -> Optional[Run]:
+    """An agent run that already exists for this moment, without starting one."""
+    return _runs.get((dataset_name, D.load(dataset_name).token, now))
+
+
 def get_run(dataset_name: str, now: Optional[int] = None, force: bool = False) -> Run:
     """Starts the agent the first time a dataset is asked for. Nobody has to type a prompt."""
     key = (dataset_name, D.load(dataset_name).token, now)
@@ -258,4 +267,4 @@ def get_run(dataset_name: str, now: Optional[int] = None, force: bool = False) -
             run = Run(dataset_name, now)
             _runs[key] = run
             threading.Thread(target=_execute, args=(run,), daemon=True).start()
-        return _runs[key]
+        return _runs.get(key)

@@ -43,7 +43,7 @@ export default function Report() {
       <h2 className="text-2xl font-semibold">Summary: {hand.headline}</h2>
       <p className="mb-3 text-sm text-zinc-500">
         As of {formatDateTime(hand.as_of)}
-        {hand.agent_mode ? ` · saved by the triage agent (${hand.agent_mode === "nemotron" ? "Nemotron" : "offline script"})` : ""}
+        {hand.agent_engine ? ` · triage agent engine: ${hand.agent_engine === "nemotron" ? "Nemotron (live model)" : "offline script (no model)"}` : ""}
       </p>
       <ul className="space-y-1.5 text-lg text-zinc-200">
         {hand.lines.map((l, i) => <li key={i}>{l}</li>)}
@@ -59,7 +59,7 @@ export default function Report() {
           <h1 className="text-3xl font-bold">Handover</h1>
           <div className="no-print flex gap-3">
             <a href={eventsUrl(dataset)} className="rounded-lg border border-zinc-700 px-5 py-2.5 text-base font-semibold text-zinc-200 hover:bg-zinc-800">Export events.json</a>
-            <button onClick={() => window.print()} className="bg-sky-500 px-5 py-2.5 text-base font-semibold text-zinc-100 hover:bg-sky-400">Print</button>
+            <button onClick={() => window.print()} className="btn-primary px-5 py-2.5 text-base font-semibold">Print</button>
           </div>
         </div>
         <p className="rounded-xl border border-dashed border-zinc-800 p-6 text-lg text-zinc-400">
@@ -85,7 +85,7 @@ export default function Report() {
               Export events.json
             </a>
           )}
-          <button onClick={() => window.print()} className="bg-sky-500 px-5 py-2.5 text-base font-semibold text-zinc-100 hover:bg-sky-400">
+          <button onClick={() => window.print()} className="btn-primary px-5 py-2.5 text-base font-semibold">
             Print
           </button>
         </div>

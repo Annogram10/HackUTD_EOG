@@ -27,6 +27,13 @@ export default function EvidenceCharts() {
   }, [dataset, asOf, key, playing]);
 
   const ev = got?.data;
+  if (got && got.key === key && !ev)
+    return (
+      <section>
+        <h2 className="text-2xl font-semibold">What dropped</h2>
+        <p className="mt-1 text-base text-zinc-400">The charts could not be loaded. The rest of the page is unaffected.</p>
+      </section>
+    );
   if (!ev) return null;
   if (ev.sections.length === 0)
     return (
@@ -73,8 +80,8 @@ export default function EvidenceCharts() {
             {s.charts.map((c) => (
               <div key={c.metric} className="space-y-1">
                 <SeriesChart bare title={c.label} unit={c.unit} points={c.points} height={170}
-                  bands={[{ from: s.onset_unix, to: ev.now, color: s.level === "red" ? "#e5484d" : "#f2b33d", label: s.level === "red" ? "Danger: problem in progress" : "Check soon: problem in progress" }]}
-                  lines={c.unit === "%" ? [] : [{ value: c.base, label: "normal", color: "#4d535c" }]} />
+                  bands={[{ from: s.onset_unix, to: ev.now, color: s.level === "red" ? "#ff2d2d" : "#ff9f1c", label: s.level === "red" ? "Danger: problem in progress" : "Check soon: problem in progress" }]}
+                  lines={c.unit === "%" ? [] : [{ value: c.base, label: "normal", color: "#8a7076" }]} />
                 <p className="px-1 text-base text-zinc-300">{c.caption}</p>
               </div>
             ))}

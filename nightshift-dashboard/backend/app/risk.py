@@ -3,8 +3,8 @@ Danger check at any moment in time.
 
 1. Rules (always on, instant): RED = a pump failure whose tank will reach shutdown before the repair ends (or already has).
    AMBER = something to check soon (a leak, a worn pump, or a failure the tank can wait out). GREEN = nothing wrong.
-2. The AI (Nemotron) reads the same facts and gives its own verdict and a short reason. It may RAISE the level
-   but never lower it below the rules, so a bad moment can never be hidden by the model.
+2. The AI (Nemotron) reads the same facts and adds a short second opinion (`note`). It runs in the background with
+   a short timeout and never changes the level, the alarm or any number.
 
 It only flags. It never says to operate equipment.
 """
@@ -12,65 +12,54 @@ It only flags. It never says to operate equipment.
 import json
 import os
 import re
+import threading
+import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from . import dataset as D
 from .handoff import _plan_words, spoken
-from .triage import fac_name, run_triage
+from .lru import LRU
+from .timeutil import parse_ts
+from .triage import (FORECAST_QUANTILE, SEVERITY_COLOR, drop, fac_name, repair_hours_left, run_triage, severity,
+                     worst_severity)
 
 URL = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1") + "/chat/completions"
 MODEL = os.environ.get("NEMOTRON_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
 ORDER = {"green": 0, "amber": 1, "red": 2}
-# A leak or a worn pump is only "check soon" when it is a real, sizeable drop. A small decrease is fine.
-# These are measured from the last 3 hours of running readings, so a slow problem is quiet at first and
-# turns amber once it is big enough to matter.
-LEAK_MISSING_AMBER = 0.06   # 6% or more of the water the pump sends never arrives
-WEAR_LOSS_AMBER = 0.12      # the pump moves 12% or more below its rated flow
 BY_RANK = {v: k for k, v in ORDER.items()}
 
 
-def _unix(ts: str) -> int:
-    return int(datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp())
+_unix = parse_ts  # naive timestamps are UTC (the old version read them as the server's local time)
 
 
-def _drop(ds, a: dict, now: int):
-    """(share of water missing, share of rated flow lost) over the last 3 h of running readings, or None."""
-    fac = ds.facilities[a["facility_id"]]
-    pump, pipe = fac.pump["id"], fac.pipeline["id"]
-    lo = now - 3 * 3600
-    run = ds.wide[(pump, "status")].loc[lo:now] == 1
-    fl = ds.wide[(pump, "flow_bpd")].loc[lo:now][run]
-    rv = ds.wide[(pipe, "receive_flow_bpd")].loc[lo:now][run]
-    if len(fl) < 4:
-        return None
-    flow = float(fl.mean())
-    return 1 - float(rv.mean()) / max(flow, 1.0), 1 - flow / fac.pump["max_flow_bpd"]
+_drop = drop  # older name, used by main.py
 
 
 def _alert_level(a: dict, now: int, ds) -> tuple:
-    """(level, short reason) for one alert."""
+    """(colour, short reason) for one alert. The colour comes from triage.severity(), nowhere else."""
     who = fac_name(a["facility_id"])
+    sev = a.get("severity") or severity(a, now, ds)
+    level = SEVERITY_COLOR[sev]
     if a["category"] != "pump_failure":
         leak = a["category"] == "pipeline_leak"
         what = "possible pipeline leak" if leak else "pump wearing out"
-        d = _drop(ds, a, now)
+        d = drop(ds, a, now)
         if d is None:  # the pump is stopped, so the drop cannot be measured right now
-            return "green", f"{who}: {what}, cannot be re-checked while the pump is stopped"
-        missing, lost = d
-        size = max(missing, 0) if leak else max(lost, 0)
-        big = size >= (LEAK_MISSING_AMBER if leak else WEAR_LOSS_AMBER)
+            return level, f"{who}: {what}, cannot be re-checked while the pump is stopped"
+        size = max(d[0], 0) if leak else max(d[1], 0)
         detail = f"{size * 100:.0f}% of the water is missing" if leak else f"{size * 100:.0f}% below rated flow"
-        if big:
-            return "amber", f"{who}: {what}, {detail}, needs an inspector"
-        return "green", f"{who}: {what}, minor so far ({detail}), keep an eye on it"
+        if sev == "medium":
+            return level, f"{who}: {what}, {detail}, an inspector should check it"
+        return level, f"{who}: {what}, {detail}, keep an eye on it"
     if a.get("tripped"):
-        return "red", f"{who}: pump failed and the tank has already reached shutdown"
-    h = a.get("hours_to_limit")
-    left = (_unix(a["repair_end_ts"]) - now) / 3600 if a.get("repair_end_ts") else None
-    if h and left is not None and h["p50"] < left:
-        return "red", f"{who}: pump failed, tank reaches shutdown in {h['p50']:.1f} h but the repair needs {left:.1f} more"
-    return "amber", f"{who}: pump failed, but the tank can wait out the repair"
+        return level, f"{who}: pump failed and the tank has already reached shutdown"
+    h, left = a.get("hours_to_limit"), repair_hours_left(a, now)
+    if sev == "high":
+        q = h[FORECAST_QUANTILE]
+        return level, f"{who}: pump failed, tank may reach shutdown in {q:.1f} h but the repair needs {left:.1f} more"
+    return level, f"{who}: pump failed, but the tank can wait out the repair"
 
 
 def rules_risk(tri: dict) -> dict:
@@ -119,19 +108,59 @@ def _money(tri: dict) -> dict:
     cost = sum(r["cost"] for r in rows)
     idle = sum(r["do_nothing"] or 0 for r in rows)
     saves = sum(r["saves"] or 0 for r in rows)
-    text = f"Cheapest fix: ${cost:,}. Doing nothing: ${idle:,}. The plan saves ${saves:,}."
+    text = f"Proposed plan for supervisor approval: ${cost:,}. Doing nothing: ${idle:,}. The plan saves ${saves:,}."
     return {"rows": rows, "total_cost": cost, "total_do_nothing": idle, "total_saves": saves, "text": text, "from_ai": False,
             "trip_price": rows[0]["trucks"]["trip_price"], "trip_bbl": rows[0]["trucks"]["trip_bbl"]}
 
 
-_ai_cache: dict = {}
+AI_TIMEOUT_S = 8          # one model call never holds anything longer than this
+AI_FAIL_TTL_S = 60        # a failed call is remembered this long, so a dead model is not retried on every poll
+_ai_cache = LRU(256)      # key -> (result, time stored)
+_ai_inflight: set = set()
+_ai_lock = threading.Lock()
+_ai_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="nemotron")
+
+
+def _ai_key(tri: dict, rules: dict) -> tuple:
+    return (tri["dataset"], tri["now"], rules["level"], len(tri["alerts"]))
+
+
+def cached_ai(tri: dict, rules: dict):
+    """The AI opinion for this moment if one is already known (success, or a failure younger than AI_FAIL_TTL_S)."""
+    with _ai_lock:
+        hit = _ai_cache.get(_ai_key(tri, rules))
+    if hit is None:
+        return None
+    res, stored = hit
+    if not res.get("available") and time.time() - stored > AI_FAIL_TTL_S:
+        return None
+    return res
+
+
+def request_ai(tri: dict, rules: dict) -> None:
+    """Start the AI second opinion in the background (never blocks the caller). No-op if known or already running."""
+    key = _ai_key(tri, rules)
+    if cached_ai(tri, rules) is not None:
+        return
+    with _ai_lock:
+        if key in _ai_inflight:
+            return
+        _ai_inflight.add(key)
+
+    def job():
+        try:
+            res = ai_check(tri, rules)
+        except Exception as e:  # never let a background failure go unrecorded
+            res = {"available": False, "error": str(e)[:120]}
+        with _ai_lock:
+            _ai_cache[key] = (res, time.time())
+            _ai_inflight.discard(key)
+
+    _ai_pool.submit(job)
 
 
 def ai_check(tri: dict, rules: dict) -> dict:
-    """Nemotron's verdict on the same facts. Cached per moment."""
-    key = (tri["dataset"], tri["now"], rules["level"], len(tri["alerts"]))
-    if key in _ai_cache:
-        return _ai_cache[key]
+    """Nemotron's opinion on the same facts. Blocking: only ever called from the background pool."""
     k = os.environ.get("NVIDIA_API_KEY")
     if not k:
         return {"available": False, "error": "NVIDIA_API_KEY is not set"}
@@ -161,44 +190,110 @@ def ai_check(tri: dict, rules: dict) -> dict:
         "Name facilities exactly as written in the facts (for example \"S1 Facility C\"), never as \"the tank\" or \"S1 tank\". "
         "Only red problems are danger: a leak or a worn pump is at most amber. The headline must name the facility when there is one. "
         "Do not diagnose and never tell anyone to operate or shut down equipment. "
-        'Answer with JSON only: {"level": "green"|"amber"|"red", "headline": "max 10 words", "why": "one short plain sentence", "money": "one plain sentence on the cost, like: Cheapest fix: send 1 truck, $905. Doing nothing would cost $4,984. Use only dollar figures from the facts (write them with commas); empty string if there is no pump failure"}\n\n'
+        'Answer with JSON only: {"level": "green"|"amber"|"red", "headline": "max 10 words", "why": "one short plain sentence", "money": "one plain sentence on the cost, worded as a proposal a supervisor approves, like: Proposed plan for supervisor approval: send 1 truck, $905. Doing nothing would cost $4,984. Use only numbers that appear in the facts (dollars with commas); empty string if there is no pump failure"}\n\n'
         + json.dumps(facts))
     body = json.dumps({"model": MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 400,
                        "temperature": 0.2, "chat_template_kwargs": {"enable_thinking": False}}).encode()
     req = urllib.request.Request(URL, body, {"Authorization": f"Bearer {k}", "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=45) as r:
+        with urllib.request.urlopen(req, timeout=AI_TIMEOUT_S) as r:
             text = json.loads(r.read())["choices"][0]["message"].get("content") or ""
         out = json.loads(re.search(r"\{.*\}", text, re.S).group(0))
         lv = out.get("level") if out.get("level") in ORDER else "green"
-        res = {"available": True, "model": MODEL, "level": lv, "headline": str(out.get("headline", ""))[:120],
-               "why": str(out.get("why", ""))[:300], "money": str(out.get("money", ""))[:300]}
-        _ai_cache[key] = res
-        return res
+        known = allowed_numbers(facts)  # a sentence with a number the facts do not contain is dropped
+        said = {k: str(out.get(k, ""))[:n] for k, n in (("headline", 120), ("why", 300), ("money", 300))}
+        said = {k: (v if numbers_ok(v, known) else "") for k, v in said.items()}
+        return {"available": True, "model": MODEL, "level": lv, **said}
     except Exception as e:
         return {"available": False, "error": str(e)[:120]}
 
 
-def assess(ds, now=None, use_ai: bool = True) -> dict:
+_WORD_NUM = {w: i for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
+    "seventeen eighteen nineteen".split())}
+_WORD_NUM.update({"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80,
+                  "ninety": 90, "hundred": 100, "thousand": 1000, "million": 1000000})
+
+
+def allowed_numbers(*sources) -> set:
+    """Every number that appears anywhere in the structured input (nested dicts/lists/strings)."""
+    out: set = set()
+
+    def walk(x):
+        if isinstance(x, bool) or x is None:
+            return
+        if isinstance(x, (int, float)):
+            out.add(round(float(x), 2))
+            out.add(float(round(x)))
+        elif isinstance(x, str):
+            for n in re.findall(r"\d[\d,]*(?:\.\d+)?", x):
+                out.add(round(float(n.replace(",", "")), 2))
+        elif isinstance(x, dict):
+            for v in x.values():
+                walk(v)
+        elif isinstance(x, (list, tuple, set)):
+            for v in x:
+                walk(v)
+
+    for s in sources:
+        walk(s)
+    return out
+
+
+def numbers_ok(sentence: str, allowed: set) -> bool:
+    """False if the sentence has any number, in digits or spelled out, that is not in `allowed`."""
+    for n in re.findall(r"\d[\d,]*(?:\.\d+)?", sentence):
+        if round(float(n.replace(",", "").rstrip(".")), 2) not in allowed:
+            return False
+    for w in re.findall(r"[a-z]+", sentence.lower()):
+        if w in _WORD_NUM and float(_WORD_NUM[w]) not in allowed:
+            return False
+    return True
+
+
+def worst_red(red_alerts: list):
+    """The most urgent red event: a tank that already tripped, else the soonest early-warning shutdown."""
+    def urgency(a):
+        h = (a.get("hours_to_limit") or {}).get(FORECAST_QUANTILE)
+        return (0 if a.get("tripped") else 1, h if h is not None else 1e9, a["facility_id"])
+    return min(red_alerts, key=urgency) if red_alerts else None
+
+
+def alarm_id(dataset: str, red_alerts: list):
+    """
+    "<dataset>:<facility_id>:<event>" for the worst rules-red event. The event part is "pf-<onset unix>": detection
+    numbers events in onset order, so an EV-#### id can shift when an earlier leak is found later; the onset cannot.
+    Same situation -> same id on every poll, so the phone alarms once per situation.
+    """
+    a = worst_red(red_alerts)
+    return f"{dataset}:{a['facility_id']}:pf-{int(a['onset_unix'])}" if a else None
+
+
+def assess(ds, now=None, use_ai: bool = True, peek_ai: bool = False) -> dict:
+    """
+    The danger level is the rules' level, always. The AI never raises or lowers it and never touches alarm_id.
+    use_ai=True: use the AI opinion if it is already known, otherwise start it in the background (never waits).
+    peek_ai=True: only use an AI opinion that is already known (no network work started at all).
+    """
     tri = run_triage(ds, now)
     rules = rules_risk(tri)
     active = [a for a in tri["alerts"] if _alert_level(a, tri["now"], ds)[0] != "green"]
-    ai = ai_check(tri, rules) if (use_ai and active) else None  # nothing new or urgent: nothing for the AI to judge
+    ai = None
+    if active and (use_ai or peek_ai):  # nothing new or urgent: nothing for the AI to judge
+        ai = cached_ai(tri, rules)
+        if ai is None and use_ai:
+            request_ai(tri, rules)
+            ai = {"available": False, "pending": True}
     level = rules["level"]
-    if ai and ai.get("available"):
-        level = BY_RANK[max(ORDER[level], ORDER[ai["level"]])]
     red = [r for r in rules["reasons"] if r["level"] == "red"]
-    alarm_ids = sorted((a["facility_id"], a["onset_unix"]) for a in tri["alerts"]
-                       if _alert_level(a, tri["now"], ds)[0] == "red")
-    if ai and ai.get("available") and level == "red" and not red:
-        headline = ai["headline"]
-    elif red:
-        headline = (ai.get("headline") if ai and ai.get("available") and ai["level"] == "red" else None) or red[0]["text"]
+    red_alerts = [a for a in tri["alerts"] if _alert_level(a, tri["now"], ds)[0] == "red"]
+    note = ai["why"] if ai and ai.get("available") and ai.get("why") else None
+    if red:
+        headline = red[0]["text"]
     else:
         known = len(tri["alerts"]) - len(active)
-        headline = (ai.get("headline") if ai and ai.get("available") else None) or (
-            rules["reasons"][0]["text"] if active and rules["reasons"] else
-            (f"Nothing urgent. {known} minor issue{'s' if known != 1 else ''} to keep an eye on" if known else "All clear"))
+        headline = (rules["reasons"][0]["text"] if active and rules["reasons"] else
+                    (f"Nothing urgent. {known} minor issue{'s' if known != 1 else ''} to keep an eye on" if known else "All clear"))
     flaggable = []
     for a in tri["alerts"]:
         lv, text = _alert_level(a, tri["now"], ds)
@@ -207,11 +302,7 @@ def assess(ds, now=None, use_ai: bool = True) -> dict:
                               "onset_unix": int(a["onset_unix"]), "text": text})
     money = _money(tri)
     if ai and ai.get("available") and ai.get("money") and money["rows"]:
-        real = {money["total_cost"], money["total_do_nothing"], money["total_saves"]}
-        for r in money["rows"]:
-            real |= {r["cost"], r["do_nothing"], r["saves"]}
-        said = {int(x.replace(",", "")) for x in re.findall(r"\$([\d,]+)", ai["money"])}
-        if said and said <= {x for x in real if x is not None}:
+        if numbers_ok(ai["money"], allowed_numbers(money)):  # else keep the deterministic sentence
             money["text"], money["from_ai"] = ai["money"], True
     speak = ""
     if level == "red":
@@ -220,14 +311,14 @@ def assess(ds, now=None, use_ai: bool = True) -> dict:
         speak = "Check soon. " + " ".join(spoken(a) for a in active[:2])
     return {
         "dataset": ds.name, "as_of": tri["now_ts"], "now": tri["now"], "level": level, "rules_level": rules["level"],
-        "alarm": level == "red",
-        "alarm_id": (f"{ds.name}:" + ",".join(f"{f}@{o}" for f, o in alarm_ids)) if level == "red" else None,
+        "severity": worst_severity(tri["alerts"]), "alarm": level == "red",
+        "alarm_id": alarm_id(ds.name, red_alerts) if level == "red" else None,
         "headline": headline, "reasons": rules["reasons"], "facilities": rules["facilities"],
-        "ai": ai, "money": money, "flaggable": flaggable, "spoken_text": speak,
+        "ai": ai, "note": note, "money": money, "flaggable": flaggable, "spoken_text": speak,
     }
 
 
-_timeline_cache: dict = {}
+_timeline_cache = LRU(32)
 
 
 def timeline(ds, step_min: int = 30) -> dict:
@@ -238,8 +329,9 @@ def timeline(ds, step_min: int = 30) -> dict:
     the whole bar.
     """
     key = (ds.name, ds.token, step_min)
-    if key in _timeline_cache:
-        return _timeline_cache[key]
+    hit = _timeline_cache.get(key)
+    if hit is not None:
+        return hit
     t0, t1 = int(ds.t_first), int(ds.t_last)
     start = t0 + 6 * 3600  # detection needs some history before it can judge
     pts = []

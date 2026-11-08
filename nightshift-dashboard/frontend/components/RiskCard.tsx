@@ -1,6 +1,6 @@
 "use client";
 
-// Is this moment dangerous? Rules plus a Nemotron second opinion. Red means an alarm for the phone and glasses.
+// Is this moment dangerous? The rules decide; a Nemotron note is added when ready. Red = alarm for phone and glasses.
 
 import { money } from "@/lib/api";
 import type { RiskLevel } from "@/lib/types";
@@ -9,18 +9,18 @@ import { WarningIcon } from "./Icons";
 import { CardSkeleton } from "./Skeleton";
 
 const LOOK: Record<RiskLevel, { label: string; box: string; pill: string }> = {
-  green: { label: "Normal", box: "border-emerald-400/50 bg-emerald-500/5", pill: "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-400/60" },
+  green: { label: "Grid stable", box: "border-emerald-400/50 bg-emerald-500/5", pill: "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-400/60" },
   amber: { label: "Check soon", box: "border-amber-400/60 bg-amber-400/5", pill: "bg-amber-400/20 text-amber-200 ring-1 ring-amber-400/60" },
-  red: { label: "DANGER", box: "border-red-500 bg-red-500/10", pill: "bg-red-500 text-zinc-100" },
+  red: { label: "// Alert", box: "border-red-500 bg-red-500/10", pill: "bg-red-500 text-zinc-950 danger-pulse" },
 };
 
 export default function RiskCard({ children, footer }: { children?: React.ReactNode; footer?: React.ReactNode }) {
-  const { asOf, playing, risk } = useApp();
+  const { asOf, playing, risk, lastOk, acked, acknowledge } = useApp();
 
   // No danger check yet (first load, or the check failed): still show the time bar so playback never disappears.
   if (!risk)
     return (
-      <section className="border-2 border-zinc-700 p-5">
+      <section className="brackets key-panel border-2 p-5">
         <CardSkeleton lines={2} />
         {footer && <p className="mt-2 text-base text-zinc-300">{footer}</p>}
         {children && <div className="mt-4 border-t border-zinc-700/70 pt-4">{children}</div>}
@@ -33,19 +33,24 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
   const others = risk.reasons.filter((r) => r.level !== risk.level);
 
   return (
-    <section key={risk.alarm_id ?? risk.level} className={`border-2 p-5 ${look.box} ${risk.alarm && !playing ? "alarm-flash" : ""}`}>
-      <div className="flex flex-wrap items-center gap-3">
+    <section id="danger-card" key={risk.alarm_id ?? risk.level} className={`scroll-mt-28 brackets ${risk.level === "red" ? "brackets-red" : ""} border-2 p-5 ${look.box} ${risk.alarm && !acked ? "card-pulse" : ""}`}>
+      {/* in danger the header keeps a free gutter on the right for the owl to perch over */}
+      <div className={`flex flex-wrap items-center gap-3 ${risk.alarm ? "pr-24" : ""}`}>
         <span className={`inline-flex items-center gap-2 px-3 py-1 text-lg font-bold uppercase ${look.pill}`}>
           {risk.level !== "green" && <WarningIcon />}
           {look.label}
         </span>
-        <h2 className="text-2xl font-bold text-zinc-100">{risk.headline}</h2>
+        <h2 className="text-2xl font-bold text-zinc-100">
+          {risk.level === "green" ? "Quiet night in Avon, choom." : risk.headline}
+        </h2>
       </div>
-      {ai?.available && ai.why && <p className="mt-2 text-lg text-zinc-300">{ai.why}</p>}
+      {risk.alarm && <div id="owl-slot" className="pr-24" />}
+      {risk.level === "green" && risk.headline !== "All clear" && <p className="mt-2 text-base text-zinc-300">{risk.headline}.</p>}
+      {risk.note && <p className="mt-2 text-lg text-zinc-300"><span className="text-zinc-500">AI note: </span>{risk.note}</p>}
       {mine.length > 0 && (
         <ul className="mt-2 space-y-0.5 text-base text-zinc-300">
           {mine.slice(0, 4).map((r, i) => (
-            <li key={i}><span className="mr-2 text-zinc-600">•</span>{r.text}</li>
+            <li key={i}><span className="mr-2 text-zinc-500">•</span>{r.text}</li>
           ))}
         </ul>
       )}
@@ -84,21 +89,33 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
         </div>
       )}
       {risk.alarm && (
-        <p className="mt-3 rounded-lg bg-red-500/20 px-4 py-2 text-base font-semibold text-red-100">
-          {asOf === null ? "Alarm sent to the phone and glasses." : "Replay: an alarm would have gone off here."}
-        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3 bg-red-500/20 px-4 py-2">
+          <p className="flex-1 text-base font-semibold text-red-100">
+            {asOf === null ? "Alarm sent to the phone and glasses." : "Replay: an alarm would have gone off here."}
+          </p>
+          {acked ? (
+            <span className="font-mono text-sm uppercase tracking-wider text-red-200">Acknowledged</span>
+          ) : (
+            <button type="button" onClick={acknowledge} className="btn-primary px-4 py-1.5 text-base font-semibold">
+              Acknowledge
+            </button>
+          )}
+        </div>
       )}
       <p className="mt-3 text-sm text-zinc-500">
         {playing
           ? "Playing: rules check only. The AI check runs when you pause. "
           : ai?.available
-          ? `Rules and AI check (${ai.model?.split("/").pop()}). The AI can raise the level, never lower it. `
+          ? `Level from the rules; note from ${ai.model?.split("/").pop()}. The AI never changes the level. `
+          : ai?.pending
+          ? "Level from the rules. AI note on its way. "
           : ai
-          ? `Rules only (${ai.error ?? "AI not available"}). `
+          ? `Level from the rules (AI note not available: ${ai.error ?? "no answer"}). `
           : risk.reasons.length === 0
           ? "Nothing to check right now, so the AI was not asked. "
           : "Rules only. "}
         A person decides what to do.
+        {lastOk && <> Last updated {lastOk.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}.</>}
       </p>
       {footer && <p className="mt-2 text-base text-zinc-300">{footer}</p>}
       {children && <div className="mt-4 border-t border-zinc-700/70 pt-4">{children}</div>}

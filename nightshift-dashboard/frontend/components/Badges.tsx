@@ -1,5 +1,5 @@
 import { WarningIcon } from "./Icons";
-import type { Category, FacilityStatus, FlagStatus, FlagType, PriorityLevel, RiskLevel, Trigger } from "@/lib/types";
+import type { Category, FacilityStatus, FlagStatus, FlagType, PriorityLevel, Severity, Trigger } from "@/lib/types";
 
 const STATUS: Record<FlagStatus, string> = {
   pending: "bg-amber-500/15 text-amber-300 ring-amber-500/40",
@@ -33,6 +33,22 @@ export const FAC_STATUS: Record<FacilityStatus, { label: string; cls: string }> 
 
 const base = "inline-flex items-center px-2.5 py-0.5 text-sm font-medium ring-1";
 
+// Severity: colour + an icon + a word, so it never depends on colour alone.
+export const SEVERITY: Record<Severity | "none", { label: string; cls: string; tone: "red" | "amber" | "ok" }> = {
+  high: { label: "Danger", cls: "bg-red-500 text-zinc-950 ring-red-500 danger-pulse", tone: "red" },
+  medium: { label: "Check soon", cls: "bg-amber-500/15 text-amber-300 ring-amber-500/40", tone: "amber" },
+  low: { label: "Minor", cls: "bg-zinc-800 text-zinc-300 ring-zinc-600", tone: "ok" },
+  none: { label: "Normal", cls: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40", tone: "ok" },
+};
+// Look up a severity safely: an older backend (or a missing field) shows as "Normal" instead of crashing the page.
+export const sevInfo = (s: string | null | undefined) => SEVERITY[(s ?? "none") as Severity | "none"] ?? SEVERITY.none;
+export const SeverityBadge = ({ severity }: { severity?: Severity | "none" | null }) => (
+  <span className={`${base} gap-1.5 font-semibold uppercase ${sevInfo(severity).cls}`}>
+    {(severity === "high" || severity === "medium") && <WarningIcon />}
+    {sevInfo(severity).label}
+  </span>
+);
+
 export const StatusBadge = ({ status }: { status: FlagStatus }) => (
   <span className={`${base} ${STATUS[status] ?? STATUS.pending}`}>{STATUS_LABEL[status] ?? status}</span>
 );
@@ -45,17 +61,16 @@ export const LevelBadge = ({ level }: { level: PriorityLevel }) => (
     {level}
   </span>
 );
-export const CategoryBadge = ({ category, minor = false }: { category: Category; minor?: boolean }) => (
-  <span className={`${base} ${minor && category !== "pump_failure" ? "bg-zinc-800 text-zinc-300 ring-zinc-600" : CATEGORY[category].cls}`}>{CATEGORY[category].label}</span>
+// What kind of problem it is. Neutral: how bad it is shows in the SeverityBadge next to it.
+export const CategoryBadge = ({ category }: { category: Category }) => (
+  <span className={`${base} bg-zinc-800 text-zinc-200 ring-zinc-600`}>{CATEGORY[category].label}</span>
 );
-export const FacStatusBadge = ({ status, level }: { status: FacilityStatus; level?: RiskLevel }) => {
-  const minor = level === "green" && (status === "worn" || status === "leak");
-  return (
-    <span className={`${base} ${minor ? "bg-zinc-800 text-zinc-300 ring-zinc-600" : FAC_STATUS[status].cls}`}>
-      {FAC_STATUS[status].label}{minor ? ", minor" : ""}
-    </span>
-  );
-};
+// A facility's status, coloured by the backend's severity.
+export const FacStatusBadge = ({ status, severity }: { status: FacilityStatus; severity?: Severity | "none" | null }) => (
+  <span className={`${base} ${sevInfo(severity).cls}`}>
+    {FAC_STATUS[status].label}{severity === "low" ? ", minor" : ""}
+  </span>
+);
 export const TriggerBadge = ({ trigger }: { trigger: Trigger }) => (
   <span className={`${base} bg-zinc-800 text-zinc-300 ring-zinc-600`}>{trigger === "camera" ? "Camera" : trigger === "voice" ? "Voice" : "Data check"}</span>
 );
