@@ -28,8 +28,15 @@ All NightShift code is in CameraAccess/NightShift/ (Config, Models, NightShiftAP
 - Decode tolerantly: ignore unknown fields, optional fields default to nil.
 - Backend base URL: the default address is in Config.swift, editable on the Shift screen and saved on the phone; the permanent ngrok address is https://stubble-sensitize-reset.ngrok-free.dev.
 
+## Shifts, flags and test tools
+- Shifts start only from the Start Shift button (never on launch or after End Shift). A shift left open by an earlier launch shows Resume / End Shift. Voice commands have their own on/off toggle on the Shift screen; Start Shift turns voice on and End Shift turns it off, but the toggle overrides either.
+- Voice flags ("flag leak/smoke/damage") are auto-confirmed (the operator's own call), trigger "voice". Camera flags always start pending, trigger "camera"; nothing confirms or dismisses them automatically.
+- Flags are confirmed or dismissed by voice ("confirm"/"dismiss" act on the newest pending flag) or by the on-screen Confirm/Dismiss buttons on each flag row.
+- Check now (sends the current frame to /vision/check immediately and shows the raw result) and Simulate camera flag (creates a pending test camera flag) exist for testing. Simulate camera flag is shown only when Config.showTestTools is true; turn it off before a real demo.
+- End Shift speaks only an app-built flag summary (confirmed / dismissed / unreviewed counts and up to three notes on confirmed flags), with no handoff text, plans or prices. Start Shift speaks the backend briefing as received.
+
 ## Working features (hand-tested on glasses)
-Camera stream, chime + spoken alerts through the glasses, voice commands (next, status of <facility>, confirm, dismiss, note <text>, flag leak/smoke/damage), frame grabber every 4 s, flags with photos stored offline, upload queue with retry, Shift screen (Start Shift, Next alert, Refresh, End Shift, Test connection), offline cache of backend data.
+Camera stream, chime + spoken alerts through the glasses, voice commands (next, status of <facility>, confirm, dismiss, note <text>, flag leak/smoke/damage), frame grabber every 6 s, flags with photos stored offline, upload queue with retry, Shift screen (Start Shift, Next alert, Refresh, End Shift, Test connection), offline cache of backend data.
 
 ## Not done
 Gestures (SDK Inputs API is experimental and needs Meta capability approval).
