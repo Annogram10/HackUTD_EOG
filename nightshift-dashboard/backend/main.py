@@ -35,6 +35,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -204,10 +205,25 @@ def ds_for(name: Optional[str]) -> D.Dataset:
         raise HTTPException(404, f"dataset '{name}' not found")
 
 
+_NUM_WORDS = {w: str(i) for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
+    "seventeen eighteen nineteen twenty".split())}
+
+
+def _spoken_key(text: str) -> str:
+    """'S one Facility C', 's1 facility c', 'S1_FACILITY_C', 's 1 c' -> 's1c' (how speech recognition writes names)."""
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    return "".join(_NUM_WORDS.get(w, w) for w in words if w != "facility")
+
+
 def resolve_facility(ds: D.Dataset, location: str) -> str:
     key = location.strip().lower().replace(" ", "_")
     for fid in ds.facilities:
         if fid.lower() == key or fac_name(fid).lower() == location.strip().lower():
+            return fid
+    spoken = _spoken_key(location)  # what the glasses heard, e.g. "status of s one facility c"
+    for fid in ds.facilities:
+        if spoken and spoken == _spoken_key(fac_name(fid)):
             return fid
     for fid, f in ds.facilities.items():  # also accept a pump/tank/pipeline/well id
         ids = [f.pump["id"], f.tank["id"], f.pipeline["id"]] + [w["id"] for w in f.wells]
