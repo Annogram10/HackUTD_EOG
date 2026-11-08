@@ -141,7 +141,7 @@ struct SettingsView: View {
       }
       FlatButton(title: "Save Pico address", icon: "checkmark") { savePico() }
         .buttonStyle(.borderless)
-      HStack(spacing: 10) {
+      AdaptiveStack(spacing: 10) {
         ForEach(1...3, id: \.self) { level in
           FlatButton(title: testingLevel == level ? "Testing…" : "Level \(level)", accessibilityLabel: "Test nudge level \(level)") {
             testingLevel = level
@@ -202,7 +202,7 @@ struct SettingsView: View {
         .autocorrectionDisabled()
         .font(.body.monospaced())
         .accessibilityLabel("Backend API key")
-      HStack(spacing: 10) {
+      AdaptiveStack(spacing: 10) {
         FlatButton(title: "Save key", icon: "key.fill") {
           let key = apiKeyText.trimmingCharacters(in: .whitespacesAndNewlines)
           apiKeySaved = Keychain.set(key, for: Config.Keys.apiKeyAccount)

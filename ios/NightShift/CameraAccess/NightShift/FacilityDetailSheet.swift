@@ -79,7 +79,7 @@ struct FacilityDetailSheet: View {
             }
           }
           .disabled(facility.spokenText == nil)
-          HStack(spacing: 10) {
+          AdaptiveStack(spacing: 10) {
             FlatButton(title: "I'm here", icon: "mappin.and.ellipse",
                        accessibilityLabel: "I'm here at \(facility.displayName)") {
               controller.markHere(facility.id)

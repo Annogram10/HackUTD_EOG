@@ -140,7 +140,7 @@ struct TodoView: View {
   private var header: some View {
     HeaderStrip(alarmActive: alarmActive) {
       VStack(alignment: .leading, spacing: 10) {
-        HStack(spacing: 10) {
+        AdaptiveStack(spacing: 10, stackedAlignment: .leading) {
           Text("NightShift")
             .font(.title2.bold())
             .foregroundStyle(NS.textPrimary)
@@ -160,7 +160,7 @@ struct TodoView: View {
             ShiftTimer(start: start)
           }
         }
-        HStack(spacing: 10) {
+        AdaptiveStack(spacing: 10) {
           shiftButton
           FlatButton(title: "Read aloud", icon: "speaker.wave.2.fill",
                      accessibilityLabel: "Read aloud what to check first") {
@@ -248,7 +248,7 @@ struct TodoView: View {
       .accessibilityElement(children: .combine)
       .accessibilityHint("Shows details")
 
-      HStack(spacing: 10) {
+      AdaptiveStack(spacing: 10) {
         FlatButton(title: "I'm here", icon: "mappin.and.ellipse",
                    accessibilityLabel: "I'm here at \(facility.displayName)") {
           controller.markHere(facility.id)
@@ -289,7 +289,7 @@ struct TodoView: View {
         }
       }
       .accessibilityElement(children: .combine)
-      HStack(spacing: 10) {
+      AdaptiveStack(spacing: 10) {
         FlatButton(title: "Dismiss", icon: "xmark", accessibilityLabel: "Dismiss possible \(flag.type) at \(place)") {
           controller.decide(flag.id, as: .dismissed)
         }
@@ -318,7 +318,7 @@ struct TodoView: View {
       if let error = alarmError {
         Text(error).font(.subheadline).foregroundStyle(NS.redText)
       }
-      HStack(spacing: 10) {
+      AdaptiveStack(spacing: 10) {
         FlatButton(title: "Dismiss", icon: "xmark", accessibilityLabel: "Dismiss the alarm") {
           decideAlarm(.dismiss)
         }

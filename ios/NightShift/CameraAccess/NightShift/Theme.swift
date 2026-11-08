@@ -50,6 +50,26 @@ extension Color {
   }
 }
 
+// MARK: - Layout
+
+/// Side by side normally; stacked at accessibility text sizes so big text and big
+/// buttons never clip (Dynamic Type up to xxxLarge and beyond).
+struct AdaptiveStack<Content: View>: View {
+  var spacing: CGFloat = 10
+  /// Alignment when stacked.
+  var stackedAlignment: HorizontalAlignment = .center
+  @ViewBuilder let content: Content
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  var body: some View {
+    if dynamicTypeSize.isAccessibilitySize {
+      VStack(alignment: stackedAlignment, spacing: spacing) { content }
+    } else {
+      HStack(spacing: spacing) { content }
+    }
+  }
+}
+
 // MARK: - Haptics
 
 enum Haptics {

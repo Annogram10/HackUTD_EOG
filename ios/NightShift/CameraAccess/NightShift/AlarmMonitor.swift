@@ -564,7 +564,11 @@ private struct AlarmOverlayView: View {
       ZStack {
         background(at: context.date)
           .ignoresSafeArea()
-        content
+        // Scrolls instead of clipping at the largest text sizes.
+        ViewThatFits(in: .vertical) {
+          content
+          ScrollView { content }
+        }
       }
     }
     .contentShape(Rectangle())
@@ -595,7 +599,7 @@ private struct AlarmOverlayView: View {
         } label: {
           Label("Listen", systemImage: "mic")
             .font(.headline)
-            .frame(maxWidth: .infinity, minHeight: 48)
+            .frame(maxWidth: .infinity, minHeight: NS.tap)
         }
         .buttonStyle(.bordered)
         .tint(.white)
@@ -606,7 +610,7 @@ private struct AlarmOverlayView: View {
         } label: {
           Label(monitor.isLoadingIssue ? "Asking…" : "What's the issue?", systemImage: "questionmark.bubble")
             .font(.headline)
-            .frame(maxWidth: .infinity, minHeight: 48)
+            .frame(maxWidth: .infinity, minHeight: NS.tap)
         }
         .buttonStyle(.bordered)
         .tint(.white)
@@ -624,7 +628,7 @@ private struct AlarmOverlayView: View {
         .padding(12)
         .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
       if issue.flag != nil {
-        HStack(spacing: 12) {
+        AdaptiveStack(spacing: 12) {
           Button {
             Task { await monitor.decide(.dismiss) }
           } label: {

@@ -147,6 +147,8 @@ struct RootTabView: View {
         }
         Text(title)
           .font(.caption.weight(.medium))
+          .lineLimit(1)
+          .minimumScaleFactor(0.6)
       }
       .foregroundStyle(selected ? NS.textPrimary : NS.textSecondary)
       .frame(maxWidth: .infinity, minHeight: NS.tap)

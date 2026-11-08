@@ -126,7 +126,7 @@ struct AlertsView: View {
       if let alarmError {
         Text(alarmError).font(.subheadline).foregroundStyle(NS.redText)
       }
-      HStack(spacing: 10) {
+      AdaptiveStack(spacing: 10) {
         FlatButton(title: "Dismiss", icon: "xmark", accessibilityLabel: "Dismiss the alarm") {
           decide(.dismiss)
         }
@@ -185,7 +185,7 @@ struct AlertsView: View {
       if let description = flag.description {
         Text(description).font(.body).foregroundStyle(NS.textBody)
       }
-      HStack(spacing: 10) {
+      AdaptiveStack(spacing: 10) {
         FlatButton(title: "Dismiss", icon: "xmark", accessibilityLabel: "Dismiss possible \(flag.type) at \(place)") {
           controller.decide(flag.id, as: .dismissed)
         }
