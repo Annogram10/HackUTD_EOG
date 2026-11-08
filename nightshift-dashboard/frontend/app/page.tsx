@@ -44,9 +44,12 @@ export default function Now() {
 
   return (
     <div className="space-y-8">
-      <RiskCard footer={phoneLine}>
-        <TimeTravel bare />
-      </RiskCard>
+      <div className="space-y-1.5">
+        <p className="hud">SYS//STATUS</p>
+        <RiskCard footer={phoneLine}>
+          <TimeTravel bare />
+        </RiskCard>
+      </div>
       <EvidenceCharts />
 
       {overview.alerts.length === 0 && (
@@ -58,6 +61,7 @@ export default function Now() {
       {overview.alerts.length > 0 && (
         <section className="space-y-4">
           <div>
+            <p className="hud">SYS//PLAN</p>
             <h2 className="text-2xl font-semibold">What to do</h2>
             <p className="text-base text-zinc-500">Most urgent first. These are suggestions for a person to approve, nothing here operates equipment.</p>
           </div>
@@ -67,7 +71,10 @@ export default function Now() {
 
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-2xl font-semibold">Map</h2>
+          <div>
+            <p className="hud">SYS//NETWORK</p>
+            <h2 className="text-2xl font-semibold">Map</h2>
+          </div>
           {overview.systems.length > 1 && (
             <div className="flex flex-wrap gap-2">
               {overview.systems.map((s) => {

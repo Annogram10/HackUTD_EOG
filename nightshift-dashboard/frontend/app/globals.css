@@ -199,3 +199,23 @@ html[data-burst] .sky-win { fill: #ff3b3b; opacity: 0.8; }
   .neon-flicker, .sky-win { animation: none; }
   .neon-night, .neon-shift, .sky-win { transition: none; }
 }
+
+/* ---------- status copy: replay cursor, timeline playhead, glitch while dragging ---------- */
+.blink-cursor { animation: blink-cursor 1.06s steps(1, end) infinite; }
+@keyframes blink-cursor { 50% { opacity: 0; } }
+.timeslider { -webkit-appearance: none; appearance: none; background: transparent; }
+.timeslider::-webkit-slider-runnable-track { background: transparent; height: 36px; }
+.timeslider::-moz-range-track { background: transparent; }
+.timeslider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 6px; height: 28px; margin-top: 4px;
+  background: #19e6ff; border: 0; box-shadow: 0 0 8px #19e6ff, 0 0 2px #fff;
+}
+.timeslider::-moz-range-thumb { width: 6px; height: 28px; background: #19e6ff; border: 0; border-radius: 0; box-shadow: 0 0 8px #19e6ff; }
+.glitch-text { animation: glitch-text 0.18s steps(2, end) infinite; }
+@keyframes glitch-text {
+  0% { text-shadow: -2px 0 #ff2bd6, 2px 0 #19e6ff; transform: translateX(0); }
+  50% { text-shadow: 2px 0 #ff2bd6, -2px 0 #19e6ff; transform: translateX(1px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .blink-cursor, .glitch-text { animation: none; text-shadow: none; }
+}

@@ -47,7 +47,7 @@ export default function AlertCard({ a, compact = false }: { a: Alert; compact?: 
         </div>
 
         {failure && (
-          <div className="w-full shrink-0 rounded-lg bg-zinc-950/60 p-4 sm:w-80">
+          <div className={`brackets ${urgent ? "brackets-red" : ""} w-full shrink-0 bg-zinc-950/60 p-4 sm:w-80`}>
             {a.tripped ? (
               <p className="text-xl font-semibold text-red-300">Tank already at shutdown. Wells stay shut in until the repair ends.</p>
             ) : (
@@ -56,6 +56,11 @@ export default function AlertCard({ a, compact = false }: { a: Alert; compact?: 
                 <p className={`text-5xl font-bold tabular-nums ${urgent ? "text-red-400" : "text-amber-300"}`}>
                   {a.hours_to_limit ? fmtHours(a.hours_to_limit.p50) : "n/a"}
                 </p>
+                {a.hours_to_limit && (
+                  <p className={`font-mono text-sm font-semibold tracking-wider ${urgent ? "text-red-300" : "text-amber-300"}`}>
+                    TANK FLATLINE IN {a.hours_to_limit.p50.toFixed(1)}H
+                  </p>
+                )}
                 {a.hours_to_limit && (
                   <p className="text-sm text-zinc-500">
                     best {fmtHours(a.hours_to_limit.p90)} · worst {fmtHours(a.hours_to_limit.p10)} · tank {a.level_pct}% full

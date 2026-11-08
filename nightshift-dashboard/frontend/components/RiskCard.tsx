@@ -9,9 +9,9 @@ import { WarningIcon } from "./Icons";
 import { CardSkeleton } from "./Skeleton";
 
 const LOOK: Record<RiskLevel, { label: string; box: string; pill: string }> = {
-  green: { label: "Normal", box: "border-emerald-400/50 bg-emerald-500/5", pill: "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-400/60" },
+  green: { label: "Grid stable", box: "border-emerald-400/50 bg-emerald-500/5", pill: "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-400/60" },
   amber: { label: "Check soon", box: "border-amber-400/60 bg-amber-400/5", pill: "bg-amber-400/20 text-amber-200 ring-1 ring-amber-400/60" },
-  red: { label: "DANGER", box: "border-red-500 bg-red-500/10", pill: "bg-red-500 text-zinc-100" },
+  red: { label: "// Alert", box: "border-red-500 bg-red-500/10", pill: "bg-red-500 text-zinc-950" },
 };
 
 export default function RiskCard({ children, footer }: { children?: React.ReactNode; footer?: React.ReactNode }) {
@@ -39,8 +39,11 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
           {risk.level !== "green" && <WarningIcon />}
           {look.label}
         </span>
-        <h2 className="text-2xl font-bold text-zinc-100">{risk.headline}</h2>
+        <h2 className="text-2xl font-bold text-zinc-100">
+          {risk.level === "green" ? "Quiet night in Avon, choom." : risk.headline}
+        </h2>
       </div>
+      {risk.level === "green" && risk.headline !== "All clear" && <p className="mt-2 text-base text-zinc-300">{risk.headline}.</p>}
       {risk.note && <p className="mt-2 text-lg text-zinc-300"><span className="text-zinc-500">AI note: </span>{risk.note}</p>}
       {mine.length > 0 && (
         <ul className="mt-2 space-y-0.5 text-base text-zinc-300">

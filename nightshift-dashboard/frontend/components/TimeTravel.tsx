@@ -122,10 +122,8 @@ export default function TimeTravel({ bare = false }: { bare?: boolean }) {
           {playing ? "Pause" : "Play"}
         </button>
         <div>
-          <p className="text-sm uppercase tracking-wide text-zinc-500">
-            Time travel · {playing ? "playing" : live ? "latest data" : "paused"}
-          </p>
-          <p className="text-2xl font-bold tabular-nums">{formatDateTime(unixToIso(value))}</p>
+          <p className="hud">SYS//TIMELINE · Neural replay · {playing ? "playing" : live ? "latest data" : "paused"}</p>
+          <p className={`text-2xl font-bold tabular-nums ${draft !== null ? "glitch-text" : ""}`}>{formatDateTime(unixToIso(value))}</p>
           <p className="text-sm text-zinc-500">
             Reading {reading} of {total} · a new reading every 5 minutes
             {value < tl.last ? ` · next at ${formatTime(unixToIso(value + tl.step_s))} UTC` : " · newest reading"}
@@ -157,6 +155,15 @@ export default function TimeTravel({ bare = false }: { bare?: boolean }) {
             <div key={i} className="absolute inset-y-0 bg-zinc-500"
               style={{ left: pct(b.start), width: `max(3px, calc(${pct(Math.min(b.end, value))} - ${pct(b.start)}))` }} />
           ))}
+        </div>
+        {/* tick marks: one per day (taller) and every 6 hours */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-[30px] h-2">
+          {Array.from({ length: Math.floor((tl.last - tl.first) / 21600) + 1 }, (_, i) => {
+            const t = Math.ceil(tl.first / 21600) * 21600 + i * 21600;
+            if (t > tl.last) return null;
+            const day = t % 86400 === 0;
+            return <span key={t} className={`absolute top-0 w-px ${day ? "h-2 bg-zinc-400" : "h-1 bg-zinc-600"}`} style={{ left: pct(t) }} />;
+          })}
         </div>
         <input type="range" min={tl.first} max={tl.last} step={tl.step_s} value={value}
           onChange={(e) => { setPlaying(false); setDraft(Number(e.target.value)); }}
@@ -193,7 +200,7 @@ export default function TimeTravel({ bare = false }: { bare?: boolean }) {
           <ul className="space-y-1 text-base">
             {feed.slice(0, 6).map((a) => (
               <li key={a.event_id} className="flex flex-wrap gap-x-3 text-zinc-300">
-                <span className="w-28 shrink-0 font-mono text-zinc-400">{formatTime(a.detected_ts)} UTC</span>
+                <span className="w-36 shrink-0 whitespace-nowrap font-mono text-zinc-400">{formatTime(a.detected_ts)} UTC</span>
                 <span className="font-medium text-zinc-100">{facName(a.facility_id)}</span>
                 <span className="text-zinc-400">
                   {a.category === "pump_failure" ? "pump failure" : a.category === "pipeline_leak" ? "possible leak" : "pump wearing out"}

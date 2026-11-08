@@ -27,17 +27,17 @@ export default function TopBar() {
           {mode && overview && (
             <p className="flex items-center gap-3 text-base" aria-live="polite">
               {replay ? (
-                <span className="flex items-center gap-2 bg-amber-500/15 px-3 py-1 text-base font-bold uppercase tracking-wide text-amber-300 ring-1 ring-amber-400/60">
-                  <span aria-hidden className="h-2.5 w-2.5 bg-amber-400" />
-                  {playing ? "Replaying" : "Replay"}
+                <span className="flex items-center gap-1 border border-[#FF2BD6]/60 px-3 py-1 font-mono text-sm font-bold uppercase tracking-wider text-[#FF6BE0]">
+                  {"// "}{playing ? "Replaying" : "Replay mode"}
+                  <span aria-hidden className="blink-cursor">▌</span>
                 </span>
               ) : (
                 <span className="flex items-center gap-2 bg-emerald-500/15 px-3 py-1 text-base font-bold uppercase tracking-wide text-emerald-300 ring-1 ring-emerald-400/60">
                   <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                  Live
+                  <span className="font-mono text-sm tracking-wider">LIVE</span>
                 </span>
               )}
-              <span className={`font-semibold ${replay ? "text-amber-300" : "text-zinc-200"}`}>
+              <span className="font-semibold text-zinc-100">
                 {replay ? "Showing " : "Latest reading "}
                 {formatDateTime(overview.as_of)}
               </span>
