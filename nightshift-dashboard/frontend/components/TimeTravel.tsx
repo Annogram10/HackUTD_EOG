@@ -23,6 +23,11 @@ const SPEEDS = [
   { label: "Very fast (0.1 s per reading)", ms: 100 },
 ];
 
+// Timelines already loaded, per dataset, for the whole session: switching back to a dataset shows its bar at once
+// (no placeholder while it reloads, even if the backend is busy just after a restart).
+const timelineCache = new Map<string, Timeline>();
+const RETRY_MS = [2000, 4000, 8000]; // quiet retries before showing "Couldn't load"
+
 export default function TimeTravel({ bare = false }: { bare?: boolean }) {
   const { dataset, asOf, setAsOf, playing, setPlaying, overview } = useApp();
   const [got, setGot] = useState<{ dataset: string; data: Timeline | null } | null>(null);
@@ -32,16 +37,31 @@ export default function TimeTravel({ bare = false }: { bare?: boolean }) {
   const [pauseOnAlarm, setPauseOnAlarm] = useState(true);
   const [hopTo, setHopTo] = useState<number | null>(null); // the alarm the replay buddy last hopped onto
   const [attempt, setAttempt] = useState(0);
-  const loaded = got && got.dataset === dataset;
-  const tl = loaded ? got.data : null;
+  const cached = dataset ? timelineCache.get(dataset) ?? null : null;
+  const loaded = (got && got.dataset === dataset) || !!cached;
+  const tl = (got && got.dataset === dataset ? got.data : null) ?? cached;
   const valueRef = useRef(0);
 
   useEffect(() => {
     if (!dataset) return;
     let alive = true;
-    getTimeline(dataset).then((d) => alive && setGot({ dataset, data: d })).catch(() => alive && setGot({ dataset, data: null }));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = (tries: number) => {
+      getTimeline(dataset)
+        .then((d) => {
+          timelineCache.set(dataset, d);
+          if (alive) setGot({ dataset, data: d });
+        })
+        .catch(() => {
+          if (!alive) return;
+          if (tries < RETRY_MS.length) timer = setTimeout(() => load(tries + 1), RETRY_MS[tries]);
+          else setGot({ dataset, data: null }); // the cached bar (if any) stays on screen
+        });
+    };
+    load(0);
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
   }, [dataset, attempt]);
 
