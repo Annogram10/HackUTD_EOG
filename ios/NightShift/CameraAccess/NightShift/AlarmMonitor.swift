@@ -255,7 +255,7 @@ final class AlarmMonitor {
 
   /// alarm_id ("<dataset>:<facility>:<event>"); older backends without it fall back to
   /// facility id + level.
-  static func identity(of status: AlarmStatus) -> String {
+  nonisolated static func identity(of status: AlarmStatus) -> String {
     if let id = status.alarmId { return id }
     return "\(status.facilityIds.first ?? "unknown"):\(status.level ?? "unknown")"
   }
