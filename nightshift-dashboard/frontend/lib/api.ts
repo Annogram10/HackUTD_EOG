@@ -50,7 +50,9 @@ export const getAgentTrace = (dataset: string) => get<AgentRun>(`/agent/trace${q
 export const getHandoff = (dataset: string, now?: number) => get<Handoff>(`/handoff${q({ dataset, now: now?.toString() })}`);
 export const getSeries = (dataset: string, asset: string, metric: string, hours: number) =>
   get<{ points: [number, number][] }>(`/series${q({ dataset, asset, metric, hours: String(hours) })}`);
-export const eventsUrl = (dataset: string) => `${API_URL}/events.json${q({ dataset })}`;
+// Both downloads use the moment on screen (replay time, or the latest data).
+export const eventsUrl = (dataset: string, now?: number) => `${API_URL}/events.json${q({ dataset, now: now?.toString() })}`;
+export const briefUrl = (dataset: string, now?: number) => `${API_URL}/handoff.txt${q({ dataset, now: now?.toString() })}`;
 
 export async function rerunAgent(dataset: string): Promise<AgentRun> {
   const res = await fetch(`${API_URL}/agent/run${q({ dataset })}`, { method: "POST", headers: writeHeaders() });

@@ -38,14 +38,14 @@ import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -56,7 +56,7 @@ from app import risk as risk_mod
 from app import speech, vision
 from app.forecast import current_state
 from app.timeutil import parse_ts
-from app.handoff import build_handoff, spoken
+from app.handoff import build_brief, build_handoff, spoken
 from app.triage import (SEVERITY_COLOR, SEVERITY_RANK, events_json, fac_name, facility_status, money, run_triage,
                         worst_severity)
 
@@ -621,6 +621,22 @@ def handoff(dataset: Optional[str] = None, now: Optional[int] = None):
         h["agent_engine"] = run.public()["engine"]
     h["events_count"] = len(tri["events"])
     return h
+
+
+@app.get("/handoff.txt")
+def handoff_brief(dataset: Optional[str] = None, now: Optional[int] = None):
+    """The plain-English handoff the next operator reads in about 30 seconds, as a text download."""
+    ds = ds_for(dataset)
+    now, mode = effective_now(ds, now)
+    tri = run_triage(ds, now)
+    try:
+        first = [p["location"] for p in get_next_shift(None, ds.name, now)]
+    except HTTPException:
+        first = []
+    when = datetime.fromtimestamp(tri["now"], tz=timezone.utc).strftime("%b %-d, %-I:%M %p UTC")
+    text = build_brief(tri, when, first, len(tri["events"]), mode)
+    name = f"NightShift handoff {ds.name} {datetime.fromtimestamp(tri['now'], tz=timezone.utc):%Y-%m-%d %H%M}.txt"
+    return PlainTextResponse(text, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @app.get("/events.json")

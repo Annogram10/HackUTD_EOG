@@ -8,7 +8,7 @@ import { useApp } from "@/components/AppProvider";
 import { PageSkeleton } from "@/components/Skeleton";
 import FlagCard from "@/components/FlagCard";
 import Stat from "@/components/Stat";
-import { eventsUrl, facName, formatDate, formatDateTime, formatTime, getHandoff } from "@/lib/api";
+import { briefUrl, eventsUrl, facName, formatDate, formatDateTime, formatTime, getHandoff } from "@/lib/api";
 import PriorityList from "@/components/PriorityList";
 import { flagSignature, usePriorities, useReport } from "@/lib/hooks";
 import type { Handoff } from "@/lib/types";
@@ -51,16 +51,29 @@ export default function Report() {
     </section>
   );
 
+  // Two downloads for two readers: the 30-second plain-English handoff for the next operator, and events.json
+  // (EOG's machine-readable format) for scoring and other tools. Both use the moment on screen.
+  const downloads = (
+    <div className="no-print flex flex-wrap items-start gap-3">
+      <div className="flex flex-col">
+        <a href={briefUrl(dataset, asOf ?? undefined)} className="btn-primary px-5 py-2.5 text-base font-semibold">Download handoff</a>
+        <span className="mt-1 text-sm text-zinc-400">Plain English, 30-second read</span>
+      </div>
+      <div className="flex flex-col">
+        <a href={eventsUrl(dataset, asOf ?? undefined)} className="border border-zinc-700 px-5 py-2.5 text-base font-semibold text-zinc-200 hover:bg-zinc-800">Export events.json</a>
+        <span className="mt-1 text-sm text-zinc-400">Data file in EOG&apos;s format</span>
+      </div>
+      <button onClick={() => window.print()} className="border border-zinc-700 px-5 py-2.5 text-base font-semibold text-zinc-200 hover:bg-zinc-800">Print</button>
+    </div>
+  );
+
   // No phone upload for this dataset yet: still show everything the sensors know.
   if (!shift || !report)
     return (
       <div className="space-y-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <h1 className="text-3xl font-bold">Handover</h1>
-          <div className="no-print flex gap-3">
-            <a href={eventsUrl(dataset)} className="rounded-lg border border-zinc-700 px-5 py-2.5 text-base font-semibold text-zinc-200 hover:bg-zinc-800">Export events.json</a>
-            <button onClick={() => window.print()} className="btn-primary px-5 py-2.5 text-base font-semibold">Print</button>
-          </div>
+          {downloads}
         </div>
         <p className="rounded-xl border border-dashed border-zinc-800 p-6 text-lg text-zinc-400">
           {asOf !== null ? "No shift had started yet at this time." : "No phone report for this dataset yet."} When the operator ends a shift on the phone, their flags, notes and route appear here.
@@ -79,16 +92,7 @@ export default function Report() {
             Operator {report.shift.operator} · {formatDateTime(report.shift.started_at)} to {formatDateTime(report.shift.ended_at)} · uploaded {formatDateTime(report.shift.uploaded_at)}
           </p>
         </div>
-        <div className="no-print flex gap-3">
-          {dataset && (
-            <a href={eventsUrl(dataset)} className="rounded-lg border border-zinc-700 px-5 py-2.5 text-base font-semibold text-zinc-200 hover:bg-zinc-800">
-              Export events.json
-            </a>
-          )}
-          <button onClick={() => window.print()} className="btn-primary px-5 py-2.5 text-base font-semibold">
-            Print
-          </button>
-        </div>
+        {downloads}
       </div>
 
       {handoffBlock}
