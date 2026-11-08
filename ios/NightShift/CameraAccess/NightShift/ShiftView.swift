@@ -13,6 +13,8 @@ struct ShiftView: View {
   var network = NetworkMonitor.shared
   var backend = BackendStatus.shared
   @State private var confirmEndShift = false
+  @State private var noteFlagID: Flag.ID?
+  @State private var noteText = ""
   @State private var addressText = ""
   @State private var addressError: String?
 
@@ -56,12 +58,26 @@ struct ShiftView: View {
 
         Section("Flags") {
           if let shift = controller.store.current, !shift.flags.isEmpty || !shift.notes.isEmpty {
+            let pending = shift.flags.count(where: { $0.status == .pending })
+            Label(
+              pending == 0 ? "No flags waiting" : "\(pending) flag\(pending == 1 ? "" : "s") waiting for review",
+              systemImage: pending == 0 ? "checkmark.circle" : "exclamationmark.circle"
+            )
+            .font(.subheadline.bold())
+            .foregroundStyle(pending == 0 ? Color.secondary : Color.orange)
             ForEach(shift.flags.reversed()) { flag in
               FlagRow(
                 flag: flag,
                 photoURL: controller.store.photoURL(for: flag, in: shift),
-                facilityName: facilityName(for: flag.facility)
+                facilityName: facilityName(for: flag.facility),
+                onConfirm: { controller.decide(flag.id, as: .confirmed) },
+                onDismiss: { controller.decide(flag.id, as: .dismissed) },
+                onAddNote: {
+                  noteText = ""
+                  noteFlagID = flag.id
+                }
               )
+              .disabled(!controller.isOnShift)
             }
             ForEach(shift.notes) { note in
               Label(note.text, systemImage: "quote.bubble")
@@ -77,6 +93,18 @@ struct ShiftView: View {
       }
       .navigationTitle("Shift")
       .navigationBarTitleDisplayMode(.inline)
+      .alert("Add note", isPresented: Binding(
+        get: { noteFlagID != nil },
+        set: { if !$0 { noteFlagID = nil } }
+      )) {
+        TextField("Note", text: $noteText)
+        Button("Save") {
+          if let noteFlagID {
+            controller.addNote(noteText, to: noteFlagID)
+          }
+        }
+        Button("Cancel", role: .cancel) {}
+      }
       .confirmationDialog("End shift?", isPresented: $confirmEndShift, titleVisibility: .visible) {
         Button("End Shift and Upload", role: .destructive) {
           Task { await controller.endShift() }

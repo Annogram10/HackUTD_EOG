@@ -2,6 +2,7 @@
 // FlagRow.swift
 //
 // One flag: photo, type, description (camera flags), facility, status, and notes.
+// Pending flags get Confirm and Dismiss buttons; every flag can take a note.
 //
 
 import SwiftUI
@@ -10,6 +11,9 @@ struct FlagRow: View {
   let flag: Flag
   let photoURL: URL?
   let facilityName: String?
+  var onConfirm: () -> Void = {}
+  var onDismiss: () -> Void = {}
+  var onAddNote: () -> Void = {}
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
@@ -26,6 +30,7 @@ struct FlagRow: View {
         HStack {
           Text(flag.type)
             .font(.subheadline.bold())
+            .strikethrough(flag.status == .dismissed)
           if flag.source == "voice" {
             Text("voice")
               .font(.caption2)
@@ -34,7 +39,7 @@ struct FlagRow: View {
               .background(.secondary.opacity(0.2), in: Capsule())
           }
           Spacer()
-          Text(flag.status.rawValue)
+          Label(flag.status.rawValue, systemImage: statusIcon)
             .font(.caption.bold())
             .foregroundStyle(statusColor)
         }
@@ -50,9 +55,34 @@ struct FlagRow: View {
           Label(note.text, systemImage: "quote.bubble")
             .font(.caption)
         }
+        // Bordered styles keep each button separately tappable inside a List row.
+        HStack(spacing: 8) {
+          if flag.status == .pending {
+            Button("Confirm", systemImage: "checkmark", action: onConfirm)
+              .buttonStyle(.borderedProminent)
+              .tint(.red)
+            Button("Dismiss", systemImage: "xmark", action: onDismiss)
+              .buttonStyle(.bordered)
+          }
+          Button("Note", systemImage: "square.and.pencil", action: onAddNote)
+            .buttonStyle(.bordered)
+        }
+        .font(.caption)
+        .controlSize(.small)
+        .padding(.top, 2)
       }
     }
     .padding(.vertical, 2)
+    .opacity(flag.status == .dismissed ? 0.55 : 1)
+    .listRowBackground(flag.status == .pending ? Color.orange.opacity(0.12) : nil)
+  }
+
+  private var statusIcon: String {
+    switch flag.status {
+    case .pending: return "clock"
+    case .confirmed: return "checkmark.seal.fill"
+    case .dismissed: return "xmark.circle"
+    }
   }
 
   private var statusColor: Color {

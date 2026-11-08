@@ -315,6 +315,25 @@ final class NightShiftController {
     await Speaker.shared.announce("possible \(type), confirm or dismiss")
   }
 
+  /// Confirms or dismisses a pending flag (on-screen buttons and voice). Flags that
+  /// are already decided are left alone.
+  @discardableResult
+  func decide(_ flagID: Flag.ID, as status: FlagStatus) -> Bool {
+    guard status != .pending,
+      store.current?.flags.first(where: { $0.id == flagID })?.status == .pending
+    else { return false }
+    store.setStatus(status, for: flagID)
+    return true
+  }
+
+  /// Adds an on-screen note to a flag. Returns false if empty or no shift is active.
+  @discardableResult
+  func addNote(_ text: String, to flagID: Flag.ID) -> Bool {
+    let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard isOnShift, !text.isEmpty else { return false }
+    return store.addNote(text, to: flagID)
+  }
+
   // MARK: - Voice commands
 
   /// Visible result of the last voice command or unrecognized phrase. `ok` is false
@@ -342,7 +361,7 @@ final class NightShiftController {
         await reply("No flag waiting", ok: false)
         return
       }
-      store.setStatus(status, for: flag.id)
+      decide(flag.id, as: status)
       await reply(status == .confirmed ? "Confirmed" : "Dismissed")
     case .note(let text):
       guard isOnShift else {
