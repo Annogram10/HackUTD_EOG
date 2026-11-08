@@ -134,6 +134,8 @@ final class NightShiftController {
     vision.onFlag = { [weak self] type, description, facility, photo in
       await self?.handleCameraFlag(type: type, description: description, facility: facility, photo: photo)
     }
+    // Speech model from the cached facility names (rebuilt when /map brings new ones).
+    updateSpeechModel()
   }
 
   // MARK: - Camera
@@ -352,7 +354,32 @@ final class NightShiftController {
       mapError = NightShiftAPIError.describe(error)
       NSLog("[NightShift] Map load failed, using cached map: \(error)")
     }
+    updateSpeechModel()
   }
+
+  // MARK: - Speech model
+
+  /// Facility names the speech model was last built with.
+  @ObservationIgnored private var speechModelNames: [String]?
+
+  /// Teaches the recognizer the commands and this dataset's facility names: contextual
+  /// strings right away, and the custom language model (built in the background, cached)
+  /// from the next utterance on. Rebuilt only when the names change.
+  func updateSpeechModel() {
+    let names = Array(Set((map?.facilities ?? []).map(\.displayName) + facilities.map(\.displayName))).sorted()
+    guard names != speechModelNames else { return }
+    speechModelNames = names
+    voice.contextualStrings = VoiceCommand.vocabulary + names
+    speechModelReady = nil
+    Task { [weak self] in
+      let model = await CommandLanguageModel.prepare(facilityNames: names)
+      self?.voice.languageModel = model
+      self?.speechModelReady = model != nil
+    }
+  }
+
+  /// nil while the command model builds; then whether it's in use (Settings shows it).
+  private(set) var speechModelReady: Bool?
 
   /// GET /alerts once on the current address and reports success or the error text.
   func testConnection() async {
@@ -809,12 +836,14 @@ final class NightShiftController {
       return
     }
     var facility = currentFacilityID
+    // Words after the type that aren't a known facility ("over there") are kept as a note.
+    var extraNote: String?
     if !spokenFacility.isEmpty {
       if let id = facilityID(matching: spokenFacility) {
         setCurrentFacility(id)
         facility = id
       } else {
-        facility = spokenFacility
+        extraNote = spokenFacility
       }
     }
     var photo: Data?
@@ -824,6 +853,9 @@ final class NightShiftController {
     guard let flag = store.addFlag(type: type ?? "issue", source: "voice", status: .confirmed, photo: photo, facility: facility) else {
       await reply("Start a shift first", ok: false)
       return
+    }
+    if let extraNote {
+      store.addNote(extraNote, to: flag.id)
     }
     recordHistory(kind: .flag, title: flagTitle(flag), facilityID: flag.facility, outcome: .confirmed)
     let place = facility.map { " at \(facilityName(for: $0))" } ?? ""

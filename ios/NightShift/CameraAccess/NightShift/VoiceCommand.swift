@@ -70,12 +70,42 @@ enum VoiceCommand: Equatable, Sendable {
     "damage": "damage", "damaged": "damage", "broken": "damage", "crack": "damage", "cracked": "damage", "dent": "damage",
   ]
 
+  /// What the on-device recognizer often hears instead of a command word (narrowband
+  /// glasses mic). Only applied to the first word, where a command word is expected.
+  private static let commandSoundsLike: [String: String] = [
+    "black": "flag", "flack": "flag", "flak": "flag", "flagg": "flag", "flags": "flag", "blag": "flag",
+    "plaque": "flag", "flog": "flag", "slag": "flag", "frag": "flag", "lag": "flag", "flagged": "flag",
+    "nodes": "note", "noted": "note", "knot": "note", "nope": "note", "vote": "note", "boat": "note", "nolte": "note",
+    "conform": "confirm", "affirm": "confirm", "conferm": "confirm",
+    "dismissal": "dismiss", "dismissive": "dismiss",
+    "stasis": "status", "statue": "status", "statues": "status", "stats": "status",
+    "nest": "next", "necks": "next",
+    "knowledge": "acknowledge",
+    "prioritizes": "prioritize", "priorities": "prioritize", "prioritizing": "prioritize",
+  ]
+  /// Mishearings of the flag type, only right after the flag word.
+  private static let typeSoundsLike: [String: String] = [
+    "lake": "leak", "leek": "leak", "lick": "leak", "league": "leak", "leaked": "leak",
+    "smoked": "smoke", "spoke": "smoke", "smog": "smoke",
+    "image": "damage", "damages": "damage", "dammit": "damage",
+  ]
+
+  /// Phrases the recognizer is biased toward (SFSpeechRecognitionRequest.contextualStrings).
+  static let vocabulary = [
+    "flag", "flag leak", "flag smoke", "flag damage", "flag a possible leak", "note", "add a note", "take a note",
+    "confirm", "dismiss", "prioritize", "acknowledge", "stop", "repeat", "status", "status of", "next alert",
+    "what's the issue", "what's wrong", "cancel",
+  ]
+
   /// Words allowed before "flag" / "note" ("add a note", "take a note", "new flag").
   private static let leadIns: Set<String> = ["add", "a", "take", "new", "make", "raise", "please", "okay", "ok", "hey"]
   private static let noteWords: Set<String> = ["note", "notes", "memo"]
   private static let flagWords: Set<String> = ["flag", "flagged", "report"]
   /// Filler words skipped around the flag type and facility.
-  private static let flagFillers: Set<String> = ["a", "an", "the", "possible", "of", "for", "there", "is", "theres"]
+  private static let flagFillers: Set<String> = [
+    "a", "an", "the", "possible", "of", "for", "there", "is", "theres", "some", "black", "white", "grey", "gray",
+    "heavy", "small", "big", "bad",
+  ]
 
   /// Filler words skipped between "status" and the facility name.
   private static let statusFillers: Set<String> = ["of", "for", "at", "on", "the"]
@@ -83,7 +113,13 @@ enum VoiceCommand: Equatable, Sendable {
   /// Parses an utterance. Returns nil (not understood) for anything off the whitelist.
   static func parse(_ transcript: String) -> VoiceCommand? {
     let words = transcript.split(whereSeparator: \.isWhitespace).map(String.init)
-    let normalized = words.map { $0.lowercased().filter { $0.isLetter || $0.isNumber } }
+    var normalized = words.map { $0.lowercased().filter { $0.isLetter || $0.isNumber } }
+    // A misheard command word in command position ("black leak" -> "flag leak").
+    if let start = normalized.firstIndex(where: { !$0.isEmpty && !leadIns.contains($0) }),
+      let fixed = commandSoundsLike[normalized[start]]
+    {
+      normalized[start] = fixed
+    }
 
     // "flag ..." / "note ...": the first real word decides, and the rest is kept as said.
     if let start = normalized.firstIndex(where: { !$0.isEmpty && !leadIns.contains($0) }) {
@@ -131,7 +167,7 @@ enum VoiceCommand: Equatable, Sendable {
     var index = 0
     while index < normalized.count, normalized[index].isEmpty || flagFillers.contains(normalized[index]) { index += 1 }
     var type: String?
-    if index < normalized.count, let spoken = flagTypes[normalized[index]] {
+    if index < normalized.count, let spoken = flagTypes[normalized[index]] ?? typeSoundsLike[normalized[index]] {
       type = spoken
       index += 1
     }

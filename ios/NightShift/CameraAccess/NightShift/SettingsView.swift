@@ -555,6 +555,15 @@ struct SettingsView: View {
         }
         .buttonStyle(.borderless)
       }
+      // The on-device command model (CommandLanguageModel): ready, building, or not available.
+      Label(
+        controller.speechModelReady.map {
+          $0 ? "Command model: ready (tuned to the commands and facility names)" : "Command model: unavailable, using plain dictation"
+        } ?? "Command model: building…",
+        systemImage: controller.speechModelReady == true ? "waveform.badge.checkmark" : "waveform"
+      )
+      .font(.ns(.subheadline))
+      .foregroundStyle(controller.speechModelReady == false ? NS.amberText : NS.textSecondary)
       // Live transcript, for checking what the recognizer hears.
       Text("Hearing: \(controller.voice.heardText.isEmpty ? "…" : controller.voice.heardText)")
         .font(.nsMono(.subheadline))

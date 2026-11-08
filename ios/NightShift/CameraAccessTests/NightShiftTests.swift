@@ -487,6 +487,14 @@ private func freshDefaults() -> UserDefaults {
     #expect(VoiceCommand.parse("take a note") == .note(text: ""))
   }
 
+  @Test func commonMishearingsInCommandPosition() {
+    #expect(VoiceCommand.parse("black leak") == .flag(type: "leak", facility: ""))
+    #expect(VoiceCommand.parse("Black lake at pad 7") == .flag(type: "leak", facility: "pad 7"))
+    #expect(VoiceCommand.parse("nodes the valve is loose") == .note(text: "the valve is loose"))
+    #expect(VoiceCommand.parse("Conform") == .confirm)
+    #expect(VoiceCommand.parse("flag black smoke") == .flag(type: "smoke", facility: ""))
+  }
+
   @Test func flagOnlyCountsAsTheFirstWord() {
     #expect(VoiceCommand.parse("I think we should flag this") == nil)
     #expect(VoiceCommand.parse("confirm or dismiss") == nil)

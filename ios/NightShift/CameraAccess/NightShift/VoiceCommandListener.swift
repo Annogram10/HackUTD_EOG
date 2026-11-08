@@ -45,6 +45,14 @@ final class VoiceCommandListener {
   /// One-shot: the next utterance is handed over exactly as heard instead of being
   /// parsed (the sentence after "note"). Cleared once used.
   @ObservationIgnored var captureNextUtterance: (@MainActor (String) -> Void)?
+  /// The command language model (CommandLanguageModel), used from the next utterance
+  /// on; nil = plain dictation.
+  @ObservationIgnored var languageModel: SFSpeechLanguageModel.Configuration?
+  /// Phrases the recognizer is biased toward (commands plus facility names).
+  @ObservationIgnored var contextualStrings: [String] = VoiceCommand.vocabulary
+  /// The recognizer's other guesses for the current utterance (best first), tried
+  /// when the best one isn't a command.
+  @ObservationIgnored private var alternatives: [String] = []
 
   /// Silence that ends an utterance.
   private static let utteranceSilence: Duration = .milliseconds(1500)
@@ -176,6 +184,11 @@ final class VoiceCommandListener {
     request.requiresOnDeviceRecognition = true
     request.shouldReportPartialResults = true
     request.taskHint = .unspecified
+    request.addsPunctuation = false
+    request.contextualStrings = contextualStrings
+    if let languageModel {
+      request.customizedLanguageModel = languageModel
+    }
     requestBox.replace(with: request)
 
     taskGeneration += 1
@@ -197,15 +210,16 @@ final class VoiceCommandListener {
   ) -> @Sendable (SFSpeechRecognitionResult?, Error?) -> Void {
     { @Sendable result, error in
       let text = result?.bestTranscription.formattedString
+      let alternatives = result?.transcriptions.map(\.formattedString) ?? []
       let isFinal = result?.isFinal ?? false
       let failed = error != nil
       Task { @MainActor in
-        listener.handleResult(generation: generation, text: text, isFinal: isFinal, failed: failed)
+        listener.handleResult(generation: generation, text: text, alternatives: alternatives, isFinal: isFinal, failed: failed)
       }
     }
   }
 
-  private func handleResult(generation: Int, text: String?, isFinal: Bool, failed: Bool) {
+  private func handleResult(generation: Int, text: String?, alternatives: [String], isFinal: Bool, failed: Bool) {
     guard generation == taskGeneration, isListening else { return }
 
     // An error with nothing heard ("no speech detected", recognizer hiccup): restart
@@ -225,6 +239,7 @@ final class VoiceCommandListener {
         utteranceOverlapsSpeaker = true
       }
       heardText = text
+      self.alternatives = alternatives
       scheduleUtteranceEnd()
     }
 
@@ -248,6 +263,8 @@ final class VoiceCommandListener {
   private func finishUtterance() {
     silenceTask?.cancel()
     let transcript = heardText
+    let guesses = alternatives
+    alternatives = []
     let overlapsSpeaker = utteranceOverlapsSpeaker
       || Speaker.shared.isBusy
       || Date().timeIntervalSince(Speaker.shared.lastFinishedAt) < Self.speakerEchoGuard
@@ -264,7 +281,11 @@ final class VoiceCommandListener {
       capture(transcript)
       return
     }
-    guard let command = VoiceCommand.parse(transcript) else {
+    // The best guess first; if it isn't a command, the recognizer's other guesses
+    // ("black leak" may have "flag leak" as its second guess).
+    guard let command = VoiceCommand.parse(transcript)
+      ?? guesses.dropFirst().lazy.compactMap({ VoiceCommand.parse($0) }).first
+    else {
       onUnrecognized?(transcript)
       return
     }
