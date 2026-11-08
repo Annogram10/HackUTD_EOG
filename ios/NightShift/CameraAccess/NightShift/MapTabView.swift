@@ -53,6 +53,11 @@ struct MapTabView: View {
             .padding(.horizontal, 10)
             .frame(minHeight: 36)
             .flatCard(fill: NS.background.opacity(0.92))
+          // A failed refresh keeps the last good pins, tagged stale.
+          if controller.mapError != nil && controller.map != nil {
+            Badge(text: "STALE", tone: .amber, icon: "clock.badge.exclamationmark")
+              .accessibilityLabel("Map data is stale; showing the last good update")
+          }
           Spacer()
           squareIconButton("location.viewfinder", label: "Recenter the map") {
             position = .automatic
@@ -62,6 +67,21 @@ struct MapTabView: View {
           }
         }
         .padding(.horizontal, 12)
+        if controller.map == nil {
+          StateCard(
+            title: controller.mapError == nil ? "Loading the map…" : "Couldn't load the map",
+            detail: controller.mapError.map { "\($0) Retrying by itself." },
+            icon: controller.mapError == nil ? "hourglass" : "exclamationmark.triangle",
+            tone: controller.mapError == nil ? .grey : .red,
+            actionTitle: controller.mapError == nil ? nil : "Retry now"
+          ) {
+            Task { await controller.refreshMap() }
+          }
+          .padding(.horizontal, 12)
+        } else if routeStops.isEmpty {
+          StateCard(title: "No problems in progress", detail: nil, icon: "checkmark.circle", tone: .green)
+            .padding(.horizontal, 12)
+        }
         if showLegend {
           legend
             .padding(.horizontal, 12)

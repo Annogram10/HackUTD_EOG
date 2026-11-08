@@ -81,12 +81,22 @@ struct TodoView: View {
               .padding(.horizontal, 12)
               .flatCard()
           }
-          if isEmpty {
-            Text("Nothing needs checking right now.")
-              .font(.title3.weight(.semibold))
-              .foregroundStyle(NS.textBody)
-              .frame(maxWidth: .infinity, minHeight: 120)
-              .flatCard()
+          if controller.map == nil {
+            // Nothing cached yet: loading or error, never a blank screen.
+            StateCard(
+              title: controller.mapError == nil ? "Loading…" : "Couldn't load the to-do list",
+              detail: controller.mapError.map { "\($0) Retrying by itself." },
+              icon: controller.mapError == nil ? "hourglass" : "exclamationmark.triangle",
+              tone: controller.mapError == nil ? .grey : .red,
+              actionTitle: controller.mapError == nil ? nil : "Retry now"
+            ) {
+              Task { await controller.refreshMap() }
+            }
+          } else if isEmpty {
+            StateCard(title: "No problems in progress", detail: nil, icon: "checkmark.circle", tone: .green)
+          }
+          if controller.map != nil, controller.mapError != nil {
+            Badge(text: "STALE — showing the last good data", tone: .amber, icon: "clock.badge.exclamationmark")
           }
 
           if openAlarm != nil || !doNowFacilities.isEmpty || !pendingFlags.isEmpty {

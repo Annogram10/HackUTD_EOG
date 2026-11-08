@@ -70,12 +70,18 @@ struct AlertsView: View {
 
   @ViewBuilder
   private var activeList: some View {
-    if currentAlarm == nil && pendingFlags.isEmpty {
-      Text("No active alerts.")
-        .font(.title3.weight(.semibold))
-        .foregroundStyle(NS.textBody)
-        .frame(maxWidth: .infinity, minHeight: 100)
-        .flatCard()
+    if controller.alarm.monitoringLost {
+      StateCard(
+        title: "Can't check for alarms right now",
+        detail: "Showing the last known state. Retrying by itself.",
+        icon: "exclamationmark.triangle.fill",
+        tone: .red
+      )
+    } else if controller.alarm.lastSuccess == nil {
+      StateCard(title: "Checking for alarms…", detail: nil, icon: "hourglass", tone: .grey)
+    }
+    if currentAlarm == nil && pendingFlags.isEmpty && controller.alarm.lastSuccess != nil {
+      StateCard(title: "No problems in progress", detail: nil, icon: "checkmark.circle", tone: .green)
     }
     if let alarm = currentAlarm {
       alarmCard(alarm)

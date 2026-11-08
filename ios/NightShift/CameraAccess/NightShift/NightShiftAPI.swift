@@ -86,13 +86,16 @@ enum NightShiftAPIError: LocalizedError {
       case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
            .serverCertificateNotYetValid, .serverCertificateHasUnknownRoot:
         return "Secure connection failed."
-      default: return urlError.localizedDescription
+      default: return "Network problem (\(urlError.code.rawValue))."
       }
     }
     if error is DecodingError {
       return "Unexpected response: not alert data."
     }
-    return error.localizedDescription
+    if let apiError = error as? NightShiftAPIError, let text = apiError.errorDescription {
+      return text
+    }
+    return "Something went wrong talking to the backend."
   }
 }
 

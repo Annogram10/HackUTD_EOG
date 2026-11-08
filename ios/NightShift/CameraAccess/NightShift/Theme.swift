@@ -336,6 +336,36 @@ struct ModePill: View {
   }
 }
 
+/// Loading / empty / error card with an optional action. Text + icon, never color alone.
+struct StateCard: View {
+  let title: String
+  let detail: String?
+  let icon: String
+  let tone: Tone
+  var actionTitle: String? = nil
+  var action: () -> Void = {}
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Label(title, systemImage: icon)
+        .font(.title3.weight(.semibold))
+        .foregroundStyle(tone == .grey ? NS.textBody : tone.text)
+      if let detail {
+        Text(detail)
+          .font(.body)
+          .foregroundStyle(NS.textBody)
+      }
+      if let actionTitle {
+        FlatButton(title: actionTitle, icon: "arrow.clockwise", action: action)
+      }
+    }
+    .padding(16)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .flatCard()
+    .accessibilityElement(children: .contain)
+  }
+}
+
 /// One report's upload state as text + icon (never color alone).
 struct ReportStateRow: View {
   let entry: UploadQueue.Entry
