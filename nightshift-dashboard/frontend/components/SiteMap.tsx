@@ -48,7 +48,38 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
   const walked = new Set(shift?.route_walked ?? []);
   const walkedPts = planned.filter((id) => walked.has(id)).map((id) => pos.get(id)!);
   const missed = planned.filter((id) => !walked.has(id));
-  const danger = facs.filter((f) => f.severity === "high").map((f) => pos.get(f.id)!);
+  const dangerKey = facs.filter((f) => f.severity === "high").map((f) => f.id).join(",");
+
+  // The city never changes while panning, so it is built once (per system and danger state) and reused.
+  const cityLayer = useMemo(() => {
+    const danger = dangerKey ? dangerKey.split(",").map((id) => pos.get(id)!) : [];
+    return (
+      <>
+        {/* river */}
+        <path d={city.river} fill="none" stroke="#0b1622" strokeWidth="3.4" strokeLinecap="round" />
+        <path d={city.river} fill="none" stroke="#19E6FF" strokeOpacity="0.07" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        {/* minor streets: thin and dark; main avenues: wider, faint glow */}
+        <g stroke="#19E6FF" strokeOpacity="0.08" strokeWidth="1.5" vectorEffect="non-scaling-stroke">
+          {city.streets.filter((t) => !t.main).map((t, i) => <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} />)}
+        </g>
+        <g stroke="#19E6FF" strokeOpacity="0.2" strokeWidth="5" vectorEffect="non-scaling-stroke" filter={`url(#glow-${system.id})`} strokeLinecap="round">
+          {city.streets.filter((t) => t.main).map((t, i) => <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} />)}
+        </g>
+        {/* blocks; the ones near a facility in danger glow red */}
+        {city.blocks.map((b, i) => {
+          const hot = danger.some((p) => near(b, p, 13));
+          return hot ? (
+            <rect key={i} x={b.x} y={b.y} width={b.w} height={b.h} fill="#34161d" stroke="#e5484d" strokeOpacity="0.55"
+              strokeWidth="1" vectorEffect="non-scaling-stroke" className="city-danger" />
+          ) : (
+            <rect key={i} x={b.x} y={b.y} width={b.w} height={b.h} fill={b.fill} />
+          );
+        })}
+        {/* a few lit windows */}
+        {city.lights.map((w, i) => <circle key={i} cx={w.x} cy={w.y} r="0.12" fill={w.color} opacity={w.opacity} />)}
+      </>
+    );
+  }, [city, dangerKey, pos, system.id]);
 
   // keep at least part of the map on screen
   const clampPan = (v: View): View => {
@@ -144,7 +175,7 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
     >
       {/* the city, pipelines and route: one SVG that pans and zooms */}
       <div className="absolute inset-0 origin-top-left" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})` }}>
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
           <defs>
             <filter id={`glow-${system.id}`} x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur stdDeviation="0.5" result="b" />
@@ -152,39 +183,7 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
             </filter>
           </defs>
 
-          {/* streets */}
-          <g fill="#19E6FF" fillOpacity="0.05">
-            {city.streetsX.map((x) => <rect key={`bx${x}`} x={x - 0.5} y={0} width={1} height={H} />)}
-            {city.streetsY.map((y) => <rect key={`by${y}`} x={0} y={y - 0.5} width={W} height={1} />)}
-          </g>
-          <g stroke="#19E6FF" strokeOpacity="0.28" strokeWidth="1" vectorEffect="non-scaling-stroke" filter={`url(#glow-${system.id})`}>
-            {city.streetsX.map((x) => <line key={`x${x}`} x1={x} y1={0} x2={x} y2={H} />)}
-            {city.streetsY.map((y) => <line key={`y${y}`} x1={0} y1={y} x2={W} y2={y} />)}
-          </g>
-          {/* blocks; the ones near a facility in danger glow red */}
-          {city.blocks.map((b, i) => {
-            const hot = danger.some((p) => near(b, p, 13));
-            return (
-              <rect key={i} x={b.x} y={b.y} width={b.w} height={b.h} fill={hot ? "#3a1820" : b.fill}
-                stroke={hot ? "#e5484d" : "#3a2c42"} strokeOpacity={hot ? 0.7 : 0.6} strokeWidth="1" vectorEffect="non-scaling-stroke"
-                className={hot ? "city-danger" : undefined} />
-            );
-          })}
-          {/* district name across the ground */}
-          <text x={W / 2} y={H / 2 + 2} textAnchor="middle" fontSize="7" fontWeight="700" letterSpacing="1.4"
-            fill="#c8ccd2" opacity="0.06" style={{ textTransform: "uppercase", fontFamily: "inherit" }}>
-            {system.id} · {city.district}
-          </text>
-
-          {/* landmarks: decoration only, dimmer than facilities, no status colours */}
-          {city.landmarks.map((l) => (
-            <g key={l.name} onPointerEnter={() => setHover({ kind: "lm", id: l.name })} onPointerLeave={() => setHover(null)}>
-              <rect x={l.x} y={l.y} width={l.w} height={l.h} fill="#2f2438" stroke={l.sign} strokeOpacity="0.45" strokeWidth="1"
-                vectorEffect="non-scaling-stroke" />
-              <rect x={l.x + l.w * 0.2} y={l.y + l.h * 0.2} width={l.w * 0.6} height={l.h * 0.6} fill="#1a141f" />
-              <rect x={l.x + 0.4} y={l.y - 0.7} width={l.w - 0.8} height="0.5" fill={l.sign} opacity="0.6" className="city-sign" />
-            </g>
-          ))}
+          {cityLayer}
 
           {/* pipelines to the disposal site: glow, plus flow pulses unless the pump has failed */}
           {facs.map((f) => {
@@ -192,10 +191,10 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
             const leak = f.status === "leak";
             return (
               <g key={f.id}>
-                <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? "#f2b33d" : "#19E6FF"} strokeOpacity="0.18"
-                  strokeWidth="9" vectorEffect="non-scaling-stroke" strokeLinecap="round" />
-                <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? "#f2b33d" : "#5fd9ec"} strokeWidth="2.5"
-                  strokeDasharray={leak ? "10 6" : undefined} vectorEffect="non-scaling-stroke" strokeLinecap="round" opacity="0.85" />
+                <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? "#f2b33d" : "#19E6FF"} strokeOpacity="0.3"
+                  strokeWidth="10" vectorEffect="non-scaling-stroke" strokeLinecap="round" filter={`url(#glow-${system.id})`} />
+                <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? "#f2b33d" : "#19E6FF"} strokeWidth="3"
+                  strokeDasharray={leak ? "10 6" : undefined} vectorEffect="non-scaling-stroke" strokeLinecap="round" opacity="0.9" />
                 {!failed(f) && (
                   <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke="#E6FDFF" strokeWidth="2.5" strokeDasharray="2 22"
                     vectorEffect="non-scaling-stroke" strokeLinecap="round" className="city-flow" />
@@ -215,13 +214,22 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
         </svg>
       </div>
 
-      {/* landmark rooftop signs (HTML, so the text stays readable at any zoom) */}
+      {/* vignette: darker toward the edges */}
+      <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse at center, transparent 50%, rgba(8,6,10,0.75) 100%)" }} />
+
+      {/* landmark rooftop signs: small, dim, decoration only (HTML so the text stays readable at any zoom) */}
       {city.landmarks.map((l) => (
-        <span key={l.name} className="pointer-events-none absolute -translate-x-1/2 -translate-y-full whitespace-nowrap px-1 text-[12px] font-semibold uppercase tracking-wide"
-          style={{ ...at([l.x + l.w / 2, l.y - 0.8]), color: l.sign, opacity: 0.7, textShadow: `0 0 6px ${l.sign}80` }}>
+        <span key={l.name} onPointerEnter={() => setHover({ kind: "lm", id: l.name })} onPointerLeave={() => setHover(null)}
+          className="city-sign absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-mono text-[12px] font-medium uppercase tracking-wider"
+          style={{ ...at([l.x + l.w / 2, l.y + l.h / 2]), color: l.sign, opacity: 0.6, textShadow: `0 0 4px ${l.sign}66` }}>
           {l.name}
         </span>
       ))}
+
+      {/* district label */}
+      <span className="pointer-events-none absolute left-3 top-3 z-20 font-mono text-sm tracking-widest text-zinc-300 opacity-70">
+        {system.id} {"//"} {city.district}
+      </span>
 
       <div className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={{ ...at(disp), transform: `scale(${cardScale})` }}>
         <span className="h-7 w-7 rotate-45 border-2 border-cyan-200 bg-zinc-950 shadow-[0_0_12px_#19E6FF80]" />
@@ -243,7 +251,7 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
           <Link key={`${f.id}-${f.severity}`} href={`/facility/${f.id}`} draggable={false}
             onPointerEnter={() => setHover({ kind: "fac", id: f.id })} onPointerLeave={() => setHover(null)}
             style={{ ...at(pos.get(f.id)!), transform: `scale(${cardScale})` }}
-            className={`absolute w-44 -translate-x-1/2 -translate-y-1/2 border-2 bg-zinc-950/95 p-2.5 ${BORDER[t]} ${isMissed ? "border-dashed" : ""} ${t === "red" ? "fac-danger" : ""}`}>
+            className={`fac-card absolute w-44 -translate-x-1/2 -translate-y-1/2 border-2 bg-zinc-950 p-2.5 ${BORDER[t]} ${isMissed ? "border-dashed" : ""} ${t === "red" ? "fac-danger" : ""}`}>
             {stop > 0 && (
               <span className="absolute -left-3 -top-3 flex h-7 w-7 items-center justify-center rounded-full bg-zinc-300 text-sm font-bold text-zinc-950 ring-2 ring-zinc-950">{stop}</span>
             )}
@@ -286,7 +294,7 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
       )}
       {hoveredLm && (
         <div role="tooltip" className="pointer-events-none absolute z-10 -translate-x-1/2 whitespace-nowrap border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-300"
-          style={at([hoveredLm.x + hoveredLm.w / 2, hoveredLm.y + hoveredLm.h + 1.2])}>
+          style={at([hoveredLm.x + hoveredLm.w / 2, hoveredLm.y + hoveredLm.h + 1.4 / view.z])}>
           <span className="font-semibold" style={{ color: hoveredLm.sign }}>{hoveredLm.name}:</span> {hoveredLm.joke}
         </div>
       )}

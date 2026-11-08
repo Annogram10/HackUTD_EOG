@@ -85,12 +85,25 @@ export const LANDMARKS: { name: string; joke: string }[] = [
   { name: "Petrochem Nest", joke: "premium perches, zero vacancies." },
   { name: "Afterflow", joke: "the bar where pressure goes to unwind." },
 ];
+const MAX_LANDMARKS = 6;
 const SIGN_COLORS = ["#FF2BD6", "#19E6FF", "#FFD319"];
-const DISTRICTS = ["Brine Heights", "Neon Flats", "Low Pressure", "Rust Harbor", "Salt Mesa", "Pumptown", "Night Basin", "Static Row"];
+const DISTRICTS = ["BRINELANDS", "NEON FLATS", "LOW PRESSURE", "RUST HARBOR", "SALT MESA", "PUMPTOWN", "NIGHT BASIN", "STATIC ROW"];
+const GAP = 6.7; // ~80 px at a normal map width: landmarks keep this far from everything real
+// the city is drawn well past the visible map so panning and zooming out never show an empty edge
+const OUTER = { x: -W * 0.6, y: -H * 0.6, w: W * 2.2, h: H * 2.2 };
 
 export interface Block { x: number; y: number; w: number; h: number; fill: string; cx: number; cy: number }
+export interface Street { x1: number; y1: number; x2: number; y2: number; main: boolean }
+export interface Light { x: number; y: number; color: string; opacity: number }
 export interface Landmark { name: string; joke: string; x: number; y: number; w: number; h: number; sign: string }
-export interface City { blocks: Block[]; streetsX: number[]; streetsY: number[]; district: string; landmarks: Landmark[] }
+export interface City {
+  blocks: Block[];
+  streets: Street[]; // minor streets and the 2-3 main avenues (incl. one diagonal)
+  river: string; // SVG path of the curved river
+  lights: Light[];
+  district: string;
+  landmarks: Landmark[];
+}
 
 function seeded(id: string) {
   let h = 2166136261;
@@ -107,87 +120,126 @@ function seeded(id: string) {
 
 interface Rect { x: number; y: number; w: number; h: number }
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+const grow = (r: Rect, m: number): Rect => ({ x: r.x - m, y: r.y - m, w: r.w + 2 * m, h: r.h + 2 * m });
 
-// distance from point to segment
-function segDist(p: Pt, a: Pt, b: Pt) {
-  const dx = b[0] - a[0], dy = b[1] - a[1];
-  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
-  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+function rectPointDist(r: Rect, p: Pt) {
+  const dx = Math.max(r.x - p[0], 0, p[0] - (r.x + r.w));
+  const dy = Math.max(r.y - p[1], 0, p[1] - (r.y + r.h));
+  return Math.hypot(dx, dy);
 }
 function rectNearSegment(r: Rect, a: Pt, b: Pt, clear: number) {
-  const corners: Pt[] = [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h], [r.x + r.w / 2, r.y + r.h / 2]];
-  if (corners.some((c) => segDist(c, a, b) < clear)) return true;
-  // the segment passing through the rect
-  for (let t = 0; t <= 1; t += 0.05) {
-    const p: Pt = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-    if (p[0] > r.x - clear && p[0] < r.x + r.w + clear && p[1] > r.y - clear && p[1] < r.y + r.h + clear) return true;
+  for (let t = 0; t <= 1.0001; t += 0.02) {
+    if (rectPointDist(r, [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]) < clear) return true;
   }
   return false;
 }
 
 /** Keep-out zones in map units: every facility card, the disposal site and the truck yard (with their labels). */
 export function keepOut(l: Layout): Rect[] {
-  const m = 1;
-  const out: Rect[] = [...l.pos.values()].map(([x, y]) => ({ x: x - CHIP.w / 2 - m, y: y - CHIP.h / 2 - m, w: CHIP.w + 2 * m, h: CHIP.h + 2 * m }));
+  const out: Rect[] = [...l.pos.values()].map(([x, y]) => ({ x: x - CHIP.w / 2, y: y - CHIP.h / 2, w: CHIP.w, h: CHIP.h }));
   out.push({ x: l.disp[0] - 6, y: l.disp[1] - 4, w: 12, h: 10 }); // diamond + "Disposal site" + psi
   out.push({ x: l.yard[0] - 9, y: l.yard[1] - 3.5, w: 18, h: 8 }); // square + "Truck yard · n trucks"
   return out;
 }
 
+const shade = (t: number) => {
+  // between #1A141F and #241B29
+  const c = (a: number, b: number) => Math.round(a + (b - a) * t).toString(16).padStart(2, "0");
+  return `#${c(0x1a, 0x24)}${c(0x14, 0x1b)}${c(0x1f, 0x29)}`;
+};
+
 export function buildCity(systemId: string, l: Layout): City {
   const rnd = seeded(systemId);
-  const cellW = 7 + rnd() * 1.5;
-  const cellH = 5.2 + rnd() * 1;
-  const street = 1.1;
-  const ox = -rnd() * cellW;
-  const oy = -rnd() * cellH;
-  const streetsX: number[] = [];
-  const streetsY: number[] = [];
-  for (let x = ox; x < W + cellW; x += cellW) streetsX.push(x);
-  for (let y = oy; y < H + cellH; y += cellH) streetsY.push(y);
+  const streets: Street[] = [];
+  const leaves: Rect[] = [];
+
+  // recursive subdivision: big blocks, small lots and odd shapes, not a grid
+  const split = (r: Rect, depth: number) => {
+    const big = Math.max(r.w, r.h);
+    const stopP = big < 3 ? 1 : big < 6 ? 0.55 : big < 10 ? 0.25 : big < 16 ? 0.08 : 0;
+    if (depth > 1 && rnd() < stopP) return leaves.push(r);
+    const vertical = r.w > r.h * 1.25 ? true : r.h > r.w * 1.25 ? false : rnd() < 0.5;
+    const t = 0.28 + rnd() * 0.44;
+    const gap = 0.55;
+    if (vertical) {
+      const x = r.x + r.w * t;
+      streets.push({ x1: x, y1: r.y, x2: x, y2: r.y + r.h, main: false });
+      split({ x: r.x, y: r.y, w: x - r.x - gap / 2, h: r.h }, depth + 1);
+      split({ x: x + gap / 2, y: r.y, w: r.x + r.w - x - gap / 2, h: r.h }, depth + 1);
+    } else {
+      const y = r.y + r.h * t;
+      streets.push({ x1: r.x, y1: y, x2: r.x + r.w, y2: y, main: false });
+      split({ x: r.x, y: r.y, w: r.w, h: y - r.y - gap / 2 }, depth + 1);
+      split({ x: r.x, y: y + gap / 2, w: r.w, h: r.y + r.h - y - gap / 2 }, depth + 1);
+    }
+  };
+
+  // two straight main avenues (one each way) cut the city first; everything else subdivides inside them
+  const ax = W * (0.25 + rnd() * 0.5);
+  const ay = H * (0.25 + rnd() * 0.5);
+  const mg = 1.4;
+  streets.push({ x1: ax, y1: OUTER.y, x2: ax, y2: OUTER.y + OUTER.h, main: true });
+  streets.push({ x1: OUTER.x, y1: ay, x2: OUTER.x + OUTER.w, y2: ay, main: true });
+  for (const [x0, x1] of [[OUTER.x, ax - mg], [ax + mg, OUTER.x + OUTER.w]])
+    for (const [y0, y1] of [[OUTER.y, ay - mg], [ay + mg, OUTER.y + OUTER.h]])
+      split({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, 0);
+
+  // a diagonal avenue and a curved river cut through; blocks under them are cleared
+  const dx0 = W * (0.1 + rnd() * 0.5);
+  const diag: [Pt, Pt] = [[dx0 - 40, -30], [dx0 + 60, H + 30]];
+  streets.push({ x1: diag[0][0], y1: diag[0][1], x2: diag[1][0], y2: diag[1][1], main: true });
+  const ry = [H * (0.2 + rnd() * 0.6), H * (rnd() * 1.2 - 0.1), H * (0.2 + rnd() * 0.6)];
+  const riverPts: Pt[] = [];
+  for (let i = 0; i <= 60; i++) {
+    const t = i / 60;
+    const x = -30 + (W + 60) * t;
+    const y = (1 - t) * (1 - t) * ry[0] + 2 * (1 - t) * t * ry[1] + t * t * ry[2];
+    riverPts.push([x, y]);
+  }
+  const river = `M${riverPts.map((p) => p.map((v) => v.toFixed(2)).join(" ")).join(" L")}`;
 
   const blocks: Block[] = [];
-  for (const x0 of streetsX) {
-    for (const y0 of streetsY) {
-      if (rnd() < 0.12) continue; // a plaza
-      const split = rnd() < 0.35;
-      const parts = split ? 2 : 1;
-      const innerW = cellW - street;
-      for (let i = 0; i < parts; i++) {
-        const w = split ? innerW / 2 - 0.3 : innerW - rnd() * 1.2;
-        const x = x0 + street / 2 + (split ? i * (innerW / 2 + 0.3) : rnd() * 0.6);
-        const h = cellH - street - rnd() * 1.2;
-        const y = y0 + street / 2 + rnd() * 0.5;
-        blocks.push({ x, y, w, h, fill: rnd() < 0.5 ? "#221B26" : "#2A2130", cx: x + w / 2, cy: y + h / 2 });
-      }
+  const lights: Light[] = [];
+  for (const r of leaves) {
+    if (r.w < 0.6 || r.h < 0.6) continue;
+    if (rectNearSegment(r, diag[0], diag[1], 1.1)) continue;
+    if (riverPts.some((p) => rectPointDist(r, p) < 1.9)) continue;
+    // now and then a big block is cut into tiny lots
+    const lots: Rect[] = r.w > 4 && r.h > 3 && rnd() < 0.2
+      ? [0, 1].flatMap((i) => [0, 1].map((j) => ({ x: r.x + (i * r.w) / 2 + 0.12, y: r.y + (j * r.h) / 2 + 0.12, w: r.w / 2 - 0.24, h: r.h / 2 - 0.24 })))
+      : [r];
+    for (const b of lots) {
+      blocks.push({ ...b, fill: shade(rnd()), cx: b.x + b.w / 2, cy: b.y + b.h / 2 });
+      const n = rnd() < 0.08 ? 1 : 0; // a few lit windows, not a light show
+      for (let k = 0; k < n; k++)
+        lights.push({ x: b.x + 0.3 + rnd() * Math.max(0, b.w - 0.6), y: b.y + 0.3 + rnd() * Math.max(0, b.h - 0.6),
+          color: rnd() < 0.7 ? "#FFD319" : "#FF2BD6", opacity: 0.2 + rnd() * 0.25 });
     }
   }
 
-  // landmarks: on city blocks in empty space, in list order, up to all nine
-  const zones = keepOut(l);
+  // landmark signs: on blocks in empty space, at most six, ~80 px from anything real and from each other
+  const zones = keepOut(l).map((z) => grow(z, GAP));
   const pipes: [Pt, Pt][] = [...l.pos.values()].map((p) => [p, l.disp]);
   const placed: Landmark[] = [];
   const candidates = blocks
-    .filter((b) => b.x > 1 && b.y > 1 && b.x + b.w < W - 1 && b.y + b.h < H - 1 && b.w > 3.5 && b.h > 3)
+    .filter((b) => b.x > 2 && b.y > 3 && b.x + b.w < W - 2 && b.y + b.h < H - 2 && b.w > 2.5 && b.h > 1.6)
     .map((b) => ({ b, r: rnd() }))
     .sort((p, q) => p.r - q.r)
     .map((p) => p.b);
   for (const b of candidates) {
-    if (placed.length >= LANDMARKS.length) break;
-    const w = Math.min(b.w, 5 + rnd() * 2);
-    const h = Math.min(b.h, 3.6 + rnd() * 1);
+    if (placed.length >= Math.min(MAX_LANDMARKS, LANDMARKS.length)) break;
+    const lm = LANDMARKS[placed.length];
+    const w = lm.name.length * 0.62 + 1.2; // label width in map units at 12 px
+    const h = 1.7;
     const r: Rect = { x: b.cx - w / 2, y: b.cy - h / 2, w, h };
-    const sign: Rect = { x: r.x - 3, y: r.y - 3, w: r.w + 6, h: 3 }; // the rooftop sign label above it
-    const both = [r, sign];
-    if (both.some((x) => zones.some((z) => overlaps(x, z)))) continue;
-    if (both.some((x) => pipes.some(([a, c]) => rectNearSegment(x, a, c, 1.2)))) continue;
-    if (placed.some((p) => both.some((x) => overlaps(x, { x: p.x - 3.5, y: p.y - 3.5, w: p.w + 7, h: p.h + 7 })))) continue;
-    if (sign.y < 0.5) continue;
-    const i = placed.length;
-    placed.push({ ...LANDMARKS[i], ...r, sign: SIGN_COLORS[i % SIGN_COLORS.length] });
+    if (r.x < 1 || r.x + r.w > W - 1 || r.y < 3 || r.y + r.h > H - 1) continue;
+    if (zones.some((z) => overlaps(r, z))) continue;
+    if (pipes.some(([a, c]) => rectNearSegment(r, a, c, GAP))) continue;
+    if (placed.some((p) => overlaps(r, grow(p, GAP)))) continue;
+    placed.push({ ...lm, ...r, sign: SIGN_COLORS[placed.length % SIGN_COLORS.length] });
   }
 
-  return { blocks, streetsX, streetsY, district: DISTRICTS[Math.floor(rnd() * DISTRICTS.length)], landmarks: placed };
+  return { blocks, streets, river, lights, district: DISTRICTS[Math.floor(rnd() * DISTRICTS.length)], landmarks: placed };
 }
 
 /** City blocks within `radius` map units of a point (used to light up blocks around a facility in danger). */

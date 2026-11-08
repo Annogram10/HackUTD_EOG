@@ -127,8 +127,9 @@ html[data-alarm="red"] body::after {
 .city-danger { animation: city-danger 2.4s ease-in-out infinite; }
 @keyframes city-danger { 50% { stroke-opacity: 0.25; } }
 .city-sign { animation: city-sign 4s ease-in-out infinite; }
-@keyframes city-sign { 50% { opacity: 0.35; } }
-.fac-danger { box-shadow: 0 0 18px #e5484d55; }
+@keyframes city-sign { 50% { opacity: 0.4; } }
+.fac-card { box-shadow: 0 0 0 4px rgba(14, 15, 17, 0.9), 0 10px 28px rgba(0, 0, 0, 0.65); }
+.fac-danger { box-shadow: 0 0 0 4px rgba(14, 15, 17, 0.9), 0 0 22px #e5484d66, 0 10px 28px rgba(0, 0, 0, 0.65); }
 .fac-sign { text-shadow: 0 0 8px #e5484d; animation: fac-sign 0.24s step-end 3; }
 @keyframes fac-sign { 0% { opacity: 1; } 40% { opacity: 0.15; } 70% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
