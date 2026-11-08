@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 
 from . import dataset as D
 from .handoff import _plan_words, spoken
+from .timeutil import parse_ts
 from .triage import (FORECAST_QUANTILE, SEVERITY_COLOR, drop, fac_name, repair_hours_left, run_triage, severity,
                      worst_severity)
 
@@ -29,8 +30,7 @@ ORDER = {"green": 0, "amber": 1, "red": 2}
 BY_RANK = {v: k for k, v in ORDER.items()}
 
 
-def _unix(ts: str) -> int:
-    return int(datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp())
+_unix = parse_ts  # naive timestamps are UTC (the old version read them as the server's local time)
 
 
 _drop = drop  # older name, used by main.py

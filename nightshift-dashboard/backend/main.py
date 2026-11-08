@@ -55,6 +55,7 @@ from app import evidence as evidence_mod
 from app import risk as risk_mod
 from app import speech, vision
 from app.forecast import current_state
+from app.timeutil import parse_ts
 from app.handoff import build_handoff, spoken
 from app.triage import (SEVERITY_COLOR, SEVERITY_RANK, events_json, fac_name, facility_status, money, run_triage,
                         worst_severity)
@@ -327,10 +328,7 @@ def seen_by(flags: list, now: Optional[int]) -> list:
     """Flags that already existed at `now` (unix seconds). None = no time limit."""
     if now is None:
         return flags
-    def ts(f):
-        t = f["timestamp"]
-        return datetime.fromisoformat(t.replace("Z", "+00:00") if t.endswith("Z") or "+" in t[10:] else t + "+00:00").timestamp()
-    return [f for f in flags if ts(f) <= now]
+    return [f for f in flags if parse_ts(f["timestamp"]) <= now]
 
 
 def one_flag(c, flag_id: str) -> dict:
@@ -1000,8 +998,7 @@ def get_timeline(dataset: Optional[str] = None):
     return risk_mod.timeline(ds_for(dataset))
 
 
-def _unix_of(iso: str) -> float:
-    return datetime.fromisoformat(iso.replace("Z", "+00:00") if iso.endswith("Z") else iso + "+00:00").timestamp()
+_unix_of = parse_ts
 
 
 AUTO_TYPE = {"pump_failure": "alarm", "pipeline_leak": "leak", "pump_degradation": "damage"}

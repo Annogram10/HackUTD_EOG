@@ -3,13 +3,13 @@ The triage pipeline: detect problems -> countdown -> cheapest plan (shared truck
 Everything numeric comes from code in this module and its neighbours. Nothing here uses AI.
 """
 
-from datetime import datetime
 from typing import Optional
 
 from . import optimize as opt
 from .dataset import Dataset, iso
 from .detect import detect_events
 from .forecast import current_state, forecast_shutdown
+from .timeutil import parse_ts
 
 _cache: dict = {}
 
@@ -24,8 +24,7 @@ SEVERITY_RANK = {"high": 3, "medium": 2, "low": 1}
 SEVERITY_COLOR = {"high": "red", "medium": "amber", "low": "green"}
 
 
-def _unix(ts: str) -> int:
-    return int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
+_unix = parse_ts
 
 
 def drop(ds: Dataset, a: dict, now: int):
