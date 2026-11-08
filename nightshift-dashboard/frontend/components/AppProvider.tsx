@@ -29,6 +29,9 @@ interface Ctx {
   offline: boolean; // the backend failed twice in a row (or never answered): what is on screen may be stale
   lastOk: Date | null; // when the backend last answered
   mode: Mode | null; // live or replay, as the backend reports it
+  alarmId: string | null; // the danger situation on screen (null when not in danger)
+  acked: boolean; // the operator acknowledged this alarm: no more motion, no top strip
+  acknowledge: () => void;
 }
 
 const AppContext = createContext<Ctx | null>(null);
@@ -131,6 +134,34 @@ export default function AppProvider({ children }: { children: React.ReactNode })
     document.documentElement.dataset.alarm = riskLevel === "red" ? "red" : "";
   }, [riskLevel]);
 
+  // The alarm moment, once per new danger situation: for ~2 s the neon sign and skyline windows tint red and the
+  // danger card pulses; then the page scrolls to the danger card and the #1 plan is highlighted. Acknowledge stops it.
+  const alarmId = risk?.alarm ? risk.alarm_id : null;
+  const [ackedId, setAckedId] = useState<string | null>(null);
+  const acked = alarmId !== null && ackedId === alarmId;
+  const acknowledge = useCallback(() => setAckedId(alarmId), [alarmId]);
+  useEffect(() => {
+    const html = document.documentElement;
+    if (!alarmId || acked) {
+      delete html.dataset.burst;
+      delete html.dataset.focus;
+      return;
+    }
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    html.dataset.burst = "1";
+    const t = setTimeout(() => {
+      delete html.dataset.burst;
+      document.getElementById("danger-card")?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      html.dataset.focus = "1";
+    }, reduce ? 0 : 2000);
+    return () => clearTimeout(t);
+  }, [alarmId, acked]);
+  useEffect(() => {
+    const html = document.documentElement;
+    if (acked) html.dataset.acked = "1";
+    else delete html.dataset.acked;
+  }, [acked]);
+
   // The phone and glasses start at the same moment the dashboard opens on.
   const clockSet = asOfState !== null && asOfState.dataset === dataset;
   useEffect(() => {
@@ -180,9 +211,9 @@ export default function AppProvider({ children }: { children: React.ReactNode })
       select: (id: string) => dataset && setSelected({ dataset, id }),
       patchFlag: (flag) =>
         setShifts((all) => all.map((s) => ({ ...s, flags: s.flags.map((f) => (f.id === flag.id ? { ...f, ...flag } : f)) }))),
-      loading, offline, lastOk: health.lastOk, mode,
+      loading, offline, lastOk: health.lastOk, mode, alarmId, acked, acknowledge,
     }),
-    [datasets, dataset, setDataset, overview, asOf, setAsOf, risk, riskLevel, playing, setPlaying, shifts, selectedId, loading, offline, health.lastOk, mode],
+    [datasets, dataset, setDataset, overview, asOf, setAsOf, risk, riskLevel, playing, setPlaying, shifts, selectedId, loading, offline, health.lastOk, mode, alarmId, acked, acknowledge],
   );
 
   if (CONFIG_ERROR)

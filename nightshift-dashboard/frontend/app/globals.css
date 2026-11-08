@@ -219,3 +219,22 @@ html[data-burst] .sky-win { fill: #ff3b3b; opacity: 0.8; }
 @media (prefers-reduced-motion: reduce) {
   .blink-cursor, .glitch-text { animation: none; text-shadow: none; }
 }
+
+/* ---------- alarm moment ---------- */
+/* danger card border pulses 3 times, then stays solid red */
+.card-pulse { animation: card-pulse 0.65s ease-in-out 3; }
+@keyframes card-pulse { 50% { border-color: rgba(255, 59, 59, 0.25); } }
+/* after the burst: the #1 plan is highlighted (static, no motion) */
+html[data-focus] .first-plan { outline: 2px solid #ff3b3b; outline-offset: 3px; }
+/* acknowledged: everything alarm-related stops moving; the card stays red but still */
+html[data-acked] body::after,
+html[data-acked] .card-pulse,
+html[data-acked] .owl-shake,
+html[data-acked] .owl-glasses.owl-hop,
+html[data-acked] .city-danger,
+html[data-acked] .fac-sign,
+html[data-acked] .neon-flicker,
+html[data-acked] .sky-win { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .card-pulse, html[data-alarm="red"] body::after { animation: none; }
+}

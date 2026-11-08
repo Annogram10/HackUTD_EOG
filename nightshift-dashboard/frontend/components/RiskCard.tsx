@@ -15,7 +15,7 @@ const LOOK: Record<RiskLevel, { label: string; box: string; pill: string }> = {
 };
 
 export default function RiskCard({ children, footer }: { children?: React.ReactNode; footer?: React.ReactNode }) {
-  const { asOf, playing, risk, lastOk } = useApp();
+  const { asOf, playing, risk, lastOk, acked, acknowledge } = useApp();
 
   // No danger check yet (first load, or the check failed): still show the time bar so playback never disappears.
   if (!risk)
@@ -33,7 +33,7 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
   const others = risk.reasons.filter((r) => r.level !== risk.level);
 
   return (
-    <section id="danger-card" key={risk.alarm_id ?? risk.level} className={`brackets ${risk.level === "red" ? "brackets-red" : ""} border-2 p-5 ${look.box} ${risk.alarm && !playing ? "alarm-flash" : ""}`}>
+    <section id="danger-card" key={risk.alarm_id ?? risk.level} className={`scroll-mt-28 brackets ${risk.level === "red" ? "brackets-red" : ""} border-2 p-5 ${look.box} ${risk.alarm && !acked ? "card-pulse" : ""}`}>
       <div className="flex flex-wrap items-center gap-3">
         <span className={`inline-flex items-center gap-2 px-3 py-1 text-lg font-bold uppercase ${look.pill}`}>
           {risk.level !== "green" && <WarningIcon />}
@@ -87,9 +87,18 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
         </div>
       )}
       {risk.alarm && (
-        <p className="mt-3 rounded-lg bg-red-500/20 px-4 py-2 text-base font-semibold text-red-100">
-          {asOf === null ? "Alarm sent to the phone and glasses." : "Replay: an alarm would have gone off here."}
-        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3 bg-red-500/20 px-4 py-2">
+          <p className="flex-1 text-base font-semibold text-red-100">
+            {asOf === null ? "Alarm sent to the phone and glasses." : "Replay: an alarm would have gone off here."}
+          </p>
+          {acked ? (
+            <span className="font-mono text-sm uppercase tracking-wider text-red-200">Acknowledged</span>
+          ) : (
+            <button type="button" onClick={acknowledge} className="btn-primary px-4 py-1.5 text-base font-semibold">
+              Acknowledge
+            </button>
+          )}
+        </div>
       )}
       <p className="mt-3 text-sm text-zinc-500">
         {playing

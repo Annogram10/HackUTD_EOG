@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Chakra_Petch, IBM_Plex_Sans, JetBrains_Mono } from "next/font/google";
 import { Suspense } from "react";
 import Nav from "@/components/Nav";
+import AlarmStrip from "@/components/AlarmStrip";
 import AppProvider from "@/components/AppProvider";
 import GlitchIntro from "@/components/GlitchIntro";
 import OwlCorner from "@/components/OwlCorner";
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`h-full antialiased ${plexSans.variable} ${mono.variable} ${heading.variable}`}>
       <body className="flex min-h-full flex-col">
         <AppProvider>
+          <AlarmStrip />
           <Suspense fallback={<div className="h-[73px] border-b border-zinc-800" />}>
             <Nav />
           </Suspense>

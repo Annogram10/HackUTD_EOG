@@ -17,7 +17,7 @@ export default function AlertCard({ a, compact = false }: { a: Alert; compact?: 
   const danger = a.severity === "high"; // from the backend's one severity rule
   const urgent = danger;
   return (
-    <article className="border border-zinc-700 bg-zinc-900 p-5">
+    <article className={`border border-zinc-700 bg-zinc-900 p-5 ${a.order === 1 && a.severity === "high" ? "first-plan" : ""}`}>
       <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-3">
