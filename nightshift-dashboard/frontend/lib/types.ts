@@ -214,6 +214,7 @@ export interface AgentRun {
   dataset: string;
   status: "running" | "done" | "error";
   mode: "nemotron" | "offline-script";
+  engine: "nemotron" | "offline"; // what really ran: "offline" also when Nemotron failed and the script took over
   model: string | null;
   steps: TraceStep[];
   handoff: string | null;

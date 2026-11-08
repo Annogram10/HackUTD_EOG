@@ -168,7 +168,9 @@ class Run:
         return res
 
     def public(self):
+        # engine: what really produced this run. "offline" also when Nemotron failed and the script took over.
         return {"dataset": self.dataset, "status": self.status, "mode": self.mode, "model": self.model,
+                "engine": "nemotron" if self.mode == "nemotron" else "offline",
                 "steps": self.steps, "handoff": self.handoff_text, "error": self.error}
 
 

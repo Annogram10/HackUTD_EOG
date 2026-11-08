@@ -107,7 +107,7 @@ export default function AgentTrace() {
   }, [running, dataset]);
 
   if (!run) return <PageSkeleton cards={3} />;
-  const live = run.mode === "nemotron";
+  const live = run.engine === "nemotron";
   const { rows, final } = toRows(run.steps);
   const toolCalls = run.steps.filter((s) => s.kind === "tool");
   const seconds = run.steps.length ? run.steps[run.steps.length - 1].t : 0;
@@ -129,7 +129,8 @@ export default function AgentTrace() {
 
       <div className={`flex flex-wrap items-center gap-x-8 gap-y-2 rounded-xl px-5 py-4 text-lg ${live ? "bg-emerald-500/10 text-emerald-100" : "bg-amber-500/10 text-amber-100"}`}>
         <span>
-          {live ? <>Driven by <span className="font-semibold">{run.model}</span></> : <>Fixed script, <span className="font-semibold">not Nemotron</span> (no <code>NVIDIA_API_KEY</code> set)</>}
+          <span className="font-semibold">Engine: {live ? "Nemotron (live model)" : "Offline script (no model)"}</span>
+          {live ? <> · {run.model}</> : <> · {run.error ? "Nemotron failed, so the fixed script ran" : <>no <code>NVIDIA_API_KEY</code> set</>}</>}
         </span>
         <span className="text-zinc-300">{toolCalls.length} tool calls</span>
         <span className="text-zinc-300">{seconds.toFixed(0)} s</span>

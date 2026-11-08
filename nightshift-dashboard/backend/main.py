@@ -618,6 +618,7 @@ def handoff(dataset: Optional[str] = None, now: Optional[int] = None):
     if run and run.status == "done" and run.handoff_text:
         h["agent_text"] = run.handoff_text
         h["agent_mode"] = run.mode
+        h["agent_engine"] = run.public()["engine"]
     h["events_count"] = len(tri["events"])
     return h
 
