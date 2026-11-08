@@ -70,6 +70,13 @@ enum Config {
   /// Turn off before a real demo.
   static let showTestTools = true
 
+  /// How often GET /alarm is polled while the app is open.
+  static let alarmPollInterval: Duration = .seconds(4)
+  /// How often an unacknowledged alarm's spoken_text is repeated.
+  static let alarmRepeatInterval: Duration = .seconds(15)
+  /// How often GET /map is reloaded while the app is open.
+  static let mapRefreshInterval: Duration = .seconds(10)
+
   /// How often a streaming frame is sent to /vision/check.
   static let visionCheckInterval: Duration = .seconds(6)
 

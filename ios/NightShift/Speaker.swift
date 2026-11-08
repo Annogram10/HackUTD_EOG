@@ -29,6 +29,15 @@ final class Speaker: NSObject {
     /// The most recent phrases spoken (newest last), for rejecting the mic's echo of them.
     private(set) var recentlySpoken: [String] = []
 
+    /// Bumped by stopAll() so queued phrases are dropped.
+    private var stopGeneration = 0
+
+    /// Stops the current phrase immediately and drops everything queued.
+    func stopAll() {
+        stopGeneration += 1
+        synth.stopSpeaking(at: .immediate)
+    }
+
     override private init() {
         super.init()
         synth.delegate = self
@@ -53,14 +62,23 @@ final class Speaker: NSObject {
     @discardableResult
     private func enqueue(_ text: String, chime: Bool) -> Task<Void, Never> {
         let previous = tail
+        let generation = stopGeneration
         pendingCount += 1
         let task = Task { @MainActor in
             await previous?.value
+            // Skip anything queued before the last stopAll().
+            guard generation == self.stopGeneration else {
+                self.pendingCount -= 1
+                if self.pendingCount == 0 { self.lastFinishedAt = Date() }
+                return
+            }
             Self.activateAudioSession()
             if chime {
                 await Self.playChime()
             }
-            await self.speakNow(text)
+            if generation == self.stopGeneration {
+                await self.speakNow(text)
+            }
             self.pendingCount -= 1
             if self.pendingCount == 0 {
                 self.lastFinishedAt = Date()
@@ -142,8 +160,24 @@ final class Speaker: NSObject {
     /// play-and-record (for example, a video recording with mic), it is left as is so its
     /// mode isn't disturbed. `.defaultToSpeaker` sends audio to the phone's loudspeaker,
     /// not the earpiece, when the glasses aren't connected.
+    /// While an alarm sounds the session is playback-only (loudest output, other audio
+    /// ducked, keeps playing when locked). Voice commands pause until it ends.
+    static var isAlarmMode = false {
+        didSet {
+            guard isAlarmMode != oldValue else { return }
+            activateAudioSession()
+        }
+    }
+
     static func activateAudioSession() {
         let session = AVAudioSession.sharedInstance()
+        if isAlarmMode {
+            if session.category != .playback {
+                try? session.setCategory(.playback, mode: .default, options: [.duckOthers])
+            }
+            try? session.setActive(true)
+            return
+        }
         if session.category != .playAndRecord {
             try? session.setCategory(.playAndRecord,
                                      mode: .spokenAudio,

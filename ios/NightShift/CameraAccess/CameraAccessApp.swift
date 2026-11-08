@@ -70,6 +70,8 @@ struct CameraAccessApp: App {
       // Main app view with access to the shared Wearables SDK instance
       // The Wearables.shared singleton provides the core DAT API
       MainAppView(wearables: Wearables.shared, viewModel: wearablesViewModel)
+        // NightShift: poll GET /alarm (red flash) and GET /map while the app is open.
+        .task { NightShiftController.shared.startPolling() }
         // Show error alerts for view model failures
         .alert("Something went wrong", isPresented: $wearablesViewModel.showError) {
           Button("OK") {

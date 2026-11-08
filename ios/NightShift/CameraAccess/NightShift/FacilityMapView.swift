@@ -1,9 +1,12 @@
 //
 // FacilityMapView.swift
 //
-// GET /map on a map: one pin per facility, numbered by the backend's rank and colored
-// by its level, plus a ranked list in the order received (rank 1 = check first). Tap a
-// pin or row for the backend's reasons; "Read aloud" speaks its spoken_text as is.
+// GET /map on a map. Facilities with importance above 0 get numbered pins (the
+// backend's rank) and a route line visiting them in rank order: 1, then 2, then 3.
+// Facilities with importance 0 are small grey pins, not on the route. Every pin and
+// row shows the level as text (Danger, Check soon, Minor, Normal) as well as color.
+// A system picker narrows the view. Tap a pin or row for the backend's reasons;
+// "Read aloud" speaks its spoken_text as is.
 //
 
 import MapKit
@@ -13,13 +16,49 @@ struct FacilityMapView: View {
   var controller: NightShiftController
   @State private var position: MapCameraPosition = .automatic
   @State private var selected: MapFacility?
+  /// nil = all systems.
+  @State private var systemFilter: String?
 
-  private var facilities: [MapFacility] { controller.map?.facilities ?? [] }
+  /// Backend order (already ranked), narrowed to the chosen system. Never re-sorted.
+  private var facilities: [MapFacility] {
+    let all = controller.map?.facilities ?? []
+    guard let systemFilter else { return all }
+    return all.filter { $0.system == systemFilter }
+  }
+
+  /// Facilities that need checking, in rank order: the route.
+  private var routeStops: [MapFacility] {
+    facilities.filter(\.needsCheck)
+  }
+
+  private var systems: [MapSystem] {
+    let all = controller.map?.systems ?? []
+    guard let systemFilter else { return all }
+    return all.filter { $0.id == systemFilter }
+  }
+
+  /// System ids in the order the backend lists them (systems first, then any only
+  /// seen on facilities).
+  private var systemIDs: [String] {
+    var seen = Set<String>()
+    let ids = (controller.map?.systems.map(\.id) ?? []) + (controller.map?.facilities.compactMap(\.system) ?? [])
+    return ids.filter { seen.insert($0).inserted }
+  }
+
+  private var routeLine: MKPolyline? {
+    let coordinates = routeStops.compactMap(\.coordinate)
+    guard coordinates.count >= 2 else { return nil }
+    return MKPolyline(coordinates: coordinates, count: coordinates.count)
+  }
 
   var body: some View {
     VStack(spacing: 0) {
       Map(position: $position) {
-        ForEach(controller.map?.systems ?? []) { system in
+        if let routeLine {
+          MapPolyline(routeLine)
+            .stroke(.blue, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round, dash: [8, 6]))
+        }
+        ForEach(systems) { system in
           if let yard = coordinate(system.truckYard) {
             Annotation("\(system.id) truck yard", coordinate: yard) {
               siteIcon("box.truck.fill")
@@ -32,12 +71,19 @@ struct FacilityMapView: View {
           }
         }
         ForEach(facilities) { facility in
-          if let lat = facility.lat, let lon = facility.lon {
-            Annotation(facility.displayName, coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)) {
+          if let coordinate = facility.coordinate {
+            Annotation(
+              facility.needsCheck ? "\(facility.displayName) · \(Self.levelText(facility.level))" : facility.displayName,
+              coordinate: coordinate
+            ) {
               Button {
                 selected = facility
               } label: {
-                pin(for: facility)
+                if facility.needsCheck {
+                  pin(for: facility)
+                } else {
+                  smallPin(for: facility)
+                }
               }
               .buttonStyle(.plain)
             }
@@ -46,6 +92,18 @@ struct FacilityMapView: View {
       }
       .mapStyle(.standard(pointsOfInterest: .excludingAll))
       .frame(minHeight: 280)
+      // Re-frame the map when the system changes.
+      .onChange(of: systemFilter) { position = .automatic }
+
+      Picker("System", selection: $systemFilter) {
+        Text("All systems").tag(String?.none)
+        ForEach(systemIDs, id: \.self) { id in
+          Text(id).tag(Optional(id))
+        }
+      }
+      .pickerStyle(.segmented)
+      .padding(.horizontal)
+      .padding(.vertical, 6)
 
       List {
         Section {
@@ -68,7 +126,7 @@ struct FacilityMapView: View {
             .buttonStyle(.plain)
           }
         } header: {
-          Text("Check first")
+          Text(routeStops.isEmpty ? "Nothing to check" : "Route: \(routeStops.count) stop\(routeStops.count == 1 ? "" : "s") in rank order")
         } footer: {
           if let asOf = controller.map?.asOf {
             Text("Data as of \(asOf)\(controller.map?.dataset.map { " · \($0)" } ?? "")")
@@ -99,6 +157,15 @@ struct FacilityMapView: View {
     return CLLocationCoordinate2D(latitude: pair[0], longitude: pair[1])
   }
 
+  /// Small grey dot for a facility with nothing wrong (not on the route).
+  private func smallPin(for facility: MapFacility) -> some View {
+    Circle()
+      .fill(.gray)
+      .frame(width: 12, height: 12)
+      .overlay(Circle().stroke(.white, lineWidth: 1.5))
+      .accessibilityLabel("\(facility.displayName), \(Self.levelText(facility.level))")
+  }
+
   private func pin(for facility: MapFacility) -> some View {
     ZStack {
       Circle()
@@ -110,7 +177,7 @@ struct FacilityMapView: View {
         .font(.caption.bold())
         .foregroundStyle(.white)
     }
-    .accessibilityLabel("Rank \(facility.rank.map(String.init) ?? "unknown"), \(facility.displayName), \(facility.level ?? "unknown") importance")
+    .accessibilityLabel("Rank \(facility.rank.map(String.init) ?? "unknown"), \(facility.displayName), \(Self.levelText(facility.level))")
   }
 
   private func siteIcon(_ systemName: String) -> some View {
@@ -123,7 +190,12 @@ struct FacilityMapView: View {
 
   private func row(for facility: MapFacility) -> some View {
     HStack(spacing: 12) {
-      pin(for: facility)
+      if facility.needsCheck {
+        pin(for: facility)
+      } else {
+        smallPin(for: facility)
+          .frame(width: 28)
+      }
       VStack(alignment: .leading, spacing: 2) {
         HStack {
           Text(facility.displayName)
@@ -135,9 +207,16 @@ struct FacilityMapView: View {
               .background(.blue.opacity(0.2), in: Capsule())
           }
         }
-        Text([facility.status, facility.level.map { "\($0) importance" }].compactMap { $0 }.joined(separator: " · "))
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        HStack(spacing: 6) {
+          Text(Self.levelText(facility.level))
+            .font(.caption.bold())
+            .foregroundStyle(Self.color(for: facility.level))
+          if let status = facility.status {
+            Text("· \(status)")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
         if let reason = facility.reasons.first {
           Text(reason)
             .font(.caption)
@@ -150,6 +229,17 @@ struct FacilityMapView: View {
         .foregroundStyle(.tertiary)
     }
     .contentShape(Rectangle())
+  }
+
+  /// The level as words, so color is never the only signal.
+  static func levelText(_ level: String?) -> String {
+    switch level {
+    case "high": return "Danger"
+    case "medium": return "Check soon"
+    case "low": return "Minor"
+    case "none": return "Normal"
+    default: return "Unknown"
+    }
   }
 
   /// Pin color from the backend's level: high red, medium amber, low grey, none green.
@@ -174,7 +264,7 @@ private struct FacilityDetailCard: View {
       List {
         Section {
           LabeledContent("Rank", value: facility.rank.map(String.init) ?? "—")
-          LabeledContent("Level", value: facility.level ?? "—")
+          LabeledContent("Level", value: FacilityMapView.levelText(facility.level))
           LabeledContent("Status", value: facility.status ?? "—")
           if let hours = facility.hoursToShutdown {
             LabeledContent("Hours to shutdown", value: String(hours))
@@ -192,7 +282,7 @@ private struct FacilityDetailCard: View {
         }
         Section {
           if let text = facility.spokenText {
-            Button("Read aloud", systemImage: "speaker.wave.2") {
+            Button("Read out", systemImage: "speaker.wave.2") {
               Task { await Speaker.shared.speak(text) }
             }
           }
@@ -206,5 +296,15 @@ private struct FacilityDetailCard: View {
       .navigationTitle(facility.displayName)
       .navigationBarTitleDisplayMode(.inline)
     }
+  }
+}
+
+extension MapFacility {
+  /// On the route: importance above 0.
+  var needsCheck: Bool { (importance ?? 0) > 0 }
+
+  var coordinate: CLLocationCoordinate2D? {
+    guard let lat, let lon else { return nil }
+    return CLLocationCoordinate2D(latitude: lat, longitude: lon)
   }
 }

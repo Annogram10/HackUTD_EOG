@@ -287,3 +287,33 @@ extension KeyedDecodingContainer {
     return nil
   }
 }
+
+// MARK: - GET /alarm
+
+/// GET /alarm: whether something needs a person's attention right now. Each distinct
+/// situation has its own `alarmId`, so an acknowledged one never flashes again.
+struct AlarmStatus: Codable, Hashable, Sendable {
+  let alarm: Bool
+  let alarmId: String?
+  let level: String?
+  let headline: String?
+  /// Written for speech (numbers spelled out); spoken as received.
+  let spokenText: String?
+  let reasons: [String]
+  let facilityIds: [String]
+
+  private enum CodingKeys: String, CodingKey {
+    case alarm, alarmId, level, headline, spokenText, reasons, facilityIds
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    alarm = (try? c.decodeIfPresent(Bool.self, forKey: .alarm)) ?? false
+    alarmId = c.lenientString(.alarmId).flatMap { $0.isEmpty ? nil : $0 }
+    level = c.lenientString(.level)
+    headline = c.lenientString(.headline)
+    spokenText = c.lenientString(.spokenText).flatMap { $0.isEmpty ? nil : $0 }
+    reasons = (try? c.decodeIfPresent([String].self, forKey: .reasons)) ?? []
+    facilityIds = (try? c.decodeIfPresent([String].self, forKey: .facilityIds)) ?? []
+  }
+}

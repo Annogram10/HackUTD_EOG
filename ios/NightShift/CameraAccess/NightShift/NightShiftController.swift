@@ -55,6 +55,8 @@ final class NightShiftController {
   // MARK: - Components
 
   let voice = VoiceCommandListener()
+  /// Red full-screen alarm from GET /alarm.
+  @ObservationIgnored let alarm: AlarmMonitor
   let store = ShiftStore()
   let uploads: UploadQueue
   @ObservationIgnored let vision: FrameGrabber
@@ -75,6 +77,7 @@ final class NightShiftController {
     self.cache = cache
     vision = FrameGrabber(api: api)
     uploads = UploadQueue(api: api)
+    alarm = AlarmMonitor(api: api)
     uploads.onUploaded = { [weak self] in
       // The ranking uses the latest uploaded shift, so reload it.
       await self?.refreshMap()
@@ -222,6 +225,21 @@ final class NightShiftController {
       NSLog("[NightShift] Refresh failed, using cached data: \(error)")
     }
     await mapDone
+  }
+
+  @ObservationIgnored private var mapPollTask: Task<Void, Never>?
+
+  /// Starts the app-wide polls: GET /alarm every 4 s and GET /map every 10 s. Called
+  /// once from the app root; safe to call again.
+  func startPolling() {
+    alarm.startPolling()
+    guard mapPollTask == nil else { return }
+    mapPollTask = Task { @MainActor [weak self] in
+      while !Task.isCancelled {
+        await self?.refreshMap()
+        try? await Task.sleep(for: Config.mapRefreshInterval)
+      }
+    }
   }
 
   /// Reloads GET /map and caches it. On failure the cached map stays in use.

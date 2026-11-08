@@ -14,6 +14,8 @@ protocol NightShiftAPI: Sendable {
   func fetchHandoff() async throws -> Handoff
   /// GET /map: all facilities with positions, ranked by importance.
   func fetchMap() async throws -> FacilityMap
+  /// GET /alarm: the current alarm state.
+  func fetchAlarm() async throws -> AlarmStatus
   /// Sends one JPEG frame for the given facility; the backend says whether it shows a problem.
   func checkVision(jpeg: Data, facility: String?) async throws -> VisionResult
   func submitReport(_ report: ShiftReport) async throws
@@ -128,6 +130,10 @@ struct RealAPI: NightShiftAPI {
     try JSONCoding.decoder.decode(FacilityMap.self, from: try await send(makeRequest("map"), path: "map"))
   }
 
+  func fetchAlarm() async throws -> AlarmStatus {
+    try JSONCoding.decoder.decode(AlarmStatus.self, from: try await send(makeRequest("alarm"), path: "alarm"))
+  }
+
   /// Raw JPEG body (Content-Type: image/jpeg), facility as `?facility=<id>`.
   func checkVision(jpeg: Data, facility: String?) async throws -> VisionResult {
     let path = "vision/check"
@@ -216,6 +222,12 @@ struct MockAPI: NightShiftAPI {
 
   func fetchMap() async throws -> FacilityMap {
     try await load(FacilityMap.self, "mock_map")
+  }
+
+  /// The mock never raises an alarm.
+  func fetchAlarm() async throws -> AlarmStatus {
+    try await simulateNetwork()
+    return try JSONCoding.decoder.decode(AlarmStatus.self, from: Data(#"{"alarm": false}"#.utf8))
   }
 
   func checkVision(jpeg: Data, facility: String?) async throws -> VisionResult {
