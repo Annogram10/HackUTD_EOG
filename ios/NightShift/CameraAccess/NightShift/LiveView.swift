@@ -368,7 +368,7 @@ private struct VoiceStatusBar: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   /// The real whitelisted commands.
-  private static let hint = "SAY 'WHAT'S THE ISSUE', 'STATUS', 'NEXT', 'CONFIRM', 'DISMISS', 'REPEAT'"
+  private static let hint = "SAY 'FLAG LEAK', 'NOTE', 'PRIORITIZE', 'WHAT'S THE ISSUE', 'STATUS', 'NEXT', 'CONFIRM', 'DISMISS', 'REPEAT'"
 
   var body: some View {
     TimelineView(.periodic(from: .now, by: 0.25)) { context in

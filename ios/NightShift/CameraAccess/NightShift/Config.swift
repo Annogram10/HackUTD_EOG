@@ -79,6 +79,9 @@ enum Config {
 
   /// Request timeout, kept short so offline fallbacks to the cache kick in quickly.
   static let requestTimeout: TimeInterval = 10
+  /// POST /vision/check: the backend gives the vision model up to 15 s, plus the frame
+  /// upload through the tunnel, so this waits longer than other requests.
+  static let visionRequestTimeout: TimeInterval = 25
   /// GET /alarm and other reads: per-request and whole-resource limits.
   static let pollRequestTimeout: TimeInterval = 5
   static let pollResourceTimeout: TimeInterval = 8

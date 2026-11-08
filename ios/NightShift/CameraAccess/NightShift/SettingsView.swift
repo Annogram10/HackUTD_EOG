@@ -396,7 +396,7 @@ struct SettingsView: View {
       if let error = controller.mapError {
         Text("Map update failed: \(error)")
           .font(.ns(.caption))
-          .foregroundStyle(.red)
+          .foregroundStyle(NS.amberText)
       }
     }
   }
@@ -469,8 +469,8 @@ struct SettingsView: View {
       if controller.currentFacilityID == nil {
         Label(
           controller.facilityChoices.isEmpty
-            ? "Pick a facility: no alerts loaded yet, tap Refresh. Camera and voice flags are paused."
-            : "Pick a facility. Camera and voice flags are paused until you choose one.",
+            ? "No facility set: no alerts loaded yet, tap Refresh. Flags are saved as unknown facility until you pick one."
+            : "No facility set. Flags are saved as unknown facility until you pick one (or say 'flag leak at <facility>').",
           systemImage: "mappin.slash"
         )
         .font(.ns(.subheadline))

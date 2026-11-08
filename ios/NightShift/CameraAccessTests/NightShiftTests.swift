@@ -470,3 +470,26 @@ private func freshDefaults() -> UserDefaults {
     #expect(abs(first.rect.x - 12.0556) < 1e-5 && abs(first.rect.y - 29.923991) < 1e-5)
   }
 }
+
+// MARK: - Voice commands
+
+@Suite struct VoiceCommandTests {
+  @Test func flagWithTypeAndFacility() {
+    #expect(VoiceCommand.parse("flag leak") == .flag(type: "leak", facility: ""))
+    #expect(VoiceCommand.parse("Flag a possible leak at Pad 7") == .flag(type: "leak", facility: "Pad 7"))
+    #expect(VoiceCommand.parse("flag fire on compressor station 2") == .flag(type: "smoke", facility: "compressor station 2"))
+    #expect(VoiceCommand.parse("flag") == .flag(type: nil, facility: ""))
+  }
+
+  @Test func noteKeepsTheTextAsSaid() {
+    #expect(VoiceCommand.parse("note the pump stopped making noise") == .note(text: "the pump stopped making noise"))
+    #expect(VoiceCommand.parse("Add a note: valve is loose") == .note(text: "valve is loose"))
+    #expect(VoiceCommand.parse("take a note") == .note(text: ""))
+  }
+
+  @Test func flagOnlyCountsAsTheFirstWord() {
+    #expect(VoiceCommand.parse("I think we should flag this") == nil)
+    #expect(VoiceCommand.parse("confirm or dismiss") == nil)
+    #expect(VoiceCommand.parse("prioritize") == .prioritize)
+  }
+}

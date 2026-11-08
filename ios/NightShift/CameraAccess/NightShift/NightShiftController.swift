@@ -504,7 +504,7 @@ final class NightShiftController {
   /// Backend flagged a frame: save it with the facility the check was sent for, chime,
   /// and ask for a decision.
   @discardableResult
-  private func handleCameraFlag(type: String, description: String?, facility: String, photo: Data?, note: String? = nil) async -> Bool {
+  private func handleCameraFlag(type: String, description: String?, facility: String?, photo: Data?, note: String? = nil) async -> Bool {
     // The shift may have ended while the check was in flight.
     guard let flag = store.addFlag(type: type, source: "camera", status: .pending, photo: photo, facility: facility, description: description) else { return false }
     if let note {
@@ -524,10 +524,7 @@ final class NightShiftController {
       simulateResult = ("Start a shift first", false)
       return
     }
-    guard let facility = currentFacilityID else {
-      simulateResult = ("Pick a facility first", false)
-      return
-    }
+    let facility = currentFacilityID
     var photo: Data?
     if let frame = vision.latestFrame {
       photo = await Task.detached(priority: .userInitiated) { FrameGrabber.scaledJPEG(frame) }.value
@@ -549,11 +546,14 @@ final class NightShiftController {
     return true
   }
 
-  /// On-screen Prioritize for a phone flag: confirms it and marks it a priority. There
-  /// is no backend endpoint for phone flags, so the priority travels in the report.
+  /// Prioritize for a phone flag (on screen or by voice): confirms it and marks it a
+  /// priority. Works on pending and confirmed flags (voice flags are saved confirmed).
+  /// After the report uploads, UploadQueue sends POST /flag/{id}/prioritize for it.
   @discardableResult
   func prioritize(_ flagID: Flag.ID) -> Bool {
-    guard let flag = store.current?.flags.first(where: { $0.id == flagID }), flag.status == .pending else { return false }
+    guard let flag = store.current?.flags.first(where: { $0.id == flagID }),
+      flag.status != .dismissed, flag.priority != true
+    else { return false }
     store.setPriority(for: flagID)
     recordHistory(kind: .flag, title: flagTitle(flag), facilityID: flag.facility, outcome: .prioritized)
     return true
@@ -691,7 +691,19 @@ final class NightShiftController {
       await alarm.askIssue()
     case .prioritize:
       voiceFeedback = ("Prioritize", true)
-      if !(await alarm.decide(.prioritize)) {
+      // During an alarm (or after "what's the issue") it acts on that issue; otherwise on
+      // the flag just raised.
+      if alarm.isAwaitingDecision || alarm.active != nil {
+        if !(await alarm.decide(.prioritize)) {
+          await reply("Say what's the issue first", ok: false)
+        }
+      } else if let flag = recentFlag {
+        if prioritize(flag.id) {
+          await reply("\(flagName(flag, capitalized: true)) marked priority")
+        } else {
+          await reply("That flag is already a priority")
+        }
+      } else if !(await alarm.decide(.prioritize)) {
         await reply("Say what's the issue first", ok: false)
       }
     case .confirm:
@@ -744,7 +756,121 @@ final class NightShiftController {
     case .next:
       voiceFeedback = ("Next alert", true)
       await speakNextAlert()
+    case .flag(let type, let facility):
+      voiceFeedback = (command.summary, true)
+      await raiseVoiceFlag(type: type, spokenFacility: facility)
+    case .note(let text):
+      voiceFeedback = (command.summary, true)
+      await addVoiceNote(text)
     }
+  }
+
+  // MARK: - Voice flags and notes
+
+  /// How long after a flag is raised "note" and "prioritize" still act on it.
+  private static let recentFlagWindow: TimeInterval = 5 * 60
+  /// How long "note" waits for the sentence that follows it.
+  private static let noteCaptureWindow: Duration = .seconds(20)
+  @ObservationIgnored private var noteCaptureGeneration = 0
+
+  /// The flag "note" and "prioritize" act on: the newest flag (voice or camera) raised
+  /// in the last few minutes that isn't dismissed.
+  var recentFlag: Flag? {
+    guard let flag = store.current?.flags.last(where: { $0.status != .dismissed }),
+      Date().timeIntervalSince(flag.createdAt) < Self.recentFlagWindow
+    else { return nil }
+    return flag
+  }
+
+  /// "flag leak [at <facility>]": takes the current glasses frame as the photo and saves
+  /// a voice flag (confirmed: it's the operator's own call). The facility is the one
+  /// said, else the current one, else unknown (the backend accepts a name or nothing).
+  func raiseVoiceFlag(type: String?, spokenFacility: String) async {
+    guard isOnShift else {
+      await reply("Start a shift first", ok: false)
+      return
+    }
+    var facility = currentFacilityID
+    if !spokenFacility.isEmpty {
+      if let id = facilityID(matching: spokenFacility) {
+        setCurrentFacility(id)
+        facility = id
+      } else {
+        facility = spokenFacility
+      }
+    }
+    var photo: Data?
+    if let frame = vision.latestFrame {
+      photo = await Task.detached(priority: .userInitiated) { FrameGrabber.scaledJPEG(frame) }.value
+    }
+    guard let flag = store.addFlag(type: type ?? "issue", source: "voice", status: .confirmed, photo: photo, facility: facility) else {
+      await reply("Start a shift first", ok: false)
+      return
+    }
+    recordHistory(kind: .flag, title: flagTitle(flag), facilityID: flag.facility, outcome: .confirmed)
+    let place = facility.map { " at \(facilityName(for: $0))" } ?? ""
+    let picture = photo == nil ? ", no camera picture" : ", photo saved"
+    let lead = flag.type == "issue" ? "Flag saved" : "\(flag.type.capitalized) flagged"
+    await reply("\(lead)\(place)\(picture). Say note, or prioritize")
+  }
+
+  /// "note <text>": on the flag just raised, else on the shift. "note" alone takes the
+  /// next sentence as the note.
+  func addVoiceNote(_ spoken: String) async {
+    guard isOnShift else {
+      await reply("Start a shift first", ok: false)
+      return
+    }
+    let text = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
+    if text.isEmpty {
+      noteCaptureGeneration += 1
+      let generation = noteCaptureGeneration
+      voice.captureNextUtterance = { [weak self] heard in
+        Task { await self?.addVoiceNote(heard) }
+      }
+      Task { [weak self] in
+        try? await Task.sleep(for: Self.noteCaptureWindow)
+        guard let self, self.noteCaptureGeneration == generation, self.voice.captureNextUtterance != nil else { return }
+        self.voice.captureNextUtterance = nil
+        self.voiceFeedback = ("Note timed out", false)
+      }
+      await reply("Go ahead with your note")
+      return
+    }
+    if ["cancel", "never mind", "nevermind"].contains(text.lowercased().trimmingCharacters(in: .punctuationCharacters)) {
+      await reply("Note cancelled")
+      return
+    }
+    let target = recentFlag
+    guard store.addNote(text, to: target?.id) else {
+      await reply("Start a shift first", ok: false)
+      return
+    }
+    await reply(target.map { "Note added to the \(flagName($0))" } ?? "Note saved to the shift")
+  }
+
+  /// "leak flag" ("Leak flag"), or just "flag" for an untyped one.
+  private func flagName(_ flag: Flag, capitalized: Bool = false) -> String {
+    let name = flag.type == "issue" ? "flag" : "\(flag.type) flag"
+    return capitalized ? name.prefix(1).uppercased() + name.dropFirst() : name
+  }
+
+  /// A facility id (or spoken name) as its display name.
+  private func facilityName(for id: String) -> String {
+    map?.facilities.first { $0.id == id }?.displayName
+      ?? facilities.first { $0.id == id }?.displayName
+      ?? id
+  }
+
+  /// A spoken facility name to an id from /map or the cached statuses.
+  private func facilityID(matching spokenName: String) -> String? {
+    let query = spokenName.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters)).lowercased()
+    guard !query.isEmpty else { return nil }
+    let known = (map?.facilities ?? []).map { ($0.id, $0.displayName) } + facilities.map { ($0.id, $0.displayName) }
+    return known.first { id, name in
+      let name = name.lowercased()
+      return id.lowercased() == query || name.contains(query) || query.contains(name)
+    }?.0
   }
 
   /// Shows `text` on the Shift screen and speaks it.

@@ -237,7 +237,7 @@ struct RealAPI: NightShiftAPI {
     }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.timeoutInterval = Config.requestTimeout
+    request.timeoutInterval = Config.visionRequestTimeout
     request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
     request.httpBody = jpeg

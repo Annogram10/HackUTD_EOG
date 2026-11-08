@@ -4,7 +4,8 @@
 // While the camera is streaming, sends one preview frame to POST /vision/check every
 // `Config.visionCheckInterval`. Frames are scaled to at most `maxFrameSide` px before
 // JPEG encoding. At most one request is in flight; a tick that lands while one is
-// pending is skipped. No check is sent until a facility is known. Failures, timeouts,
+// pending is skipped. The facility (if one is set) goes with each check; without one,
+// checks still run and flags are saved as "unknown facility". Failures, timeouts,
 // unavailable checks and non-flag responses are ignored silently.
 //
 
@@ -25,8 +26,8 @@ final class FrameGrabber {
 
   /// Called when the backend flags a frame: type, description, the facility id the
   /// check was sent with, and the JPEG that was sent (kept as the evidence photo).
-  @ObservationIgnored var onFlag: (@MainActor (_ type: String, _ description: String?, _ facility: String, _ photo: Data) async -> Void)?
-  /// Facility id sent with each check; nil means none chosen yet, so nothing is sent.
+  @ObservationIgnored var onFlag: (@MainActor (_ type: String, _ description: String?, _ facility: String?, _ photo: Data) async -> Void)?
+  /// Facility id sent with each check; nil when none is chosen yet (checks still run).
   @ObservationIgnored var facility: @MainActor () -> String? = { nil }
   /// False while no shift is active: no checks are sent and no flags raised.
   @ObservationIgnored var isEnabled: @MainActor () -> Bool = { false }
@@ -114,20 +115,15 @@ final class FrameGrabber {
     }
     guard isEnabled() else { return blocked("Not sent: start a shift first.") }
     guard !isRequestPending else { return blocked("Not sent: a check is already in progress.") }
-    guard let facility = facility() else { return blocked("Not sent: pick a facility first.") }
     guard let frame = latestFrame else { return blocked("Not sent: start the camera first.") }
     isCheckingNow = true
     defer { isCheckingNow = false }
-    lastManualCheck = await performCheck(frame: frame, facility: facility)
+    lastManualCheck = await performCheck(frame: frame, facility: facility())
   }
 
   private func tick() {
     guard isEnabled(), !isRequestPending, let frame = latestFrame, frame !== lastSentFrame else { return }
-    guard let facility = facility() else {
-      // No facility chosen: flags are blocked, so don't send.
-      lastCheck = (.skipped, Date())
-      return
-    }
+    let facility = facility()
     Task { @MainActor [weak self] in
       _ = await self?.performCheck(frame: frame, facility: facility)
     }
@@ -135,7 +131,7 @@ final class FrameGrabber {
 
   /// Scales, encodes and sends one frame; creates a flag only for a valid flag
   /// response. Callers have already checked that no request is pending.
-  private func performCheck(frame: UIImage, facility: String) async -> CheckReport {
+  private func performCheck(frame: UIImage, facility: String?) async -> CheckReport {
     lastSentFrame = frame
     isRequestPending = true
     defer { isRequestPending = false }

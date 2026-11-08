@@ -137,12 +137,27 @@ final class UploadQueue {
           try? FileManager.default.removeItem(at: file)
         }
         setState(.sent(at: Date()), for: report.shiftId, startedAt: report.startedAt)
+        await sendPriorities(of: report)
         await onUploaded?()
       } catch {
         NSLog("[NightShift] Report upload failed, retrying later: \(error)")
         setState(Self.isOffline(error) ? .queued : .failed(message: NightShiftAPIError.describe(error)),
                  for: report.shiftId, startedAt: report.startedAt)
         scheduleRetry()
+      }
+    }
+  }
+
+  /// The backend's report format has no priority field, but it stores each flag under
+  /// the phone's flag id, so prioritized flags are marked with POST /flag/{id}/prioritize
+  /// (which puts the facility at the top of the next-shift list). Best effort: the
+  /// report itself is already saved.
+  private func sendPriorities(of report: ShiftReport) async {
+    for flag in report.flags where flag.priority == true && flag.status != .dismissed {
+      do {
+        _ = try await api.decideFlag(id: flag.id.uuidString, action: .prioritize)
+      } catch {
+        NSLog("[NightShift] Couldn't mark flag \(flag.id) a priority: \(error)")
       }
     }
   }

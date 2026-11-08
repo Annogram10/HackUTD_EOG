@@ -42,6 +42,9 @@ final class VoiceCommandListener {
   @ObservationIgnored var onCommand: (@MainActor (VoiceCommand) async -> Void)?
   /// Called on the main actor for a phrase that matches no command.
   @ObservationIgnored var onUnrecognized: (@MainActor (String) -> Void)?
+  /// One-shot: the next utterance is handed over exactly as heard instead of being
+  /// parsed (the sentence after "note"). Cleared once used.
+  @ObservationIgnored var captureNextUtterance: (@MainActor (String) -> Void)?
 
   /// Silence that ends an utterance.
   private static let utteranceSilence: Duration = .milliseconds(1500)
@@ -256,6 +259,11 @@ final class VoiceCommandListener {
 
     guard !transcript.isEmpty, !overlapsSpeaker, !isEchoOfSpeaker(transcript) else { return }
     lastHeard = transcript
+    if let capture = captureNextUtterance {
+      captureNextUtterance = nil
+      capture(transcript)
+      return
+    }
     guard let command = VoiceCommand.parse(transcript) else {
       onUnrecognized?(transcript)
       return

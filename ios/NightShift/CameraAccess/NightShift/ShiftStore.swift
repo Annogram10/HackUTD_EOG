@@ -69,7 +69,7 @@ final class ShiftStore {
     source: String,
     status: FlagStatus,
     photo: Data?,
-    facility: String,
+    facility: String?,
     description: String? = nil
   ) -> Flag? {
     guard let shift = current else { return nil }

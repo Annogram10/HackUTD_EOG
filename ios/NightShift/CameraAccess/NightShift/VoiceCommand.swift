@@ -11,6 +11,12 @@
 //   "repeat"                                  say the last message again
 //   "status" [of <facility>]                  read a facility's status
 //   "next alert"                              read the next alert
+//   "flag" [leak|smoke|damage] [at <facility>] photo from the glasses, saved as a flag
+//   "note" [<text>]                           note on the flag just made (or the shift);
+//                                             "note" alone takes the next sentence
+//
+// "flag" and "note" only count as the first word (after "add a" / "take a" etc.), and
+// everything after them is kept as said, so "note the pump stopped" is a note, not "stop".
 //
 
 import Foundation
@@ -29,6 +35,10 @@ enum VoiceCommand: Equatable, Sendable {
   /// "status" alone (empty) or "status of <name>".
   case status(facility: String)
   case next
+  /// "flag leak at Pad 7": type is "leak", "smoke", "damage", or nil when not said.
+  case flag(type: String?, facility: String)
+  /// "note <text>"; empty text means "take the next sentence as the note".
+  case note(text: String)
 
   private enum Trigger {
     case confirm, dismiss, prioritize, acknowledge, stop, repeatLast, status, next
@@ -53,6 +63,20 @@ enum VoiceCommand: Equatable, Sendable {
     "next": .next,
   ]
 
+  /// Spoken words for each flag type the backend knows.
+  private static let flagTypes: [String: String] = [
+    "leak": "leak", "leaks": "leak", "leaking": "leak", "spill": "leak", "drip": "leak", "dripping": "leak",
+    "smoke": "smoke", "smoking": "smoke", "fire": "smoke", "vapor": "smoke", "vapour": "smoke", "steam": "smoke",
+    "damage": "damage", "damaged": "damage", "broken": "damage", "crack": "damage", "cracked": "damage", "dent": "damage",
+  ]
+
+  /// Words allowed before "flag" / "note" ("add a note", "take a note", "new flag").
+  private static let leadIns: Set<String> = ["add", "a", "take", "new", "make", "raise", "please", "okay", "ok", "hey"]
+  private static let noteWords: Set<String> = ["note", "notes", "memo"]
+  private static let flagWords: Set<String> = ["flag", "flagged", "report"]
+  /// Filler words skipped around the flag type and facility.
+  private static let flagFillers: Set<String> = ["a", "an", "the", "possible", "of", "for", "there", "is", "theres"]
+
   /// Filler words skipped between "status" and the facility name.
   private static let statusFillers: Set<String> = ["of", "for", "at", "on", "the"]
 
@@ -60,6 +84,18 @@ enum VoiceCommand: Equatable, Sendable {
   static func parse(_ transcript: String) -> VoiceCommand? {
     let words = transcript.split(whereSeparator: \.isWhitespace).map(String.init)
     let normalized = words.map { $0.lowercased().filter { $0.isLetter || $0.isNumber } }
+
+    // "flag ..." / "note ...": the first real word decides, and the rest is kept as said.
+    if let start = normalized.firstIndex(where: { !$0.isEmpty && !leadIns.contains($0) }) {
+      if noteWords.contains(normalized[start]) {
+        let text = words[(start + 1)...].joined(separator: " ")
+          .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        return .note(text: text.drop { $0 == ":" }.trimmingCharacters(in: .whitespaces))
+      }
+      if flagWords.contains(normalized[start]) {
+        return parseFlag(words: Array(words[(start + 1)...]), normalized: Array(normalized[(start + 1)...]))
+      }
+    }
 
     let phrase = " " + normalized.filter { !$0.isEmpty }.joined(separator: " ") + " "
     if issuePhrases.contains(where: { phrase.contains(" \($0) ") }) {
@@ -90,6 +126,24 @@ enum VoiceCommand: Equatable, Sendable {
     }
   }
 
+  /// "[a] [possible] leak [at|on <facility>]" after the flag word.
+  private static func parseFlag(words: [String], normalized: [String]) -> VoiceCommand {
+    var index = 0
+    while index < normalized.count, normalized[index].isEmpty || flagFillers.contains(normalized[index]) { index += 1 }
+    var type: String?
+    if index < normalized.count, let spoken = flagTypes[normalized[index]] {
+      type = spoken
+      index += 1
+    }
+    // The facility follows "at" / "on" / "near" / "by" (or comes straight after the type).
+    while index < normalized.count, ["at", "on", "near", "by", "in", "the"].contains(normalized[index]) || normalized[index].isEmpty {
+      index += 1
+    }
+    let facility = words[index...].joined(separator: " ")
+      .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+    return .flag(type: type, facility: facility)
+  }
+
   var summary: String {
     switch self {
     case .issue: return "what's the issue"
@@ -101,6 +155,9 @@ enum VoiceCommand: Equatable, Sendable {
     case .repeatLast: return "repeat"
     case .status(let facility): return facility.isEmpty ? "status" : "status of \(facility)"
     case .next: return "next alert"
+    case .flag(let type, let facility):
+      return "flag" + (type.map { " \($0)" } ?? "") + (facility.isEmpty ? "" : " at \(facility)")
+    case .note(let text): return text.isEmpty ? "note" : "note: \(text)"
     }
   }
 }
