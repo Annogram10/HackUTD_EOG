@@ -1,7 +1,7 @@
 "use client";
 
-// Entry transition: horizontal glitch bars -> RGB-split logo with typed lines from the loaded data -> bars slide
-// off and the dashboard shows. Original drawing code, no external assets.
+// Entry transition: horizontal glitch bars that thin out, then slide off as the dashboard shows. No text.
+// Original drawing code, no external assets.
 // Plays on the first load of a browser session and when the dataset changes. Click or any key skips it.
 // prefers-reduced-motion: a plain 300 ms fade instead.
 // Safety: the backdrop stays dark the whole time (no full-screen bright flash); bright colours only on thin bars
@@ -13,7 +13,7 @@ import { useApp } from "./AppProvider";
 
 const SESSION_KEY = "nightshift.intro.played";
 const P1 = 600; // bars
-const P2 = 1100; // logo + typed lines, bars thin out
+const P2 = 1100; // bars thin out
 const END = 1500; // bars slide off, overlay removed
 const STEP = 70; // bars are re-drawn every ~70 ms
 const BACKDROP = "#05061a";
@@ -52,15 +52,9 @@ function makeBars(n: number, W: number, H: number): Bar[] {
 }
 
 export default function GlitchIntro() {
-  const { dataset, datasets, overview, risk } = useApp();
+  const { dataset } = useApp();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const data = useRef({ dataset, datasets, overview, risk });
   const prev = useRef<string | null>(null);
-
-  // the typed lines read the latest loaded data on every frame
-  useEffect(() => {
-    data.current = { dataset, datasets, overview, risk };
-  });
 
   useEffect(() => {
     if (!dataset || prev.current === dataset) return;
@@ -116,27 +110,12 @@ export default function GlitchIntro() {
       };
     }
 
-    const font = getComputedStyle(document.body).fontFamily;
-    const mono = getComputedStyle(document.documentElement).getPropertyValue("--font-plex-mono") || "monospace";
     const N = Math.round(Math.max(60, H / 9));
     let bars = makeBars(N, W, H);
     let lastStep = 0;
     let slide: Bar[] | null = null;
-    let jitter = { r: 3, c: 3, y: 0 };
     const start = performance.now();
 
-    const lines = () => {
-      const d = data.current;
-      const info = d.datasets.find((x) => x.name === d.dataset);
-      const ov = d.overview && d.overview.dataset === d.dataset ? d.overview : null;
-      const ai = d.risk?.ai;
-      const engine = ai?.available ? "NEMOTRON: ONLINE" : ai && !ai.pending ? "NEMOTRON: OFFLINE · RULES ONLINE" : "RULES: ONLINE · NEMOTRON: STANDBY";
-      return [
-        "AVON GRID // LINK ESTABLISHED",
-        `SYSTEMS: ${info?.systems ?? "…"} · FACILITIES: ${info?.facilities ?? "…"} · ALERTS: ${ov ? ov.alerts.length : "…"}`,
-        engine,
-      ];
-    };
 
     const drawBars = (list: Bar[], dx = 0) => {
       for (const b of list) {
@@ -152,33 +131,6 @@ export default function GlitchIntro() {
       ctx.globalAlpha = 1;
     };
 
-    const drawLogo = (t: number, fade: number) => {
-      const size = Math.min(96, W / 7);
-      ctx.font = `700 ${size}px ${font}`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      const cx = W / 2;
-      const cy = H / 2 - 30;
-      ctx.globalAlpha = 0.85 * fade;
-      ctx.fillStyle = "#FF2B4B";
-      ctx.fillText("NightShift", cx - jitter.r, cy + jitter.y);
-      ctx.fillStyle = "#19E6FF";
-      ctx.fillText("NightShift", cx + jitter.c, cy - jitter.y);
-      ctx.globalAlpha = fade;
-      ctx.fillStyle = "#ECEEF1";
-      ctx.fillText("NightShift", cx, cy);
-
-      // typed lines: characters appear across phase 2
-      const typed = Math.max(0, (t - P1) / (P2 - P1 - 100));
-      ctx.font = `500 ${Math.min(18, W / 34)}px ${mono}, monospace`;
-      lines().forEach((line, i) => {
-        const shown = Math.floor(Math.min(1, typed * 1.4 - i * 0.25) * line.length);
-        if (shown <= 0) return;
-        ctx.fillStyle = i === 0 ? "#19E6FF" : i === 2 ? "#4BFF6B" : "#C8CCD2";
-        ctx.fillText(line.slice(0, shown) + (shown < line.length ? "▌" : ""), cx, cy + size * 0.75 + i * 28);
-      });
-      ctx.globalAlpha = 1;
-    };
 
     const frame = (now: number) => {
       if (done) return;
@@ -192,12 +144,10 @@ export default function GlitchIntro() {
           // phase 2: fewer bars every redraw
           const n = t < P1 ? N : Math.round(N * (1 - (t - P1) / (P2 - P1)) * 0.85 + 8);
           bars = makeBars(n, W, H);
-          jitter = { r: rand(2, 4), c: rand(2, 4), y: rand(-1.5, 1.5) };
         }
         ctx.fillStyle = BACKDROP; // dark backdrop throughout: no bright full-screen flash
         ctx.fillRect(0, 0, W, H);
         drawBars(bars);
-        if (t >= P1) drawLogo(t, 1);
       } else {
         // phase 3: the dashboard is visible; the last bars slide off sideways
         if (!slide) slide = bars;
@@ -208,7 +158,6 @@ export default function GlitchIntro() {
         ctx.fillRect(0, 0, W, H);
         ctx.globalAlpha = 1;
         drawBars(slide, eased * W * 1.3);
-        if (p < 0.4) drawLogo(t, 1 - p / 0.4);
       }
       raf = requestAnimationFrame(frame);
     };

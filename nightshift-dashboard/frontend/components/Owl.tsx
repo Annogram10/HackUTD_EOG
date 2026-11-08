@@ -4,7 +4,20 @@
 // calm and happy when all is normal, worried when something needs checking, freaked out when it is danger.
 // It is grey on purpose: the expression carries the message, so it never relies on colour alone.
 
+import { useId } from "react";
 import type { RiskLevel } from "@/lib/types";
+
+// Red alert: small extra eyes open around the face (forehead, above the brows, both cheeks). Sizes are 30-60% of
+// the main eye (r 8). They mount when the level turns red, so the CSS sequence in globals.css plays once per entry:
+// out-of-sync flickers with small sideways glitches, all open together ~300 ms, then fade out. Reduced motion: hidden.
+const EXTRA_EYES = [
+  { cx: 24, cy: 6.5, r: 3.6, v: "a" }, // forehead
+  { cx: 9.5, cy: 9, r: 2.4, v: "b" }, // above the left brow
+  { cx: 38.5, cy: 9, r: 2.6, v: "c" }, // above the right brow
+  { cx: 8.5, cy: 30, r: 3.2, v: "c" }, // left cheek
+  { cx: 39.5, cy: 30, r: 2.8, v: "a" }, // right cheek
+  { cx: 24, cy: 41.5, r: 2.4, v: "b" }, // low on the belly
+];
 
 const LABEL: Record<RiskLevel, string> = {
   green: "Owl is happy: all normal",
@@ -13,6 +26,7 @@ const LABEL: Record<RiskLevel, string> = {
 };
 
 export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: number }) {
+  const glow = `owl-glow-${useId().replace(/:/g, "")}`;
   const red = level === "red";
   const amber = level === "amber";
   return (
@@ -25,6 +39,15 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       className={red ? "owl-shake" : ""}
     >
       <title>{LABEL[level]}</title>
+      <defs>
+        <filter id={glow} x="-100%" y="-100%" width="300%" height="300%">
+          <feGaussianBlur stdDeviation="1.1" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
 
       {/* ear tufts: flat when calm, standing straight up when freaked out */}
       <path d={red ? "M10 14 L8 2 L19 10 Z" : "M10 14 L8 6 L18 10 Z"} fill="#4d535c" />
@@ -74,11 +97,11 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       )}
       {red && (
         <>
-          <circle cx="16.5" cy="20" r="8" fill="#dfe2e6" />
-          <circle cx="31.5" cy="20" r="8" fill="#dfe2e6" />
-          {/* tiny pupils in huge eyes */}
-          <circle cx="16.5" cy="20" r="1.8" fill="#0e0f11" />
-          <circle cx="31.5" cy="20" r="1.8" fill="#0e0f11" />
+          {/* huge glowing red eyes with pinpoint pupils: the steady glare */}
+          <circle cx="16.5" cy="20" r="8" fill="#e5484d" filter={`url(#${glow})`} />
+          <circle cx="31.5" cy="20" r="8" fill="#e5484d" filter={`url(#${glow})`} />
+          <circle cx="16.5" cy="20" r="1.1" fill="#0e0f11" />
+          <circle cx="31.5" cy="20" r="1.1" fill="#0e0f11" />
           <path d="M9 14.5 L21 9.5" stroke="#dfe2e6" strokeWidth="2" strokeLinecap="round" />
           <path d="M39 14.5 L27 9.5" stroke="#dfe2e6" strokeWidth="2" strokeLinecap="round" />
         </>
@@ -92,6 +115,18 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
         </>
       ) : (
         <path d={amber ? "M21.5 26.5 L26.5 26.5 L24 31 Z" : "M21.5 26 L26.5 26 L24 31 Z"} fill="#a9afb8" />
+      )}
+
+      {red && (
+        <g className="owl-extra-eyes" aria-hidden>
+          {EXTRA_EYES.map((e, i) => (
+            <g key={i} className={`owl-eye owl-eye-${e.v}`} style={{ animationDelay: `${(i % 3) * 25}ms` }}>
+              <circle cx={e.cx} cy={e.cy} r={e.r} fill="#0e0f11" />
+              <circle cx={e.cx} cy={e.cy} r={e.r * 0.8} fill="#e5484d" filter={`url(#${glow})`} />
+              <circle cx={e.cx} cy={e.cy} r={Math.max(0.5, e.r * 0.22)} fill="#0e0f11" />
+            </g>
+          ))}
+        </g>
       )}
 
       {/* feet */}

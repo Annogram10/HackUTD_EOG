@@ -4,7 +4,6 @@ import { Suspense } from "react";
 import Nav from "@/components/Nav";
 import AppProvider from "@/components/AppProvider";
 import GlitchIntro from "@/components/GlitchIntro";
-import OwlCorner from "@/components/OwlCorner";
 import TopBar from "@/components/TopBar";
 import "./globals.css";
 
@@ -25,8 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Nav />
           </Suspense>
           <TopBar />
-          <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8 pb-48">{children}</main>
-          <OwlCorner />
+          <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8 pb-16">{children}</main>
           <GlitchIntro />
         </AppProvider>
       </body>

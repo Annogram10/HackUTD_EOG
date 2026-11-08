@@ -89,6 +89,48 @@ html[data-alarm="red"] body::after {
   75% { transform: rotate(9deg); }
 }
 @media (prefers-reduced-motion: reduce) { .owl-shake { animation: none; } }
+
+/* Red alert extra eyes: ~1.5 s, once. Flickers (60-120 ms) with 1-3 px sideways glitches, out of sync per variant,
+   then all open together at 53-73% (~300 ms), then fade out over ~300 ms and stay hidden. */
+.owl-eye { opacity: 0; animation: 1.5s step-end 1 forwards; }
+.owl-eye-a { animation-name: owl-eye-a; }
+.owl-eye-b { animation-name: owl-eye-b; }
+.owl-eye-c { animation-name: owl-eye-c; }
+@keyframes owl-eye-a {
+  0% { opacity: 0; transform: translateX(0); }
+  6% { opacity: 1; transform: translateX(2px); }
+  12% { opacity: 0; }
+  22% { opacity: 1; transform: translateX(-1.5px); }
+  28% { opacity: 0; }
+  40% { opacity: 1; transform: translateX(2.5px); }
+  46% { opacity: 0; transform: translateX(0); }
+  53% { opacity: 1; transform: translateX(0); }
+  73% { opacity: 1; animation-timing-function: linear; }
+  93%, 100% { opacity: 0; transform: translateX(0); }
+}
+@keyframes owl-eye-b {
+  0% { opacity: 0; transform: translateX(0); }
+  10% { opacity: 1; transform: translateX(-2px); }
+  17% { opacity: 0; }
+  31% { opacity: 1; transform: translateX(1px); }
+  37% { opacity: 0; transform: translateX(0); }
+  53% { opacity: 1; transform: translateX(0); }
+  73% { opacity: 1; animation-timing-function: linear; }
+  93%, 100% { opacity: 0; transform: translateX(0); }
+}
+@keyframes owl-eye-c {
+  0% { opacity: 0; transform: translateX(0); }
+  3% { opacity: 1; transform: translateX(1.5px); }
+  9% { opacity: 0; }
+  18% { opacity: 1; transform: translateX(-3px); }
+  25% { opacity: 0; }
+  34% { opacity: 1; transform: translateX(2px); }
+  39% { opacity: 0; transform: translateX(0); }
+  53% { opacity: 1; transform: translateX(0); }
+  73% { opacity: 1; animation-timing-function: linear; }
+  93%, 100% { opacity: 0; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) { .owl-extra-eyes { display: none; } }
 .alarm-flash { animation: alarm-flash 0.9s ease-in-out 3; }
 
 /* header: one thin line, red on alarm */
