@@ -59,7 +59,7 @@ export default function Report() {
           <h1 className="text-3xl font-bold">Handover</h1>
           <div className="no-print flex gap-3">
             <a href={eventsUrl(dataset)} className="rounded-lg border border-zinc-700 px-5 py-2.5 text-base font-semibold text-zinc-200 hover:bg-zinc-800">Export events.json</a>
-            <button onClick={() => window.print()} className="bg-sky-500 px-5 py-2.5 text-base font-semibold text-zinc-100 hover:bg-sky-400">Print</button>
+            <button onClick={() => window.print()} className="btn-primary px-5 py-2.5 text-base font-semibold">Print</button>
           </div>
         </div>
         <p className="rounded-xl border border-dashed border-zinc-800 p-6 text-lg text-zinc-400">
@@ -85,7 +85,7 @@ export default function Report() {
               Export events.json
             </a>
           )}
-          <button onClick={() => window.print()} className="bg-sky-500 px-5 py-2.5 text-base font-semibold text-zinc-100 hover:bg-sky-400">
+          <button onClick={() => window.print()} className="btn-primary px-5 py-2.5 text-base font-semibold">
             Print
           </button>
         </div>

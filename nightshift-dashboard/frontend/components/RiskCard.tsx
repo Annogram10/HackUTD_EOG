@@ -20,7 +20,7 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
   // No danger check yet (first load, or the check failed): still show the time bar so playback never disappears.
   if (!risk)
     return (
-      <section className="border-2 border-zinc-700 p-5">
+      <section className="brackets border-2 border-zinc-700 p-5">
         <CardSkeleton lines={2} />
         {footer && <p className="mt-2 text-base text-zinc-300">{footer}</p>}
         {children && <div className="mt-4 border-t border-zinc-700/70 pt-4">{children}</div>}
@@ -33,7 +33,7 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
   const others = risk.reasons.filter((r) => r.level !== risk.level);
 
   return (
-    <section key={risk.alarm_id ?? risk.level} className={`border-2 p-5 ${look.box} ${risk.alarm && !playing ? "alarm-flash" : ""}`}>
+    <section id="danger-card" key={risk.alarm_id ?? risk.level} className={`brackets ${risk.level === "red" ? "brackets-red" : ""} border-2 p-5 ${look.box} ${risk.alarm && !playing ? "alarm-flash" : ""}`}>
       <div className="flex flex-wrap items-center gap-3">
         <span className={`inline-flex items-center gap-2 px-3 py-1 text-lg font-bold uppercase ${look.pill}`}>
           {risk.level !== "green" && <WarningIcon />}

@@ -162,7 +162,10 @@ export default function GlitchIntro() {
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
+    // never leave the overlay up: if frames stall (background tab, slow device), remove it on a timer anyway
+    const failsafe = setTimeout(finish, END + 500);
     return () => {
+      clearTimeout(failsafe);
       if (!done) prev.current = before; // interrupted (dev double-run): let the next run play it
       finish();
     };

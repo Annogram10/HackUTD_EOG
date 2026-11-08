@@ -156,3 +156,29 @@ html[data-alarm="red"] body::after {
   .city-flow, .city-danger, .city-sign, .fac-sign { animation: none; }
   .city-flow { display: none; }
 }
+
+/* ---------- Avon Grid panels and controls ---------- */
+/* Solid panels, 1 px borders, a small chamfered top-right corner (the cut edge gets its own border line). */
+:where(section, article, details)[class*="border"] {
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  background-image: linear-gradient(225deg, transparent 6.6px, var(--border) 6.6px, var(--border) 8px, transparent 8px);
+  background-repeat: no-repeat;
+  background-position: top right;
+  background-size: 12px 12px;
+}
+/* Corner brackets on key panels (danger card, countdown, map). Colour follows --bracket. */
+.brackets { position: relative; --bracket: var(--label); }
+.brackets::before, .brackets::after {
+  content: ""; position: absolute; width: 14px; height: 14px; pointer-events: none; z-index: 5;
+}
+.brackets::before { left: 3px; top: 3px; border-left: 2px solid var(--bracket); border-top: 2px solid var(--bracket); }
+.brackets::after { right: 3px; bottom: 3px; border-right: 2px solid var(--bracket); border-bottom: 2px solid var(--bracket); }
+.brackets-red { --bracket: var(--danger); }
+
+/* Buttons: primary salmon with dark text and a chamfer; secondary stays outlined. No hover animations. */
+.btn-primary {
+  background: var(--brand); color: #15111a; border: 0;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+.btn-primary:hover { background: #c97b7b; }
+.btn-primary:disabled { opacity: 0.5; }

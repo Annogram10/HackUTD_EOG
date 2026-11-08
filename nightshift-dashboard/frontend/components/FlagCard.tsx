@@ -137,7 +137,7 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
             {flag.status === "pending" ? (
               <>
                 <button onClick={() => decide("confirm")} disabled={deciding}
-                  className="bg-sky-500 px-4 py-2 text-base font-semibold text-zinc-100 hover:bg-sky-400 disabled:opacity-50">
+                  className="btn-primary px-4 py-2 text-base font-semibold disabled:opacity-50">
                   Confirm issue
                 </button>
                 <button onClick={() => decide("prioritize")} disabled={deciding}
@@ -192,7 +192,7 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
               <button
                 onClick={save}
                 disabled={saving || !draft.trim()}
-                className="bg-sky-500 px-4 py-2 text-base font-semibold text-zinc-100 hover:bg-sky-400 disabled:opacity-50"
+                className="btn-primary px-4 py-2 text-base font-semibold disabled:opacity-50"
               >
                 Save
               </button>

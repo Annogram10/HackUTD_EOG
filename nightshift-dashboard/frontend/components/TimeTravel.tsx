@@ -117,7 +117,7 @@ export default function TimeTravel({ bare = false }: { bare?: boolean }) {
     <section className={bare ? "" : "rounded-xl border border-zinc-800 bg-zinc-900 p-4"}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <button onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}
-          className="flex items-center gap-2 bg-sky-500 px-5 py-3 text-lg font-semibold text-zinc-100 hover:bg-sky-400">
+          className="flex items-center gap-2 btn-primary px-5 py-3 text-lg font-semibold">
           {playing ? <PauseIcon /> : <PlayIcon />}
           {playing ? "Pause" : "Play"}
         </button>

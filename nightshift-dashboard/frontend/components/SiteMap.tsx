@@ -59,11 +59,15 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
         <path d={city.river} fill="none" stroke="#0b1622" strokeWidth="3.4" strokeLinecap="round" />
         <path d={city.river} fill="none" stroke="#19E6FF" strokeOpacity="0.07" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         {/* minor streets: thin and dark; main avenues: wider, faint glow */}
-        <g stroke="#19E6FF" strokeOpacity="0.08" strokeWidth="1.5" vectorEffect="non-scaling-stroke">
-          {city.streets.filter((t) => !t.main).map((t, i) => <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} />)}
+        <g stroke="#19E6FF" strokeOpacity="0.08" strokeWidth="1.5">
+          {city.streets.filter((t) => !t.main).map((t, i) => <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} vectorEffect="non-scaling-stroke" />)}
         </g>
-        <g stroke="#19E6FF" strokeOpacity="0.2" strokeWidth="5" vectorEffect="non-scaling-stroke" filter={`url(#glow-${system.id})`} strokeLinecap="round">
-          {city.streets.filter((t) => t.main).map((t, i) => <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} />)}
+        {/* main avenues: a faint wide halo plus a 5 px line (no SVG filter: it breaks the fixed pixel widths) */}
+        <g stroke="#19E6FF" strokeOpacity="0.06" strokeWidth="11" strokeLinecap="round">
+          {city.streets.filter((t) => t.main).map((t, i) => <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} vectorEffect="non-scaling-stroke" />)}
+        </g>
+        <g stroke="#19E6FF" strokeOpacity="0.2" strokeWidth="5" strokeLinecap="round">
+          {city.streets.filter((t) => t.main).map((t, i) => <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} vectorEffect="non-scaling-stroke" />)}
         </g>
         {/* blocks; the ones near a facility in danger glow red */}
         {city.blocks.map((b, i) => {
@@ -79,7 +83,7 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
         {city.lights.map((w, i) => <circle key={i} cx={w.x} cy={w.y} r="0.12" fill={w.color} opacity={w.opacity} />)}
       </>
     );
-  }, [city, dangerKey, pos, system.id]);
+  }, [city, dangerKey, pos]);
 
   // keep at least part of the map on screen
   const clampPan = (v: View): View => {
@@ -170,7 +174,7 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
       onClickCapture={(e) => {
         if (dragged.current) { e.preventDefault(); e.stopPropagation(); } // a drag is not a click
       }}
-      className="relative aspect-[16/9] w-full cursor-grab touch-none select-none overflow-hidden border border-zinc-800 bg-[#120e16] active:cursor-grabbing"
+      className="brackets relative aspect-[16/9] w-full cursor-grab touch-none select-none overflow-hidden border border-zinc-800 bg-[#120e16] active:cursor-grabbing"
       aria-label={`Map of ${system.id}. Drag to pan, scroll or pinch to zoom.`}
     >
       {/* the city, pipelines and route: one SVG that pans and zooms */}
@@ -191,8 +195,8 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
             const leak = f.status === "leak";
             return (
               <g key={f.id}>
-                <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? "#e8a33d" : "#19E6FF"} strokeOpacity="0.3"
-                  strokeWidth="10" vectorEffect="non-scaling-stroke" strokeLinecap="round" filter={`url(#glow-${system.id})`} />
+                <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? "#e8a33d" : "#19E6FF"} strokeOpacity="0.22"
+                  strokeWidth="10" vectorEffect="non-scaling-stroke" strokeLinecap="round" />
                 <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? "#e8a33d" : "#19E6FF"} strokeWidth="3"
                   strokeDasharray={leak ? "10 6" : undefined} vectorEffect="non-scaling-stroke" strokeLinecap="round" opacity="0.9" />
                 {!failed(f) && (
