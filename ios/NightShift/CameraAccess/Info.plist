@@ -58,15 +58,13 @@
 		<string>_bonjour._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>This app needs camera access to stream from your phone's camera as a mock device feed.</string>
+	<string>Used only in test builds, where the phone's camera stands in for the glasses camera.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>This lets your phone find and connect to your glasses over Wi-Fi, and buzz the NightShift alarm buzzer on your local network.</string>
+	<string>NightShift connects to your glasses over Wi-Fi and sends alarm nudges to the Pico buzzer on your local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>This app needs microphone access to record sound from your glasses' microphone alongside video.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>This app needs access to save photos captured from your glasses.</string>
+	<string>NightShift listens through your glasses' microphone (or the phone's) for voice commands like "what's the issue" and "acknowledge".</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>NightShift recognizes spoken commands like "next" and "confirm" on this iPhone. Audio is not sent to a server.</string>
+	<string>NightShift recognizes spoken commands like "what's the issue", "acknowledge" and "repeat" on this iPhone. Audio is not sent to a server.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -76,7 +74,6 @@
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>processing</string>
 		<string>bluetooth-central</string>
 		<string>audio</string>
 		<string>bluetooth-peripheral</string>
