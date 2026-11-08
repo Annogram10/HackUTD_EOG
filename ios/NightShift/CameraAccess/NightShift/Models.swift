@@ -91,7 +91,7 @@ struct Handoff: Codable, Hashable, Sendable {
 }
 
 /// POST /vision/check response. Only `flag`, `type`, `available` and `description` are
-/// used; confidence is ignored.
+/// used; `confidence` and `httpStatus` are kept for display (Check now) only.
 struct VisionResult: Codable, Hashable, Sendable {
   /// The only types that count as a camera flag (exact, lowercase).
   static let flagTypes: Set<String> = ["leak", "smoke", "damage"]
@@ -101,16 +101,21 @@ struct VisionResult: Codable, Hashable, Sendable {
   /// nil (missing) is treated as available.
   let available: Bool?
   let description: String?
+  /// Display only; never used to decide anything.
+  let confidence: Double?
+  /// HTTP status of the response (set by RealAPI, not decoded).
+  var httpStatus: Int?
 
   private enum CodingKeys: String, CodingKey {
-    case flag, type, available, description
+    case flag, type, available, description, confidence
   }
 
-  init(flag: Bool, type: String?, available: Bool? = true, description: String? = nil) {
+  init(flag: Bool, type: String?, available: Bool? = true, description: String? = nil, confidence: Double? = nil) {
     self.flag = flag
     self.type = type
     self.available = available
     self.description = description
+    self.confidence = confidence
   }
 
   init(from decoder: Decoder) throws {
@@ -119,6 +124,7 @@ struct VisionResult: Codable, Hashable, Sendable {
     type = c.lenientString(.type)
     available = try? c.decodeIfPresent(Bool.self, forKey: .available)
     description = c.lenientString(.description).flatMap { $0.isEmpty ? nil : $0 }
+    confidence = c.lenientString(.confidence).flatMap(Double.init)
   }
 
   /// The flag type if this is a real flag: flag == true, available, and type is

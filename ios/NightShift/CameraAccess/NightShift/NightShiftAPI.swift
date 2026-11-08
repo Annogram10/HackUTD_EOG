@@ -135,7 +135,10 @@ struct RealAPI: NightShiftAPI {
     request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
     request.httpBody = jpeg
-    return try JSONCoding.decoder.decode(VisionResult.self, from: try await send(request, path: path))
+    let (data, status) = try await sendWithStatus(request, path: path)
+    var result = try JSONCoding.decoder.decode(VisionResult.self, from: data)
+    result.httpStatus = status
+    return result
   }
 
   func submitReport(_ report: ShiftReport) async throws {
@@ -155,8 +158,13 @@ struct RealAPI: NightShiftAPI {
     return request
   }
 
-  /// Sends the request and records the outcome in `BackendStatus`.
   private func send(_ request: URLRequest, path: String) async throws -> Data {
+    try await sendWithStatus(request, path: path).data
+  }
+
+  /// Sends the request and records the outcome in `BackendStatus`. Returns the body
+  /// and HTTP status of a 2xx response.
+  private func sendWithStatus(_ request: URLRequest, path: String) async throws -> (data: Data, status: Int) {
     var request = request
     // Stops ngrok's browser-warning HTML page from replacing the JSON response.
     request.setValue("true", forHTTPHeaderField: "ngrok-skip-browser-warning")
@@ -171,7 +179,7 @@ struct RealAPI: NightShiftAPI {
         throw NightShiftAPIError.badStatus(http.statusCode, path: path)
       }
       await BackendStatus.shared.record(nil)
-      return data
+      return (data, (response as? HTTPURLResponse)?.statusCode ?? 200)
     } catch {
       await BackendStatus.shared.record(error)
       throw error

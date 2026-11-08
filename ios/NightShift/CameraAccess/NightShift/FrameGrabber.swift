@@ -92,6 +92,35 @@ final class FrameGrabber {
     }
   }
 
+  /// Raw result of a "Check now" request, for display.
+  struct CheckReport {
+    let at: Date
+    /// "HTTP 200", or the error / reason nothing was sent.
+    let status: String
+    let result: VisionResult?
+    /// True if a pending camera flag was created.
+    let createdFlag: Bool
+  }
+
+  /// Result of the last "Check now".
+  private(set) var lastManualCheck: CheckReport?
+  private(set) var isCheckingNow = false
+
+  /// Sends the current frame right away, ignoring the interval. Same scaling, shift,
+  /// facility and one-request-at-a-time rules as the timer.
+  func checkNow() async {
+    func blocked(_ reason: String) {
+      lastManualCheck = CheckReport(at: Date(), status: reason, result: nil, createdFlag: false)
+    }
+    guard isEnabled() else { return blocked("Not sent: start a shift first.") }
+    guard !isRequestPending else { return blocked("Not sent: a check is already in progress.") }
+    guard let facility = facility() else { return blocked("Not sent: pick a facility first.") }
+    guard let frame = latestFrame else { return blocked("Not sent: start the camera first.") }
+    isCheckingNow = true
+    defer { isCheckingNow = false }
+    lastManualCheck = await performCheck(frame: frame, facility: facility)
+  }
+
   private func tick() {
     guard isEnabled(), !isRequestPending, let frame = latestFrame, frame !== lastSentFrame else { return }
     guard let facility = facility() else {
@@ -99,32 +128,42 @@ final class FrameGrabber {
       lastCheck = (.skipped, Date())
       return
     }
+    Task { @MainActor [weak self] in
+      _ = await self?.performCheck(frame: frame, facility: facility)
+    }
+  }
 
+  /// Scales, encodes and sends one frame; creates a flag only for a valid flag
+  /// response. Callers have already checked that no request is pending.
+  private func performCheck(frame: UIImage, facility: String) async -> CheckReport {
     lastSentFrame = frame
     isRequestPending = true
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      defer { self.isRequestPending = false }
-      // Scaling and encoding happen off the main actor so the preview never stutters.
-      let jpeg = await Task.detached(priority: .utility) {
-        Self.scaledJPEG(frame)
-      }.value
-      guard let jpeg else {
-        self.lastCheck = (.skipped, Date())
-        return
-      }
-      self.checksSent += 1
-      guard let result = try? await self.api.checkVision(jpeg: jpeg, facility: facility) else {
-        self.lastCheck = (.skipped, Date())
-        return
-      }
-      guard let type = result.flaggedType else {
-        // A clean "no flag" is ok; flag without a valid type, or unavailable, is skipped.
-        self.lastCheck = (result.flag || result.available == false ? .skipped : .ok, Date())
-        return
-      }
-      self.lastCheck = (.flag, Date())
-      await self.onFlag?(type, result.description, facility, jpeg)
+    defer { isRequestPending = false }
+
+    // Scaling and encoding happen off the main actor so the preview never stutters.
+    let jpeg = await Task.detached(priority: .utility) {
+      Self.scaledJPEG(frame)
+    }.value
+    guard let jpeg else {
+      lastCheck = (.skipped, Date())
+      return CheckReport(at: Date(), status: "Not sent: couldn't encode the frame.", result: nil, createdFlag: false)
     }
+    checksSent += 1
+    let result: VisionResult
+    do {
+      result = try await api.checkVision(jpeg: jpeg, facility: facility)
+    } catch {
+      lastCheck = (.skipped, Date())
+      return CheckReport(at: Date(), status: NightShiftAPIError.describe(error), result: nil, createdFlag: false)
+    }
+    let status = result.httpStatus.map { "HTTP \($0)" } ?? "OK"
+    guard let type = result.flaggedType else {
+      // A clean "no flag" is ok; flag without a valid type, or unavailable, is skipped.
+      lastCheck = (result.flag || result.available == false ? .skipped : .ok, Date())
+      return CheckReport(at: Date(), status: status, result: result, createdFlag: false)
+    }
+    lastCheck = (.flag, Date())
+    await onFlag?(type, result.description, facility, jpeg)
+    return CheckReport(at: Date(), status: status, result: result, createdFlag: true)
   }
 }

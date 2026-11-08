@@ -182,7 +182,39 @@ struct ShiftView: View {
       Label(visionStatusText, systemImage: "eye")
         .font(.caption)
         .foregroundStyle(.secondary)
+      Button("Check now", systemImage: "camera.viewfinder") {
+        Task { await controller.vision.checkNow() }
+      }
+      .disabled(controller.vision.isCheckingNow)
+      if controller.vision.isCheckingNow {
+        Text("Checking…")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      } else if let report = controller.vision.lastManualCheck {
+        checkReportBox(report)
+      }
     }
+  }
+
+  /// Raw outcome of the last Check now.
+  private func checkReportBox(_ report: FrameGrabber.CheckReport) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text("\(report.status) · \(report.at.formatted(date: .omitted, time: .standard))")
+        .bold()
+      if let result = report.result {
+        Text("flag: \(String(result.flag))")
+        Text("type: \(result.type ?? "nil")")
+        Text("available: \(result.available.map { String($0) } ?? "nil")")
+        Text("description: \(result.description ?? "nil")")
+        Text("confidence: \(result.confidence.map { String($0) } ?? "nil") (display only)")
+      }
+      Text(report.createdFlag ? "Created a pending camera flag." : "No flag created.")
+        .foregroundStyle(report.createdFlag ? .orange : .secondary)
+    }
+    .font(.caption.monospaced())
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(8)
+    .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
   }
 
   private var voiceSection: some View {
