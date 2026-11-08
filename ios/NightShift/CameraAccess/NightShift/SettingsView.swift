@@ -25,6 +25,8 @@ struct SettingsView: View {
   @AppStorage(Config.Keys.supervisorPhone) private var supervisorPhone = ""
   @AppStorage(Config.Keys.picoAddress) private var picoAddress = ""
   @State private var picoText = ""
+  @State private var testingLevel: Int?
+  @State private var testResult: PicoStatus.Result?
   @State private var picoError: String?
   @State private var apiKeyText = ""
   @State private var apiKeySaved: String?
@@ -141,13 +143,35 @@ struct SettingsView: View {
         .buttonStyle(.borderless)
       HStack(spacing: 10) {
         ForEach(1...3, id: \.self) { level in
-          FlatButton(title: "Level \(level)", accessibilityLabel: "Test nudge level \(level)") {
-            PicoNudge.wake(level: level)
+          FlatButton(title: testingLevel == level ? "Testing…" : "Level \(level)", accessibilityLabel: "Test nudge level \(level)") {
+            testingLevel = level
+            Task {
+              testResult = await PicoNudge.test(level: level)
+              testingLevel = nil
+            }
           }
+          .disabled(testingLevel != nil)
         }
       }
       .buttonStyle(.borderless)
-      Text("Test nudge sends GET http://<address>/wake?level=N and ignores failures. Alarms send level 2, then level 3 every 15 seconds.")
+      if let testResult {
+        Label(
+          "Test level \(testResult.level): \(testResult.ok ? "ok" : "failed") (\(testResult.detail))",
+          systemImage: testResult.ok ? "checkmark.circle.fill" : "xmark.octagon.fill"
+        )
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(testResult.ok ? NS.green : NS.redText)
+      }
+      if let last = PicoStatus.shared.last {
+        Text("Last nudge: \(last.ok ? "ok" : "failed") \(last.at.formatted(date: .omitted, time: .shortened)) · level \(last.level) · \(last.detail)")
+          .font(.subheadline.monospacedDigit())
+          .foregroundStyle(last.ok ? NS.textBody : NS.redText)
+      } else {
+        Text("Last nudge: none yet")
+          .font(.subheadline)
+          .foregroundStyle(NS.textSecondary)
+      }
+      Text("Alarms nudge level 1 at the start, 2 after 60 s and 3 after 120 s until acknowledged. A failed nudge never delays the alarm.")
         .font(.subheadline)
         .foregroundStyle(NS.textSecondary)
     }
