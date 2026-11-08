@@ -31,7 +31,9 @@ clock, else live. Responses for the phone carry mode ("live"|"replay") and as_of
 """
 
 import base64
+import hmac
 import json
+import logging
 import os
 import sqlite3
 import uuid
@@ -66,7 +68,27 @@ TYPE_WEIGHT = {"smoke": 30, "alarm": 25, "leak": 20, "damage": 10}
 SENSOR_SCORE = {"high": 60, "medium": 40, "low": 20}  # by triage.severity(), the one scale everything uses
 
 app = FastAPI(title="NightShift API")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# Writes need the shared secret when NIGHTSHIFT_KEY is set (the ngrok URL is public). Reads stay open.
+API_KEY = os.environ.get("NIGHTSHIFT_KEY") or None
+WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()]
+if not API_KEY:
+    logging.getLogger("uvicorn.error").warning(
+        "\n" + "!" * 72 + "\n  NIGHTSHIFT_KEY is not set: anyone who can reach this server can write (dev mode).\n"
+        "  Set NIGHTSHIFT_KEY=<secret> and send it as the X-API-Key header from the dashboard and the phone.\n" + "!" * 72)
+
+
+@app.middleware("http")
+async def require_key(request: Request, call_next):
+    if API_KEY and request.method in WRITE_METHODS:
+        if not hmac.compare_digest(request.headers.get("x-api-key", ""), API_KEY):
+            return JSONResponse({"detail": "missing or wrong X-API-Key"}, status_code=401)
+    return await call_next(request)
+
+
+# Added after the key check, so it wraps it: a 401 still carries CORS headers and the browser can read it.
+app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 app.mount("/photos", StaticFiles(directory=PHOTOS), name="photos")
 
 

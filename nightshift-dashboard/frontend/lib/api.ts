@@ -6,6 +6,10 @@ import type {
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+// Writes carry the shared secret when the backend runs with NIGHTSHIFT_KEY (set the same value here).
+const API_KEY = process.env.NEXT_PUBLIC_NIGHTSHIFT_KEY;
+const writeHeaders = (h: Record<string, string> = {}): Record<string, string> => (API_KEY ? { ...h, "X-API-Key": API_KEY } : h);
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`${path}: ${res.status}`);
@@ -31,7 +35,7 @@ export const getEvidence = (dataset: string, now?: number, ai = true) =>
 // Time travel for the phone and glasses too: they see this moment until it is cleared (null = latest data).
 export async function setClock(dataset: string, now: number | null): Promise<void> {
   try {
-    await fetch(`${API_URL}/clock`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataset, now }) });
+    await fetch(`${API_URL}/clock`, { method: "POST", headers: writeHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ dataset, now }) });
   } catch {}
 }
 export const getShifts = (dataset: string) => get<Shift[]>(`/shifts${q({ dataset })}`);
@@ -45,14 +49,14 @@ export const getSeries = (dataset: string, asset: string, metric: string, hours:
 export const eventsUrl = (dataset: string) => `${API_URL}/events.json${q({ dataset })}`;
 
 export async function rerunAgent(dataset: string): Promise<AgentRun> {
-  const res = await fetch(`${API_URL}/agent/run${q({ dataset })}`, { method: "POST" });
+  const res = await fetch(`${API_URL}/agent/run${q({ dataset })}`, { method: "POST", headers: writeHeaders() });
   return (await res.json()) as AgentRun;
 }
 
 // Confirm, dismiss or reopen a flag. Returns the updated flag, or null if it failed.
 export async function setFlagStatus(flagId: string, action: "confirm" | "dismiss" | "prioritize" | "reopen"): Promise<Flag | null> {
   try {
-    const res = await fetch(`${API_URL}/flag/${flagId}/${action}`, { method: "POST" });
+    const res = await fetch(`${API_URL}/flag/${flagId}/${action}`, { method: "POST", headers: writeHeaders() });
     if (!res.ok) throw new Error(`${res.status}`);
     return (await res.json()) as Flag;
   } catch {
@@ -63,7 +67,7 @@ export async function setFlagStatus(flagId: string, action: "confirm" | "dismiss
 // Replace a flag's photo with a new JPEG, or clear it. Return the updated flag, or null if it failed.
 export async function replaceFlagPhoto(flagId: string, file: Blob): Promise<Flag | null> {
   try {
-    const res = await fetch(`${API_URL}/flag/${flagId}/photo`, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: file });
+    const res = await fetch(`${API_URL}/flag/${flagId}/photo`, { method: "POST", headers: writeHeaders({ "Content-Type": "image/jpeg" }), body: file });
     if (!res.ok) throw new Error(`${res.status}`);
     return (await res.json()) as Flag;
   } catch {
@@ -73,7 +77,7 @@ export async function replaceFlagPhoto(flagId: string, file: Blob): Promise<Flag
 
 export async function clearFlagPhoto(flagId: string): Promise<Flag | null> {
   try {
-    const res = await fetch(`${API_URL}/flag/${flagId}/photo`, { method: "DELETE" });
+    const res = await fetch(`${API_URL}/flag/${flagId}/photo`, { method: "DELETE", headers: writeHeaders() });
     if (!res.ok) throw new Error(`${res.status}`);
     return (await res.json()) as Flag;
   } catch {
@@ -86,7 +90,7 @@ export async function addControlNote(flagId: string, note: string): Promise<Flag
   try {
     const res = await fetch(`${API_URL}/flag/${flagId}/note`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: writeHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ note, author: "control" }),
     });
     if (!res.ok) throw new Error(`${res.status}`);
