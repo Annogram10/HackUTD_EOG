@@ -1,0 +1,35 @@
+# NightShift iOS app
+
+Hands-free assistant for oil and gas night-shift operators. Ray-Ban Meta Gen 2 glasses stream their camera to this iPhone app; the app speaks alerts through the glasses, takes voice commands from the glasses mic, flags possible leaks/smoke/damage, stores everything offline, and uploads a shift report. Started from Meta's CameraAccess sample (Meta Wearables DAT SDK 1.0.1). Hackathon project (HackUTD, EOG "Beat the Shutdown" + NVIDIA Nemotron track).
+
+## Division of labor (important)
+The BACKEND (separate Python server in the repo root) does ALL calculation: detecting failures, countdowns, cost optimization, ranking, writing spoken text (Nemotron agent). The APP only: captures frames, speaks the backend's text, listens for voice commands, stores flags/photos/notes offline, uploads. Never add ranking, sorting, cost, countdown or text-rewriting logic to the app. Show and speak alerts in the exact order the backend returns them, and speak spoken_text exactly as received.
+
+## HARD RULES
+- Free Apple account. NEVER add Wi-Fi Info / Hotspot Configuration capabilities or entitlements.
+- Camera link uses Bluetooth Classic: keep UISupportedExternalAccessoryProtocols = com.meta.ar.wearable, the external-accessory background mode, and all background modes in Info.plist.
+- Do not touch CameraAccess.entitlements, the MWDAT keys (MetaAppID, AppLinkURLScheme, TeamID, ClientToken) or the URL scheme.
+- Bundle ID is com.kavin.nightshift (tied to the developer's personal team).
+- Backend is reached over an https Cloudflare tunnel, so no ATS exceptions. Do not add NSAllowsArbitraryLoads or NSAllowsLocalNetworking.
+- No secrets or API keys in any file.
+- Build after every change, fix errors, one git commit per task. Do not change dependencies.
+- You cannot test on the glasses; give a short hand-test checklist after each task.
+
+## Layout
+All NightShift code is in CameraAccess/NightShift/ (Config, Models, NightShiftAPI, NightShiftController, ShiftView, FlagRow, VoiceCommand, VoiceCommandListener, FrameGrabber, ShiftStore, UploadQueue, DataCache, NetworkMonitor, UploadStatusView, MockData/). Speaker.swift does chime + text-to-speech. CameraView.swift has the camera screen, the Test voice button and the clipboard button that opens ShiftView.
+
+## Backend contract
+- GET /alerts -> [{id, facility, facility_name, system, type, severity (number), severity_word, hours_to_shutdown, tripped, best_plan, cost, spoken_text}] already in priority order
+- GET /facility/{id} -> {id, name, system, status, readings:[{label,value,unit,limit}], alerts, spoken_text}
+- GET /handoff -> use only text and spoken_text
+- POST /vision/check?facility=<id> with raw JPEG (Content-Type image/jpeg) -> {flag, type, confidence, description, available, error}. Skip silently if flag is not true, available is false, or any error/timeout. One request at a time.
+- POST /report -> one JSON body {operator, date, started_at, ended_at, flags:[{type "leak"|"smoke"|"damage", facility (id), timestamp (ISO 8601), note, status "confirmed"|"dismissed"|"pending", trigger "camera"|"voice", photo_base64}]}
+- Facility ids are strings like S5_FACILITY_C; spoken names look like "S five Facility C".
+- Decode tolerantly: ignore unknown fields, optional fields default to nil.
+- Backend base URL: Config.swift (changes whenever the tunnel restarts).
+
+## Working features (hand-tested on glasses)
+Camera stream, chime + spoken alerts through the glasses, voice commands (next, status of <facility>, confirm, dismiss, note <text>, flag leak/smoke/damage), frame grabber every 4 s, flags with photos stored offline, upload queue with retry, Shift screen (Start Shift, Next alert, Refresh, End Shift, Test connection), offline cache of backend data.
+
+## Not done
+Gestures (SDK Inputs API is experimental and needs Meta capability approval).
