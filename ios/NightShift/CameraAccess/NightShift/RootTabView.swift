@@ -65,7 +65,7 @@ struct RootTabView: View {
         LiveView(controller: controller, cameraVM: cameraVM, wearablesVM: wearablesVM)
           .toolbar(.hidden, for: .tabBar)
           .tag(AppTab.live)
-        TodoView(controller: controller, glassesConnected: cameraVM.hasActiveDevice, alarmActive: alarmActive)
+        ShiftTabView(controller: controller)
           .toolbar(.hidden, for: .tabBar)
           .tag(AppTab.shift)
         SettingsView(controller: controller, wearablesVM: wearablesVM, cameraVM: cameraVM, alarmActive: alarmActive)

@@ -116,6 +116,10 @@ enum Config {
 
   enum Keys {
     static let apiKeyAccount = "backendAPIKey"
+    /// Shown on the SHIFT tab only (not sent in reports).
+    static let operatorName = "NightShift.operatorName"
+    /// Text-to-speech rate (AVSpeechUtterance.rate), set in Settings.
+    static let voiceRate = "NightShift.voiceRate"
     static let supervisorPhone = "NightShift.supervisorPhone"
     static let picoAddress = "NightShift.picoAddress"
     static let defaultSystem = "NightShift.defaultSystem"
