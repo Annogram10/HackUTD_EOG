@@ -7,7 +7,7 @@
 import { useEffect, useId, useRef } from "react";
 import type { RiskLevel } from "@/lib/types";
 
-// Aviator sunglasses, worn in every state: two black teardrop lenses with a thin light metal frame, a double
+// Aviator sunglasses, worn in every state: two red-tinted teardrop lenses with a thin light metal frame, a double
 // bridge, short temple arms and a white glint. In danger the glasses hop (drop in, jump off to show the red eyes
 // underneath, slam back, once more, then stay) and a red reflection streak appears on each lens; the hop restarts
 // each time danger starts. Calm and check-soon: glasses sit still. Reduced motion: no hop. Original drawing.
@@ -17,7 +17,11 @@ import type { RiskLevel } from "@/lib/types";
 // hooked beak, barred chest, layered wing, talons on a branch. Greys only, so colour still means status.
 const BODY = "M24 7 C32.5 7 38.6 12.6 38.6 21.5 C38.6 32 34.5 42 24 44 C13.5 42 9.4 32 9.4 21.5 C9.4 12.6 15.5 7 24 7 Z";
 const DISC = "M24 13.2 C20.6 9.8 10.4 10.3 10.2 19.6 C10.1 25.6 15.4 28.6 24 29.2 C32.6 28.6 37.9 25.6 37.8 19.6 C37.6 10.3 27.4 9.8 24 13.2 Z";
-const TUFT = "M13.4 11.8 C11.8 8.8 10.4 6.4 9.4 3.6 C11.2 5 12.4 6 13.4 7.2 C13.4 5.6 13.7 4.3 14.3 3 C15.3 5.8 16.3 8.4 17.6 10.6 Z";
+// Rocker look: long dark swept-back head feathers, red-tinted aviators, scruffy chin feathers, a black tactical
+// vest with a dog-tag chain, and the chrome cyber wing.
+const HAIR_BACK = "M24 5.6 C13 5.4 6.6 12 6.4 20.5 C6.2 27.5 7.6 33 10 37 L12.6 31 L12.4 22 C13.4 15.5 18 11.6 24 11.4 C30 11.6 34.6 15.5 35.6 22 L35.4 31 L38 37 C40.4 33 41.8 27.5 41.6 20.5 C41.4 12 35 5.4 24 5.6 Z";
+const LOCK_A = "M15.5 8.4 C11.4 11 9.4 16.5 10 24 C10.4 29 11.4 32.4 13 35 C12.6 29 12.6 22 14.2 17.4 C15.2 14.6 17.2 12 19.8 10.2 Z";
+const LOCK_B = "M18.6 7.6 C15.6 9.8 13.8 13.4 13.2 18 C14.6 14.6 17 12 20.6 10.8 Z";
 const BARS: string[] = [];
 for (let r = 0; r < 6; r++) {
   const y = 30.6 + r * 2.1;
@@ -128,6 +132,11 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
           <stop offset="0" stopColor="#50555d" />
           <stop offset="1" stopColor="#2c2f35" />
         </linearGradient>
+        <linearGradient id={`${uid}-lens`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#120708" />
+          <stop offset="0.5" stopColor="#4a0f13" />
+          <stop offset="1" stopColor="#8f1d22" />
+        </linearGradient>
         <clipPath id={`${uid}-discclip`}><path d={DISC} /></clipPath>
         <linearGradient id={dark} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#c8ccd2" />
@@ -139,15 +148,25 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       <path d="M3.5 45.6 Q24 44 44.5 45.9" stroke="#4a4038" strokeWidth="2.2" strokeLinecap="round" fill="none" />
       <path d="M9 45.2 l-2.4 -1.6 M37 45.5 l2.2 -1.8" stroke="#4a4038" strokeWidth="0.9" strokeLinecap="round" />
 
-      {/* ear tufts: they stand up straighter in danger */}
-      <path d={TUFT} fill="#3a3e45" transform={red ? "rotate(-10 14 11)" : undefined} />
-      <path d={TUFT} fill="#3a3e45" transform={red ? "translate(48 0) scale(-1 1) rotate(-10 14 11)" : "translate(48 0) scale(-1 1)"} />
+      {/* long dark head feathers, behind the face */}
+      <path d={HAIR_BACK} fill="#1c1d22" />
+      <path d="M10 14 Q7.8 22 9.6 32 M12.2 11.4 Q9.6 19 10.8 28 M38 14 Q40.2 22 38.4 32 M35.8 11.4 Q38.4 19 37.2 28 M19 6.8 Q14 8.6 11.2 13 M29 6.8 Q34 8.6 36.8 13"
+        stroke="#4a4d56" strokeWidth="0.35" fill="none" strokeLinecap="round" />
 
       {/* body, chest and barring */}
       <path d={BODY} fill={`url(#${uid}-body)`} />
       <ellipse cx="24" cy="35.2" rx="9.4" ry="8.4" fill={`url(#${uid}-belly)`} opacity="0.9" />
       <path d={BARS.join(" ")} stroke="#3a3e45" strokeWidth="0.45" fill="none" strokeLinecap="round" opacity="0.8" />
       <path d="M18.4 9.6 q1 -0.8 2 0 M22 8.5 q1 -0.8 2 0 M26 8.5 q1 -0.8 2 0 M29.6 9.6 q-1 -0.8 -2 0" stroke="#2c3036" strokeWidth="0.4" fill="none" strokeLinecap="round" />
+
+      {/* black tactical vest with shoulder straps, seams and pockets, and a dog-tag chain */}
+      <path d="M15.2 29.6 L13.6 23.8 M32.8 29.6 L34.4 23.8" stroke="#1d1f24" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M13.4 29.4 Q16 30.4 19.4 33.6 L24 35.4 L28.6 33.6 Q32 30.4 34.6 29.4 L35.6 39.4 Q24 44.2 12.4 39.4 Z" fill="#1d1f24" />
+      <path d="M24 35.4 L24 43 M13.6 36.4 L34.4 36.4" stroke="#33363c" strokeWidth="0.4" />
+      <rect x="16.2" y="37.2" width="4" height="3" fill="none" stroke="#33363c" strokeWidth="0.35" />
+      <rect x="27.8" y="37.2" width="4" height="3" fill="none" stroke="#33363c" strokeWidth="0.35" />
+      <path d="M18.4 28.9 Q24 33.4 29.6 28.9" stroke="#b9bec6" strokeWidth="0.3" strokeDasharray="0.5 0.35" fill="none" />
+      <rect x="23.1" y="31.6" width="1.8" height="2.4" rx="0.4" fill="#c9ccd2" transform="rotate(8 24 32.8)" />
 
       {/* wings: folded when calm, raised in danger. The right one (viewer's right) is cybernetic. */}
       {red ? (
@@ -170,6 +189,16 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       </g>
       <path d="M24 13.6 L21.7 21 L24 24.2 L26.3 21 Z" fill="#c3c7cc" opacity="0.5" />
 
+      {/* front locks of the long head feathers, framing the face */}
+      {[undefined, "translate(48 0) scale(-1 1)"].map((t) => (
+        <g key={t ?? "l"} transform={t}>
+          <path d={`${LOCK_A} ${LOCK_B}`} fill="#26282e" />
+          <path d="M14.6 10.6 Q11.4 16 11.4 24 Q11.6 29 12.6 33 M17.4 9.6 Q14.4 13 13.6 17" stroke="#555963" strokeWidth="0.3" fill="none" strokeLinecap="round" />
+        </g>
+      ))}
+      <path d="M18 8 C21 6.2 27 6.2 30 8 C27.4 7.6 23.6 7.8 21.2 9.6 Z" fill="#26272c" />
+      <path d="M22.6 7 Q19 9 16.8 13.2 M25.4 7 Q29 9 31.2 13.2 M14.6 12 Q12 17 12 24" stroke="#3a3b42" strokeWidth="0.3" fill="none" strokeLinecap="round" />
+
       {/* eyes (under the glasses; they show when the glasses lift in danger) */}
       {[16.4, 31.6].map((cx) => (
         <g key={cx}>
@@ -191,11 +220,11 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
 
       {/* aviator sunglasses, every state */}
       <g ref={glasses} className="owl-glasses">
-        <path d="M10.2 16.3 L6.4 15.1 M37.8 16.3 L41.6 15.1" stroke="#C9C2D0" strokeWidth="0.8" strokeLinecap="round" />
-        <path d="M22.4 16.1 Q24 14.7 25.6 16.1" stroke="#C9C2D0" strokeWidth="0.7" fill="none" strokeLinecap="round" />
-        <path d="M22.8 18.2 L25.2 18.2" stroke="#C9C2D0" strokeWidth="0.6" strokeLinecap="round" />
-        <path d={LENS_L} fill="#0B0A0D" stroke="#C9C2D0" strokeWidth="0.75" strokeLinejoin="round" />
-        <path d={LENS_R} fill="#0B0A0D" stroke="#C9C2D0" strokeWidth="0.75" strokeLinejoin="round" />
+        <path d="M10.2 16.3 L6.4 15.1 M37.8 16.3 L41.6 15.1" stroke="#CFC6B0" strokeWidth="0.8" strokeLinecap="round" />
+        <path d="M22.4 16.1 Q24 14.7 25.6 16.1" stroke="#CFC6B0" strokeWidth="0.7" fill="none" strokeLinecap="round" />
+        <path d="M22.8 18.2 L25.2 18.2" stroke="#CFC6B0" strokeWidth="0.6" strokeLinecap="round" />
+        <path d={LENS_L} fill={`url(#${uid}-lens)`} stroke="#CFC6B0" strokeWidth="0.6" strokeLinejoin="round" />
+        <path d={LENS_R} fill={`url(#${uid}-lens)`} stroke="#CFC6B0" strokeWidth="0.6" strokeLinejoin="round" />
         {/* glints */}
         <path d="M12.3 19 L15 16.7" stroke="#ffffff" strokeWidth="0.65" strokeLinecap="round" opacity="0.85" />
         <path d="M27.7 19 L30.4 16.7" stroke="#ffffff" strokeWidth="0.65" strokeLinecap="round" opacity="0.85" />
@@ -205,6 +234,13 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
           <path d="M29.6 24.4 L36.2 18.6" stroke="#e5484d" strokeWidth="0.5" strokeLinecap="round" />
         </g>
       </g>
+
+      {/* scruffy chin feathers (goatee) and stubble */}
+      <path d="M21.4 27 Q22 32 24 34 Q26 32 26.6 27 Q24 29.8 21.4 27 Z" fill="#26272c" />
+      <path d="M22.6 29.6 L23.2 32.6 M24 30.2 L24 33.4 M25.4 29.6 L24.8 32.6" stroke="#44464d" strokeWidth="0.25" strokeLinecap="round" />
+      {[[20.6, 26.4], [21.2, 27.8], [27.4, 26.4], [26.8, 27.8], [22.2, 29.6], [25.8, 29.6], [20.2, 25.2], [27.8, 25.2]].map(([x, y]) => (
+        <circle key={`${x}-${y}`} cx={x} cy={y} r="0.2" fill="#34353b" />
+      ))}
 
       {/* hooked beak */}
       <path d="M22.7 24.2 Q24 22.8 25.3 24.2 Q25.3 27 24 29.2 Q22.7 27 22.7 24.2 Z" fill="#b9b2a2" />
