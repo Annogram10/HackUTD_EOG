@@ -18,7 +18,7 @@ _cache: dict = {}
 #                                  the repair ends
 # medium -> amber, check soon:     a pump failure the tank can wait out, or a sizeable pipeline leak
 # low    -> green, keep an eye on: a worn pump, or a small leak (or one that cannot be measured while the pump is off)
-FORECAST_QUANTILE = "p50"  # which hours-to-shutdown forecast decides "before the repair ends"
+FORECAST_QUANTILE = "p10"  # early-warning forecast decides "before the repair ends": a missed alarm costs more than a false one
 LEAK_MISSING_MEDIUM = 0.06  # a leak is "check soon" when 6% or more of the water the pump sends never arrives
 SEVERITY_RANK = {"high": 3, "medium": 2, "low": 1}
 SEVERITY_COLOR = {"high": "red", "medium": "amber", "low": "green"}
