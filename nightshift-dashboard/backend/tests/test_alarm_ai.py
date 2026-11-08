@@ -87,3 +87,31 @@ def test_ai_never_changes_level(monkeypatch):
     after = risk.assess(ds, quiet, use_ai=True)
     assert after["level"] == before["level"]
     assert after["alarm"] == before["alarm"] and after["alarm_id"] == before["alarm_id"]
+
+
+ALARM_ID = r"^full_week:S\d+_FACILITY_[A-Z]:pf-\d+$"
+
+
+def test_alarm_id_well_formed_and_stable_across_polls():
+    import re
+    ids = {c.get("/alarm", params={"dataset": "full_week", "now": ALARM_AT}).json()["alarm_id"] for _ in range(3)}
+    assert len(ids) == 1
+    (aid,) = ids
+    assert re.match(ALARM_ID, aid)
+    ds = main.ds_for("full_week")
+    out = risk.assess(ds, ALARM_AT, use_ai=False)
+    reds = [a for a in main.run_triage(ds, ALARM_AT)["alerts"] if risk._alert_level(a, ALARM_AT, ds)[0] == "red"]
+    w = risk.worst_red(reds)
+    assert aid == f"full_week:{w['facility_id']}:pf-{w['onset_unix']}" == out["alarm_id"]
+
+
+def test_alarm_id_survives_event_renumbering():
+    """At 1791525600 detection renumbers S4 Facility C's failure (EV-0015 -> EV-0016). The alarm id must not change."""
+    ds = main.ds_for("full_week")
+    seen = {}
+    for now in range(1791525600 - 4 * 1800, 1791525600 + 4 * 1800 + 1, 1800):
+        for a in main.run_triage(ds, now)["alerts"]:
+            if a["facility_id"] == "S4_FACILITY_C" and a["category"] == "pump_failure":
+                seen.setdefault(risk.alarm_id("full_week", [a]), set()).add(a["event_id"])
+    assert len(seen) == 1, seen
+    assert len(next(iter(seen.values()))) == 2  # the EV id really did change underneath

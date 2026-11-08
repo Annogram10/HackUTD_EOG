@@ -220,6 +220,24 @@ def ai_check(tri: dict, rules: dict) -> dict:
         return {"available": False, "error": str(e)[:120]}
 
 
+def worst_red(red_alerts: list):
+    """The most urgent red event: a tank that already tripped, else the soonest early-warning shutdown."""
+    def urgency(a):
+        h = (a.get("hours_to_limit") or {}).get("p10")
+        return (0 if a.get("tripped") else 1, h if h is not None else 1e9, a["facility_id"])
+    return min(red_alerts, key=urgency) if red_alerts else None
+
+
+def alarm_id(dataset: str, red_alerts: list):
+    """
+    "<dataset>:<facility_id>:<event>" for the worst rules-red event. The event part is "pf-<onset unix>": detection
+    numbers events in onset order, so an EV-#### id can shift when an earlier leak is found later; the onset cannot.
+    Same situation -> same id on every poll, so the phone alarms once per situation.
+    """
+    a = worst_red(red_alerts)
+    return f"{dataset}:{a['facility_id']}:pf-{int(a['onset_unix'])}" if a else None
+
+
 def assess(ds, now=None, use_ai: bool = True, peek_ai: bool = False) -> dict:
     """
     The danger level is the rules' level, always. The AI never raises or lowers it and never touches alarm_id.
@@ -237,8 +255,7 @@ def assess(ds, now=None, use_ai: bool = True, peek_ai: bool = False) -> dict:
             ai = {"available": False, "pending": True}
     level = rules["level"]
     red = [r for r in rules["reasons"] if r["level"] == "red"]
-    alarm_ids = sorted((a["facility_id"], a["onset_unix"]) for a in tri["alerts"]
-                       if _alert_level(a, tri["now"], ds)[0] == "red")
+    red_alerts = [a for a in tri["alerts"] if _alert_level(a, tri["now"], ds)[0] == "red"]
     note = ai["why"] if ai and ai.get("available") and ai.get("why") else None
     if red:
         headline = red[0]["text"]
@@ -268,7 +285,7 @@ def assess(ds, now=None, use_ai: bool = True, peek_ai: bool = False) -> dict:
     return {
         "dataset": ds.name, "as_of": tri["now_ts"], "now": tri["now"], "level": level, "rules_level": rules["level"],
         "alarm": level == "red",
-        "alarm_id": (f"{ds.name}:" + ",".join(f"{f}@{o}" for f, o in alarm_ids)) if level == "red" else None,
+        "alarm_id": alarm_id(ds.name, red_alerts) if level == "red" else None,
         "headline": headline, "reasons": rules["reasons"], "facilities": rules["facilities"],
         "ai": ai, "note": note, "money": money, "flaggable": flaggable, "spoken_text": speak,
     }
