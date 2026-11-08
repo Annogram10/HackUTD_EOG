@@ -402,6 +402,7 @@ final class NightShiftController {
       setCurrentFacility(facility)
     }
     if let text = alert.spokenText {
+      lastSpokenContent = text
       await Speaker.shared.announce(text)
     } else {
       await Speaker.shared.speak("This alert has no spoken text.")
@@ -420,6 +421,7 @@ final class NightShiftController {
     }
     setCurrentFacility(facility.id)
     if let text = facility.spokenText {
+      lastSpokenContent = text
       await Speaker.shared.speak(text)
     } else {
       await Speaker.shared.speak("No status for \(spokenName).")
@@ -623,18 +625,22 @@ final class NightShiftController {
   /// Shows a phrase that matched no command (not spoken).
   func handleUnrecognized(_ transcript: String) {
     voiceFeedback = ("Not understood: \(transcript)", false)
+    // Spoken at most every few seconds, so background noise (or the siren) can't
+    // make the app talk over itself. No network side effects.
+    let now = Date()
+    guard now.timeIntervalSince(lastNotUnderstoodAt) > 8 else { return }
+    lastNotUnderstoodAt = now
+    Task { await Speaker.shared.speak("I didn't catch that.") }
   }
 
-  /// Runs a voice command. Every path shows a line and speaks a short confirmation
-  /// or the reason it couldn't complete, so a command never fails silently.
+  @ObservationIgnored private var lastNotUnderstoodAt = Date.distantPast
+  /// The last backend message spoken (alert or status), for "repeat".
+  @ObservationIgnored private var lastSpokenContent: String?
+
+  /// Runs a whitelisted voice command. Every path shows a line and speaks a short
+  /// confirmation or the reason it couldn't complete, so a command never fails silently.
   func handle(_ command: VoiceCommand) async {
     switch command {
-    case .next:
-      voiceFeedback = ("Next alert", true)
-      await speakNextAlert()
-    case .status(let name):
-      voiceFeedback = ("Status of \(name)", true)
-      await speakStatus(of: name)
     case .issue:
       voiceFeedback = ("What's the issue", true)
       await alarm.askIssue()
@@ -643,58 +649,55 @@ final class NightShiftController {
       if !(await alarm.decide(.prioritize)) {
         await reply("Say what's the issue first", ok: false)
       }
-    case .dismiss where alarm.isAwaitingDecision || alarm.active != nil:
-      // During an alarm, or right after "what's the issue", dismiss acts on that issue.
+    case .dismiss:
       voiceFeedback = ("Dismiss", true)
-      if !(await alarm.decide(.dismiss)) {
-        await reply("Say what's the issue first", ok: false)
-      }
-    case .confirm, .dismiss:
-      let status: FlagStatus = command == .confirm ? .confirmed : .dismissed
-      guard let flag = store.currentFlag else {
+      // After "what's the issue" (or during an alarm), dismiss acts on that issue;
+      // otherwise on the newest pending camera flag.
+      if alarm.isAwaitingDecision || alarm.active != nil {
+        if !(await alarm.decide(.dismiss)) {
+          await reply("Say what's the issue first", ok: false)
+        }
+      } else if let flag = store.currentFlag {
+        decide(flag.id, as: .dismissed)
+        await reply("Dismissed")
+      } else {
         await reply("No flag waiting", ok: false)
-        return
       }
-      decide(flag.id, as: status)
-      await reply(status == .confirmed ? "Confirmed" : "Dismissed")
-    case .note(let text):
-      guard isOnShift else {
-        await reply("Start a shift first", ok: false)
-        return
+    case .acknowledge, .stop:
+      if alarm.active != nil {
+        alarm.acknowledge()
+        await reply("Acknowledged")
+      } else if command == .stop {
+        Speaker.shared.stopAll()
+        voiceFeedback = ("Stopped", true)
+      } else {
+        await reply("No alarm to acknowledge", ok: false)
       }
-      store.addNote(text, to: store.currentFlag?.id)
-      await reply("Note saved")
-    case .flag(let type):
-      await flagByVoice(type: type)
+    case .repeatLast:
+      voiceFeedback = ("Repeat", true)
+      if let text = alarm.issue?.spokenText ?? alarm.active?.spokenText ?? lastSpokenContent {
+        await Speaker.shared.speak(text)
+      } else {
+        await reply("Nothing to repeat", ok: false)
+      }
+    case .status(let name):
+      if name.isEmpty {
+        // "status" alone: what to check first (rank 1), as the server wrote it.
+        voiceFeedback = ("Status", true)
+        if let first = map?.facilities.first, first.needsCheck, let text = first.spokenText {
+          lastSpokenContent = text
+          await Speaker.shared.speak(text)
+        } else {
+          await reply("No problems in progress")
+        }
+      } else {
+        voiceFeedback = ("Status of \(name)", true)
+        await speakStatus(of: name)
+      }
+    case .next:
+      voiceFeedback = ("Next alert", true)
+      await speakNextAlert()
     }
-  }
-
-  private func flagByVoice(type: String) async {
-    guard voice.isListening else {
-      await reply("Voice commands are off", ok: false)
-      return
-    }
-    guard isOnShift else {
-      await reply("Start a shift first", ok: false)
-      return
-    }
-    guard let facility = currentFacilityID else {
-      await reply("Pick a facility first", ok: false)
-      return
-    }
-    let label = type.prefix(1).uppercased() + type.dropFirst()
-    // The operator raised it, so it needs no confirm step.
-    guard let frame = vision.latestFrame else {
-      // No frame: keep the flag anyway, marked as having no photo.
-      let flag = store.addFlag(type: type, source: "voice", status: .confirmed, photo: nil, facility: facility)
-      store.addNote("no photo", to: flag?.id)
-      await reply("\(label) flagged, no photo. Start the camera first", ok: false)
-      return
-    }
-    // Same scaled size as camera evidence; encoded off the main actor.
-    let photo = await Task.detached(priority: .userInitiated) { FrameGrabber.scaledJPEG(frame) }.value
-    store.addFlag(type: type, source: "voice", status: .confirmed, photo: photo, facility: facility)
-    await reply("\(label) flagged")
   }
 
   /// Shows `text` on the Shift screen and speaks it.

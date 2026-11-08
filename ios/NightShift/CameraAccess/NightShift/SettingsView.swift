@@ -445,9 +445,28 @@ struct SettingsView: View {
         systemImage: controller.voice.isRunning ? "mic.fill" : "mic.slash"
       )
       .foregroundStyle(controller.voice.isRunning ? .green : .secondary)
-      Text("Heard: \(controller.voice.lastHeard ?? "nothing yet")")
+      // Permission off: say so plainly, with a way to fix it.
+      if case .unavailable(let reason) = controller.voice.status {
+        Label(reason, systemImage: "mic.slash.fill")
+          .font(.subheadline.weight(.semibold))
+          .foregroundStyle(NS.redText)
+        FlatButton(title: "Open iOS Settings", icon: "gear", accessibilityLabel: "Open iOS Settings to allow the microphone and speech recognition") {
+          if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+          }
+        }
+        .buttonStyle(.borderless)
+      }
+      // Live transcript, for checking what the recognizer hears.
+      Text("Hearing: \(controller.voice.heardText.isEmpty ? "…" : controller.voice.heardText)")
+        .font(.subheadline.monospaced())
+        .foregroundStyle(NS.textBody)
+      Text("Last phrase: \(controller.voice.lastHeard ?? "nothing yet")")
         .font(.caption)
         .foregroundStyle(.secondary)
+      Text("Commands: what's the issue, dismiss, prioritize, acknowledge, stop, repeat, status, next alert.")
+        .font(.caption)
+        .foregroundStyle(NS.textSecondary)
       if let feedback = controller.voiceFeedback {
         Text(feedback.text)
           .font(.subheadline)

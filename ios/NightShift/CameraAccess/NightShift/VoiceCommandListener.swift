@@ -26,7 +26,8 @@ final class VoiceCommandListener {
 
   private(set) var status: Status = .off
   /// Transcript of the utterance in progress.
-  @ObservationIgnored private var heardText: String = ""
+  /// Live transcript of the utterance in progress (shown on screen for debugging).
+  private(set) var heardText: String = ""
 
   var isListening: Bool { status == .listening }
 
