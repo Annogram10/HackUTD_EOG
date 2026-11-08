@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS flags (
     id TEXT PRIMARY KEY, shift_id TEXT NOT NULL, type TEXT NOT NULL, location TEXT NOT NULL,
     equipment_id TEXT NOT NULL, photo_url TEXT NOT NULL DEFAULT '', timestamp TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending', note TEXT, control_note TEXT,
-    trigger_src TEXT NOT NULL DEFAULT 'camera', reason TEXT
+    trigger_src TEXT NOT NULL DEFAULT 'camera', reason TEXT, priority INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -94,6 +94,8 @@ def init_db() -> None:
             for t in ("shifts", "flags", "equipment", "readings"):
                 c.execute(f"DROP TABLE IF EXISTS {t}")
         c.executescript(SCHEMA)
+        if "priority" not in [r["name"] for r in c.execute("PRAGMA table_info(flags)")]:  # older database
+            c.execute("ALTER TABLE flags ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
 
 
 init_db()
@@ -251,7 +253,7 @@ def one_flag(c, flag_id: str) -> dict:
 def set_status(flag_id: str, status: str) -> dict:
     with db() as c:
         one_flag(c, flag_id)
-        c.execute("UPDATE flags SET status = ? WHERE id = ?", (status, flag_id))
+        c.execute("UPDATE flags SET status = ?, priority = CASE WHEN ? = 'confirmed' THEN priority ELSE 0 END WHERE id = ?", (status, status, flag_id))
         return one_flag(c, flag_id)
 
 
@@ -263,6 +265,15 @@ def confirm_flag(flag_id: str):
 @app.post("/flag/{flag_id}/dismiss")
 def dismiss_flag(flag_id: str):
     return set_status(flag_id, "dismissed")
+
+
+@app.post("/flag/{flag_id}/prioritize")
+def prioritize_flag(flag_id: str):
+    """Marks the flag as a real problem and puts its facility at the top of the next-shift list."""
+    with db() as c:
+        one_flag(c, flag_id)
+        c.execute("UPDATE flags SET priority = 1, status = 'confirmed' WHERE id = ?", (flag_id,))
+        return one_flag(c, flag_id)
 
 
 @app.post("/flag/{flag_id}/reopen")
@@ -722,6 +733,13 @@ def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None
     """
     with db() as c:
         try:
+            if shift_id is None:  # follow the replay time like the dashboard does: the shift in progress at that moment
+                eff = now if now is not None else CLOCK.get(dataset or default_dataset())
+                if eff is not None:
+                    rows = c.execute("SELECT id, started_at FROM shifts WHERE dataset = ? AND id NOT LIKE 'alarms-%'",
+                                     (dataset or default_dataset(),)).fetchall()
+                    before = sorted((r for r in rows if _unix_of(r["started_at"]) <= eff), key=lambda r: _unix_of(r["started_at"]), reverse=True)
+                    shift_id = before[0]["id"] if before else None
             shift = get_shift(c, shift_id, dataset)
         except HTTPException:
             if shift_id:
@@ -751,6 +769,10 @@ def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None
             if a["category"] == "pump_failure" and a.get("hours_to_limit"):
                 extra = f", tank hits shutdown in {a['hours_to_limit']['p50']:.1f} h. {a['action_text']}"
             reasons.append(f"{what} (sensor data){extra}")
+        urgent = [f for f in now if f.get("priority")]
+        if urgent:
+            score += 100
+            reasons.insert(0, "Marked as priority by the operator")
         confirmed = [f for f in now if f["status"] == "confirmed"]
         pending = [f for f in now if f["status"] == "pending"]
         if confirmed:
@@ -839,30 +861,28 @@ def _unix_of(iso: str) -> float:
     return datetime.fromisoformat(iso.replace("Z", "+00:00") if iso.endswith("Z") else iso + "+00:00").timestamp()
 
 
+AUTO_TYPE = {"pump_failure": "alarm", "pipeline_leak": "leak", "pump_degradation": "damage"}
+
+
 def record_alarm(ds, out: dict, live: bool, cleanup: bool = True) -> None:
     """
-    When an alarm goes off, log it as a flag (trigger "data") so it shows on the Flags page, the handover and next
-    shift until a person confirms or dismisses it. One flag per facility per problem, so repeats do nothing.
+    When something needs a person (a red alarm, or a sizeable leak or worn pump), log it as a flag (trigger "data") so
+    the operator can confirm, dismiss or prioritize it, on the dashboard or by voice at the site. One flag per
+    facility per problem, so repeats do nothing. A flag nobody decided on goes away when its problem is over.
     """
-    # An alarm flag that nobody decided on goes away when its alarm is over (or a newer one has started).
-    current = {}
-    if cleanup and out.get("alarm_id"):
-        for seg in out["alarm_id"].split(":", 1)[1].split(","):
-            f, _, o = seg.partition("@")
-            current[f] = o
+    current = {(f["facility_id"], str(f["onset_unix"])) for f in out.get("flaggable", [])}
     if cleanup:  # only the dashboard's own check tidies up, so the phone's polling never fights a replay
         with db() as c:
             rows = c.execute("""SELECT f.id FROM flags f JOIN shifts s ON s.id = f.shift_id
                                 WHERE s.dataset = ? AND f.id LIKE 'alarm-%' AND f.status = 'pending'""", (ds.name,)).fetchall()
             for r in rows:
                 fid, _, onset = r["id"][len("alarm-"):].rpartition("-")
-                if int(onset) <= out["now"] and current.get(fid) != onset:
+                if int(onset) <= out["now"] and (fid, onset) not in current:
                     c.execute("DELETE FROM flags WHERE id = ?", (r["id"],))
-    if not out.get("alarm"):
+    if not out.get("flaggable"):
         return
     ai = out.get("ai") or {}
     why = ai.get("why") if ai.get("available") else None
-    reds = [r for r in out["reasons"] if r["level"] == "red"]
     with db() as c:
         shifts = c.execute("SELECT id, started_at FROM shifts WHERE dataset = ? AND id NOT LIKE 'alarms-%' ORDER BY started_at DESC",
                            (ds.name,)).fetchall()
@@ -877,19 +897,18 @@ def record_alarm(ds, out: dict, live: bool, cleanup: bool = True) -> None:
                 c.execute("INSERT INTO shifts VALUES (?,?,?,?,?,?,?,?,?)",
                           (shift_id, ds.name, out["as_of"][:10], "System alarms", out["as_of"], out["as_of"],
                            out["as_of"], "[]", "[]"))
-        for r in reds:
+        for r in out["flaggable"]:
             fid = r["facility_id"]
-            onset = next((seg.split("@")[1] for seg in out["alarm_id"].split(":", 1)[1].split(",") if seg.startswith(fid + "@")), out["now"])
-            flag_id = f"alarm-{fid}-{onset}"
+            flag_id = f"alarm-{fid}-{r['onset_unix']}"
             if c.execute("SELECT 1 FROM flags WHERE id = ?", (flag_id,)).fetchone():
                 continue
             # the AI sentence is about one facility: only attach it to the flag of the facility it names
-            reason = r["text"] + (f". {why}" if why and fac_name(fid) in why else "")
+            reason = r["text"] + (f". {why}" if why and r["level"] == "red" and fac_name(fid) in why else "")
             c.execute(
                 """INSERT INTO flags (id, shift_id, type, location, equipment_id, photo_url, timestamp, status, note,
                    control_note, trigger_src, reason) VALUES (?,?,?,?,?,?,?,?,NULL,NULL,?,?)""",
-                (flag_id, shift_id, "alarm", fac_name(fid) if fid in ds.facilities else fid, fid, "", out["as_of"],
-                 "pending", "data", reason))
+                (flag_id, shift_id, AUTO_TYPE[r["category"]], fac_name(fid) if fid in ds.facilities else fid, fid, "",
+                 out["as_of"], "pending", "data", reason))
 
 
 @app.get("/risk")
@@ -928,10 +947,52 @@ def get_alarm(dataset: Optional[str] = None, now: Optional[int] = None):
     out = risk_mod.assess(ds, eff, use_ai=True)
     record_alarm(ds, out, live=(eff is None), cleanup=False)
     return {k: out[k] for k in ("dataset", "as_of", "level", "alarm", "alarm_id", "headline", "spoken_text")} | {
-        "live": ds.name not in CLOCK, "reasons": [r["text"] for r in out["reasons"]]}
+        "live": ds.name not in CLOCK, "reasons": [r["text"] for r in out["reasons"]],
+        "facility_ids": [f["facility_id"] for f in out["flaggable"] if f["level"] == "red"]}
 
 
 @app.get("/evidence")
 def get_evidence(dataset: Optional[str] = None, now: Optional[int] = None, ai: bool = True):
     """Charts of what dropped (or rose) at each facility with a problem, picked and captioned by Nemotron."""
     return evidence_mod.build(ds_for(dataset), now, use_ai=ai)
+
+
+@app.get("/issue")
+def get_issue(dataset: Optional[str] = None, facility: Optional[str] = None, now: Optional[int] = None):
+    """
+    "Meta, what's the issue?" at the site. Says what is wrong at a facility (default: the most urgent one) and
+    returns the flag the operator can then dismiss or prioritize (POST /flag/{id}/dismiss or /prioritize).
+    """
+    ds = ds_for(dataset)
+    eff = now if now is not None else CLOCK.get(ds.name)
+    out = risk_mod.assess(ds, eff, use_ai=False)
+    record_alarm(ds, out, live=(eff is None), cleanup=False)  # make sure there is a flag to act on
+    tri = run_triage(ds, eff)
+    fid = resolve_facility(ds, facility) if facility else None
+    if fid not in ds.facilities:
+        order = sorted(out["flaggable"], key=lambda f: (f["level"] != "red", f["onset_unix"]))
+        fid = order[0]["facility_id"] if order else None
+    if fid is None:
+        return {"facility_id": None, "name": None, "problem": False, "spoken_text": "No problems right now.", "flag": None, "options": []}
+    name = fac_name(fid)
+    alerts = [a for a in tri["alerts"] if a["facility_id"] == fid]
+    if not alerts:
+        return {"facility_id": fid, "name": name, "problem": False, "spoken_text": f"{speech.facility(name)} has no problems right now.",
+                "flag": None, "options": []}
+    parts = []
+    for a in alerts:
+        parts.append(spoken(a))
+        if a["category"] == "pipeline_leak":
+            d = risk_mod._drop(ds, a, tri["now"])
+            if d and d[0] > 0.01:
+                parts.append(f"About {speech.num_words(d[0] * 100)} percent of the water is not arriving.")
+    with db() as c:
+        rows = c.execute("""SELECT f.* FROM flags f JOIN shifts s ON s.id = f.shift_id
+                            WHERE s.dataset = ? AND f.equipment_id = ? AND f.status != 'dismissed'
+                            ORDER BY (f.status = 'pending') DESC, f.timestamp DESC""", (ds.name, fid)).fetchall()
+    flags = seen_by([flag_row(r) for r in rows], eff)
+    flag = flags[0] if flags else None
+    if flag:
+        parts.append("Say dismiss, or prioritize.")
+    return {"facility_id": fid, "name": name, "problem": True, "level": next((f["level"] for f in out["flaggable"] if f["facility_id"] == fid), "green"),
+            "spoken_text": " ".join(parts), "flag": flag, "options": ["dismiss", "prioritize"] if flag else []}

@@ -50,7 +50,7 @@ export async function rerunAgent(dataset: string): Promise<AgentRun> {
 }
 
 // Confirm, dismiss or reopen a flag. Returns the updated flag, or null if it failed.
-export async function setFlagStatus(flagId: string, action: "confirm" | "dismiss" | "reopen"): Promise<Flag | null> {
+export async function setFlagStatus(flagId: string, action: "confirm" | "dismiss" | "prioritize" | "reopen"): Promise<Flag | null> {
   try {
     const res = await fetch(`${API_URL}/flag/${flagId}/${action}`, { method: "POST" });
     if (!res.ok) throw new Error(`${res.status}`);

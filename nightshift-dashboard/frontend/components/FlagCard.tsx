@@ -33,7 +33,7 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
   const [deciding, setDeciding] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  async function decide(action: "confirm" | "dismiss" | "reopen") {
+  async function decide(action: "confirm" | "dismiss" | "prioritize" | "reopen") {
     setDeciding(true);
     setFailed(false);
     const updated = await setFlagStatus(flag.id, action);
@@ -89,6 +89,7 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={flag.status} />
+          {flag.priority ? <span className="inline-flex items-center bg-red-500/15 px-2.5 py-0.5 text-sm font-semibold uppercase text-red-300 ring-1 ring-red-500/50">Priority</span> : null}
           <TypeBadge type={flag.type} />
           <TriggerBadge trigger={flag.trigger} />
         </div>
@@ -138,6 +139,10 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
                 <button onClick={() => decide("confirm")} disabled={deciding}
                   className="bg-sky-500 px-4 py-2 text-base font-semibold text-zinc-100 hover:bg-sky-400 disabled:opacity-50">
                   Confirm issue
+                </button>
+                <button onClick={() => decide("prioritize")} disabled={deciding}
+                  className="border border-red-500/60 px-4 py-2 text-base font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50">
+                  Prioritize
                 </button>
                 <button onClick={() => decide("dismiss")} disabled={deciding}
                   className="rounded-lg border border-zinc-600 px-4 py-2 text-base font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50">

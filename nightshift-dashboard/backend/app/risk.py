@@ -199,6 +199,12 @@ def assess(ds, now=None, use_ai: bool = True) -> dict:
         headline = (ai.get("headline") if ai and ai.get("available") else None) or (
             rules["reasons"][0]["text"] if active and rules["reasons"] else
             (f"Nothing urgent. {known} minor issue{'s' if known != 1 else ''} to keep an eye on" if known else "All clear"))
+    flaggable = []
+    for a in tri["alerts"]:
+        lv, text = _alert_level(a, tri["now"], ds)
+        if lv in ("red", "amber"):
+            flaggable.append({"facility_id": a["facility_id"], "category": a["category"], "level": lv,
+                              "onset_unix": int(a["onset_unix"]), "text": text})
     money = _money(tri)
     if ai and ai.get("available") and ai.get("money") and money["rows"]:
         real = {money["total_cost"], money["total_do_nothing"], money["total_saves"]}
@@ -217,7 +223,7 @@ def assess(ds, now=None, use_ai: bool = True) -> dict:
         "alarm": level == "red",
         "alarm_id": (f"{ds.name}:" + ",".join(f"{f}@{o}" for f, o in alarm_ids)) if level == "red" else None,
         "headline": headline, "reasons": rules["reasons"], "facilities": rules["facilities"],
-        "ai": ai, "money": money, "spoken_text": speak,
+        "ai": ai, "money": money, "flaggable": flaggable, "spoken_text": speak,
     }
 
 

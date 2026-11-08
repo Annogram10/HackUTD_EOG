@@ -5,6 +5,7 @@ export type FlagStatus = "pending" | "confirmed" | "dismissed";
 export type Trigger = "camera" | "voice" | "data";
 
 export interface Flag {
+  priority?: number; // 1 = marked as priority by the operator
   id: string;
   shift_id: string;
   type: FlagType;
