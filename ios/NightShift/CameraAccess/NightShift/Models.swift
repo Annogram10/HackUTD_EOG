@@ -168,3 +168,122 @@ extension KeyedDecodingContainer {
     return nil
   }
 }
+
+// MARK: - GET /map
+
+/// GET /map: every facility with its pin position, already ranked by importance
+/// (rank 1 = check first). Shown in the order received; never re-sorted.
+struct FacilityMap: Codable, Hashable, Sendable {
+  let dataset: String?
+  let asOf: String?
+  let systems: [MapSystem]
+  let facilities: [MapFacility]
+
+  private enum CodingKeys: String, CodingKey {
+    case dataset, asOf, systems, facilities
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    dataset = c.lenientString(.dataset)
+    asOf = c.lenientString(.asOf)
+    systems = (try? c.decodeIfPresent(LossyArray<MapSystem>.self, forKey: .systems))?.elements ?? []
+    facilities = (try? c.decodeIfPresent(LossyArray<MapFacility>.self, forKey: .facilities))?.elements ?? []
+  }
+}
+
+struct MapSystem: Codable, Hashable, Sendable, Identifiable {
+  struct DisposalSite: Codable, Hashable, Sendable {
+    let id: String?
+    let lat: Double?
+    let lon: Double?
+    let pressurePsi: Double?
+
+    private enum CodingKeys: String, CodingKey {
+      case id, lat, lon, pressurePsi
+    }
+
+    init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      id = c.lenientString(.id)
+      lat = c.lenientDouble(.lat)
+      lon = c.lenientDouble(.lon)
+      pressurePsi = c.lenientDouble(.pressurePsi)
+    }
+  }
+
+  let id: String
+  /// [lat, lon]
+  let center: [Double]?
+  /// [lat, lon]
+  let truckYard: [Double]?
+  let disposalSite: DisposalSite?
+
+  private enum CodingKeys: String, CodingKey {
+    case id, center, truckYard, disposalSite
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = c.lenientString(.id) ?? UUID().uuidString
+    center = try? c.decodeIfPresent([Double].self, forKey: .center)
+    truckYard = try? c.decodeIfPresent([Double].self, forKey: .truckYard)
+    disposalSite = try? c.decodeIfPresent(DisposalSite.self, forKey: .disposalSite)
+  }
+}
+
+struct MapFacility: Codable, Hashable, Sendable, Identifiable {
+  let id: String
+  let rank: Int?
+  let name: String?
+  let system: String?
+  let lat: Double?
+  let lon: Double?
+  /// Higher is more urgent; 0 means nothing wrong. Display only.
+  let importance: Double?
+  /// "high", "medium", "low" or "none": used for the pin color.
+  let level: String?
+  /// Live sensor state: "failure", "tripped", "leak", "worn" or "ok".
+  let status: String?
+  /// Only for pump failures still running; otherwise nil.
+  let hoursToShutdown: Double?
+  /// Plain sentences for the detail card; empty when nothing is wrong.
+  let reasons: [String]
+  /// Ready to read on the glasses; nil when there's no problem.
+  let spokenText: String?
+
+  var displayName: String { name ?? id }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, rank, name, system, lat, lon, importance, level, status, hoursToShutdown, reasons, spokenText
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    // No id means it can't be pinned or picked; LossyArray skips it.
+    guard let id = c.lenientString(.id), !id.isEmpty else {
+      throw DecodingError.dataCorruptedError(forKey: .id, in: c, debugDescription: "Facility without id")
+    }
+    self.id = id
+    rank = c.lenientDouble(.rank).map { Int($0) }
+    name = c.lenientString(.name)
+    system = c.lenientString(.system)
+    lat = c.lenientDouble(.lat)
+    lon = c.lenientDouble(.lon)
+    importance = c.lenientDouble(.importance)
+    level = c.lenientString(.level)
+    status = c.lenientString(.status)
+    hoursToShutdown = c.lenientDouble(.hoursToShutdown)
+    reasons = (try? c.decodeIfPresent([String].self, forKey: .reasons)) ?? []
+    spokenText = c.lenientString(.spokenText).flatMap { $0.isEmpty ? nil : $0 }
+  }
+}
+
+extension KeyedDecodingContainer {
+  /// A number, or a numeric string. nil if missing, null, or not a number.
+  func lenientDouble(_ key: Key) -> Double? {
+    if let value = try? decodeIfPresent(Double.self, forKey: key) { return value }
+    if let value = try? decodeIfPresent(String.self, forKey: key) { return Double(value) }
+    return nil
+  }
+}

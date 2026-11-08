@@ -1,0 +1,18 @@
+{
+  "dataset": "mock",
+  "as_of": "2026-10-10T15:30:00Z",
+  "systems": [
+    {"id": "M1", "center": [32.2, -102.85], "truck_yard": [32.5, -102.45],
+     "disposal_site": {"id": "M1_DISPOSAL", "lat": 32.21, "lon": -102.84, "pressure_psi": 1020}}
+  ],
+  "facilities": [
+    {"rank": 1, "id": "pad-7", "name": "Pad 7", "system": "M1", "lat": 32.13, "lon": -102.9,
+     "importance": 140, "level": "high", "status": "failure", "hours_to_shutdown": 3.5,
+     "reasons": ["Injection pump P-2 is failing (mock data)."],
+     "spoken_text": "Critical. Pad 7, injection pump P 2 is failing. About three and a half hours to shutdown. Switch to standby pump P 3."},
+    {"rank": 2, "id": "comp-2", "name": "Compressor Station 2", "system": "M1", "lat": 32.28, "lon": -102.78,
+     "importance": 40, "level": "medium", "status": "leak", "hours_to_shutdown": null,
+     "reasons": ["Possible leak on the separator inlet line (mock data)."],
+     "spoken_text": "High. Compressor Station 2, possible leak on the separator inlet line near valve V 14. Walk the line with a gas detector."}
+  ]
+}

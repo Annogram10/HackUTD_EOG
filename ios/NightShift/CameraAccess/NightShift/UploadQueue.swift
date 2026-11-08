@@ -15,6 +15,9 @@ final class UploadQueue {
   /// Reports saved but not yet accepted by the backend.
   private(set) var pendingCount = 0
 
+  /// Called after each report the backend accepts (e.g. to refresh the map ranking).
+  @ObservationIgnored var onUploaded: (@MainActor () async -> Void)?
+
   @ObservationIgnored private let api: any NightShiftAPI
   @ObservationIgnored private let outbox: URL
   @ObservationIgnored private var retryTask: Task<Void, Never>?
@@ -70,6 +73,7 @@ final class UploadQueue {
         let data = try Data(contentsOf: file)
         let report = try JSONCoding.decoder.decode(ShiftReport.self, from: data)
         try await api.submitReport(report)
+        await onUploaded?()
         // If the shift was re-enqueued during the upload, the file now holds a newer
         // report: keep it so the next loop pass sends it.
         if (try? Data(contentsOf: file)) == data {

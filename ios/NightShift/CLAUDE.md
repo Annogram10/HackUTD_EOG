@@ -22,6 +22,7 @@ All NightShift code is in CameraAccess/NightShift/ (Config, Models, NightShiftAP
 - GET /alerts -> [{id, facility, facility_name, system, type, severity (number), severity_word, hours_to_shutdown, tripped, best_plan, cost, spoken_text}] already in priority order
 - GET /facility/{id} -> {id, name, system, status, readings:[{label,value,unit,limit}], alerts, spoken_text}
 - GET /handoff -> use only text and spoken_text
+- GET /map -> {dataset, as_of, systems:[{id, center [lat,lon], truck_yard [lat,lon], disposal_site {id, lat, lon, pressure_psi}}], facilities:[{rank, id, name, system, lat, lon, importance, level "high"|"medium"|"low"|"none", status, hours_to_shutdown, reasons, spoken_text}]} already ranked (rank 1 = check first); never re-sort. Pin color from level. Reload after each upload. Shown in FacilityMapView.
 - POST /vision/check?facility=<id> with raw JPEG (Content-Type image/jpeg) -> {flag, type, confidence, description, available, error}. Skip silently if flag is not true, available is false, or any error/timeout. One request at a time.
 - POST /report -> one JSON body {operator, date, started_at, ended_at, flags:[{type "leak"|"smoke"|"damage", facility (id), timestamp (ISO 8601), note, status "confirmed"|"dismissed"|"pending", trigger "camera"|"voice", photo_base64}]}
 - Facility ids are strings like S5_FACILITY_C; spoken names look like "S five Facility C".

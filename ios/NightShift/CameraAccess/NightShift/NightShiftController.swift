@@ -22,6 +22,12 @@ final class NightShiftController {
   private(set) var handoff: Handoff?
   private(set) var isRefreshing = false
 
+  /// GET /map: facilities ranked by importance, in backend order (loaded from cache first).
+  private(set) var map: FacilityMap?
+  private(set) var isLoadingMap = false
+  /// Error text of the last failed map load; nil after a success.
+  private(set) var mapError: String?
+
   /// Result of the last "Test connection": `ok` is true when GET /alerts succeeded.
   private(set) var connectionTestResult: (text: String, ok: Bool)?
   private(set) var isTestingConnection = false
@@ -61,6 +67,7 @@ final class NightShiftController {
     static let alerts = "alerts"
     static let facilities = "facilities"
     static let handoff = "handoff"
+    static let map = "map"
   }
 
   init(api: any NightShiftAPI = Config.makeAPI(), cache: DataCache = DataCache()) {
@@ -68,9 +75,14 @@ final class NightShiftController {
     self.cache = cache
     vision = FrameGrabber(api: api)
     uploads = UploadQueue(api: api)
+    uploads.onUploaded = { [weak self] in
+      // The ranking uses the latest uploaded shift, so reload it.
+      await self?.refreshMap()
+    }
     alerts = cache.load([ShiftAlert].self, from: CacheKey.alerts) ?? []
     facilities = cache.load([FacilityStatus].self, from: CacheKey.facilities) ?? []
     handoff = cache.load(Handoff.self, from: CacheKey.handoff)
+    map = cache.load(FacilityMap.self, from: CacheKey.map)
     // A shift saved by an earlier launch is not continued automatically.
     isAwaitingResume = store.current != nil
 
@@ -183,6 +195,8 @@ final class NightShiftController {
     guard !isRefreshing else { return }
     isRefreshing = true
     defer { isRefreshing = false }
+    // Independent of alerts: a map failure doesn't block the rest.
+    async let mapDone: Void = refreshMap()
 
     do {
       async let fetchedAlerts = api.fetchAlerts()
@@ -206,6 +220,23 @@ final class NightShiftController {
       cache.save(newFacilities, as: CacheKey.facilities)
     } catch {
       NSLog("[NightShift] Refresh failed, using cached data: \(error)")
+    }
+    await mapDone
+  }
+
+  /// Reloads GET /map and caches it. On failure the cached map stays in use.
+  func refreshMap() async {
+    guard !isLoadingMap else { return }
+    isLoadingMap = true
+    defer { isLoadingMap = false }
+    do {
+      let newMap = try await api.fetchMap()
+      map = newMap
+      mapError = nil
+      cache.save(newMap, as: CacheKey.map)
+    } catch {
+      mapError = NightShiftAPIError.describe(error)
+      NSLog("[NightShift] Map load failed, using cached map: \(error)")
     }
   }
 
@@ -314,7 +345,10 @@ final class NightShiftController {
   /// the facility statuses fetched for them), never a spoken name.
   func setCurrentFacility(_ id: String?) {
     guard let id, !id.isEmpty else { return }
-    guard alerts.contains(where: { $0.facility == id }) || facilities.contains(where: { $0.id == id }) else {
+    guard alerts.contains(where: { $0.facility == id })
+      || facilities.contains(where: { $0.id == id })
+      || map?.facilities.contains(where: { $0.id == id }) == true
+    else {
       NSLog("[NightShift] Ignoring unknown facility id \(id)")
       return
     }

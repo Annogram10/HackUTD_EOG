@@ -12,6 +12,8 @@ protocol NightShiftAPI: Sendable {
   func fetchAlerts() async throws -> [ShiftAlert]
   func fetchFacility(id: String) async throws -> FacilityStatus
   func fetchHandoff() async throws -> Handoff
+  /// GET /map: all facilities with positions, ranked by importance.
+  func fetchMap() async throws -> FacilityMap
   /// Sends one JPEG frame for the given facility; the backend says whether it shows a problem.
   func checkVision(jpeg: Data, facility: String?) async throws -> VisionResult
   func submitReport(_ report: ShiftReport) async throws
@@ -122,6 +124,10 @@ struct RealAPI: NightShiftAPI {
     try JSONCoding.decoder.decode(Handoff.self, from: try await send(makeRequest("handoff"), path: "handoff"))
   }
 
+  func fetchMap() async throws -> FacilityMap {
+    try JSONCoding.decoder.decode(FacilityMap.self, from: try await send(makeRequest("map"), path: "map"))
+  }
+
   /// Raw JPEG body (Content-Type: image/jpeg), facility as `?facility=<id>`.
   func checkVision(jpeg: Data, facility: String?) async throws -> VisionResult {
     let path = "vision/check"
@@ -206,6 +212,10 @@ struct MockAPI: NightShiftAPI {
 
   func fetchHandoff() async throws -> Handoff {
     try await load(Handoff.self, "mock_handoff")
+  }
+
+  func fetchMap() async throws -> FacilityMap {
+    try await load(FacilityMap.self, "mock_map")
   }
 
   func checkVision(jpeg: Data, facility: String?) async throws -> VisionResult {

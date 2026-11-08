@@ -52,6 +52,14 @@ struct ShiftView: View {
           .disabled(controller.isRefreshing)
         }
 
+        Section {
+          NavigationLink {
+            FacilityMapView(controller: controller)
+          } label: {
+            Label(mapLinkTitle, systemImage: "map")
+          }
+        }
+
         facilitySection
 
         voiceSection
@@ -250,6 +258,11 @@ struct ShiftView: View {
           .foregroundStyle(feedback.ok ? .green : .red)
       }
     }
+  }
+
+  private var mapLinkTitle: String {
+    guard let first = controller.map?.facilities.first, (first.importance ?? 0) > 0 else { return "Map" }
+    return "Map · check first: \(first.displayName)"
   }
 
   private var visionStatusText: String {
