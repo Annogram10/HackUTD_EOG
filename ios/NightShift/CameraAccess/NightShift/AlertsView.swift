@@ -72,8 +72,8 @@ struct AlertsView: View {
   private var activeList: some View {
     if controller.alarm.monitoringLost {
       StateCard(
-        title: "Can't check for alarms right now",
-        detail: "Showing the last known state. Retrying by itself.",
+        title: "Can't reach the console",
+        detail: "Everything is saved on the phone and will upload later. Alarms show again when it's back.",
         icon: "exclamationmark.triangle.fill",
         tone: .red
       )
@@ -81,7 +81,7 @@ struct AlertsView: View {
       StateCard(title: "Checking for alarms…", detail: nil, icon: "hourglass", tone: .grey)
     }
     if currentAlarm == nil && pendingFlags.isEmpty && controller.alarm.lastSuccess != nil {
-      StateCard(title: "No problems in progress", detail: nil, icon: "checkmark.circle", tone: .green)
+      StateCard(title: "GRID STABLE", detail: "No problems in progress.", icon: "checkmark.circle", tone: .green)
     }
     if let alarm = currentAlarm {
       alarmCard(alarm)

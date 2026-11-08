@@ -69,8 +69,8 @@ struct MapTabView: View {
         .padding(.horizontal, 12)
         if controller.map == nil {
           StateCard(
-            title: controller.mapError == nil ? "Loading the map…" : "Couldn't load the map",
-            detail: controller.mapError.map { "\($0) Retrying by itself." },
+            title: controller.mapError == nil ? "Loading the map…" : "Can't reach the console",
+            detail: controller.mapError == nil ? nil : "Everything is saved on the phone and will upload later.",
             icon: controller.mapError == nil ? "hourglass" : "exclamationmark.triangle",
             tone: controller.mapError == nil ? .grey : .red,
             actionTitle: controller.mapError == nil ? nil : "Retry now"
@@ -79,7 +79,7 @@ struct MapTabView: View {
           }
           .padding(.horizontal, 12)
         } else if routeStops.isEmpty {
-          StateCard(title: "No problems in progress", detail: nil, icon: "checkmark.circle", tone: .green)
+          StateCard(title: "GRID STABLE", detail: "No problems in progress.", icon: "checkmark.circle", tone: .green)
             .padding(.horizontal, 12)
         }
         if showLegend {

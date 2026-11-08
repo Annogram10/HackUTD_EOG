@@ -515,7 +515,7 @@ struct StateCard: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       Label(title, systemImage: icon)
-        .font(.ns(.title3, .semibold))
+        .font(title == title.uppercased() ? .nsDisplay(.title2) : .ns(.title3, .semibold))
         .foregroundStyle(tone == .grey ? NS.textBody : tone.text)
       if let detail {
         Text(detail)

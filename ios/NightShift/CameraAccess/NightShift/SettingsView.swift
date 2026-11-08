@@ -337,7 +337,7 @@ struct SettingsView: View {
             .font(.ns(.subheadline))
         }
       } else {
-        Text("No flags yet.")
+        Text("Quiet night, choom. Flags show up here when the glasses spot something.")
           .foregroundStyle(NS.textSecondary)
       }
     }
