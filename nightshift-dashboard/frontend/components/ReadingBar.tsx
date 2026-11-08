@@ -16,10 +16,10 @@ export default function ReadingBar({
       <p className={`mt-2 text-4xl font-bold tabular-nums ${text}`}>
         {value.toLocaleString()} <span className="text-xl font-normal text-zinc-500">{unit}</span>
       </p>
-      <div className="relative mt-4 h-4 rounded-full bg-zinc-800">
-        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.min(100, (value / scale) * 100)}%` }} />
+      <div className="relative mt-4 h-4 bg-zinc-800">
+        <div className={`h-full ${tone}`} style={{ width: `${Math.min(100, (value / scale) * 100)}%` }} />
         {warning !== undefined && <div className="absolute -top-1 h-6 w-0.5 bg-amber-400" style={{ left: `${(warning / scale) * 100}%` }} />}
-        <div className="absolute -top-1.5 h-7 w-0.5 bg-zinc-100" style={{ left: `${(limit / scale) * 100}%` }} />
+        <div className="absolute -top-1.5 h-7 w-0.5 bg-zinc-300" style={{ left: `${(limit / scale) * 100}%` }} />
       </div>
       <p className="mt-2 text-sm text-zinc-500">
         Limit {limit.toLocaleString()} {unit}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { addControlNote, formatDate, formatTime, photoSrc } from "@/lib/api";
+import { addControlNote, clearFlagPhoto, replaceFlagPhoto, setFlagStatus, formatDate, formatTime, photoSrc } from "@/lib/api";
 import type { Flag } from "@/lib/types";
 import { StatusBadge, TriggerBadge, TypeBadge } from "./Badges";
 import { useApp } from "./AppProvider";
@@ -14,6 +14,12 @@ interface Props {
   linkEquipment?: boolean;
 }
 
+// "S5_FACILITY_C" -> { system: "S5", facility: "Facility C" }; ids that are not dataset facilities have no section.
+function sectionOf(equipmentId: string) {
+  const m = equipmentId.match(/^(S\d+)_FACILITY_([A-Z0-9]+)$/i);
+  return m ? { system: m[1].toUpperCase(), facility: `Facility ${m[2].toUpperCase()}` } : null;
+}
+
 export default function FlagCard({ flag, showDate = false, allowNote = false, linkEquipment = true }: Props) {
   const { patchFlag } = useApp();
   const [imgOk, setImgOk] = useState(Boolean(flag.photo_url));
@@ -23,6 +29,29 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
   const [localNote, setLocalNote] = useState<string | null>(null); // used when backend is offline
   const dimmed = flag.status === "dismissed";
   const controlNote = localNote ?? flag.control_note;
+
+  const [deciding, setDeciding] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function decide(action: "confirm" | "dismiss" | "reopen") {
+    setDeciding(true);
+    setFailed(false);
+    const updated = await setFlagStatus(flag.id, action);
+    if (updated) patchFlag(updated);
+    else setFailed(true);
+    setDeciding(false);
+  }
+
+  async function photoAction(run: () => Promise<Flag | null>) {
+    setDeciding(true);
+    setFailed(false);
+    const updated = await run();
+    if (updated) {
+      patchFlag(updated);
+      setImgOk(Boolean(updated.photo_url));
+    } else setFailed(true);
+    setDeciding(false);
+  }
 
   async function save() {
     const text = draft.trim();
@@ -64,6 +93,13 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
           <TriggerBadge trigger={flag.trigger} />
         </div>
 
+        <p className="text-sm text-zinc-400">
+          {(() => {
+            const sec = sectionOf(flag.equipment_id);
+            return sec ? `System ${sec.system} · ${sec.facility}` : `Section unknown (the app sent "${flag.equipment_id}")`;
+          })()}
+        </p>
+
         <h3 className="text-xl font-semibold text-zinc-100">
           {linkEquipment ? (
             <Link href={`/facility/${flag.equipment_id}`} className="hover:text-amber-300 hover:underline">
@@ -79,7 +115,7 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
         </h3>
 
         {flag.reason && (
-          <p className="text-base text-violet-200">
+          <p className="text-base text-zinc-200">
             <span className="text-zinc-500">Why it was flagged: </span>
             {flag.reason}
           </p>
@@ -90,9 +126,51 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
           </p>
         )}
         {controlNote && (
-          <p className="text-base text-sky-200">
+          <p className="text-base text-zinc-200">
             <span className="text-zinc-500">Control room: </span>&ldquo;{controlNote}&rdquo;
           </p>
+        )}
+
+        {allowNote && (
+          <div className="no-print flex flex-wrap items-center gap-2 pt-1">
+            {flag.status === "pending" ? (
+              <>
+                <button onClick={() => decide("confirm")} disabled={deciding}
+                  className="bg-sky-500 px-4 py-2 text-base font-semibold text-zinc-100 hover:bg-sky-400 disabled:opacity-50">
+                  Confirm issue
+                </button>
+                <button onClick={() => decide("dismiss")} disabled={deciding}
+                  className="rounded-lg border border-zinc-600 px-4 py-2 text-base font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50">
+                  Dismiss
+                </button>
+              </>
+            ) : (
+              <button onClick={() => decide("reopen")} disabled={deciding}
+                className="rounded-lg border border-zinc-700 px-4 py-2 text-base font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50">
+                Undo ({flag.status === "dismissed" ? "dismissed" : "confirmed"}), back to needs review
+              </button>
+            )}
+            <label className={`cursor-pointer rounded-lg border border-zinc-700 px-4 py-2 text-base font-medium text-zinc-300 hover:bg-zinc-800 ${deciding ? "pointer-events-none opacity-50" : ""}`}>
+              {flag.photo_url ? "Replace photo" : "Add photo"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) photoAction(() => replaceFlagPhoto(flag.id, file));
+                }}
+              />
+            </label>
+            {flag.photo_url && (
+              <button onClick={() => photoAction(() => clearFlagPhoto(flag.id))} disabled={deciding}
+                className="rounded-lg border border-zinc-700 px-4 py-2 text-base font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50">
+                Remove photo
+              </button>
+            )}
+            {failed && <span className="text-base text-red-300">Couldn&apos;t save. Is the backend running?</span>}
+          </div>
         )}
 
         {allowNote &&
@@ -109,7 +187,7 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
               <button
                 onClick={save}
                 disabled={saving || !draft.trim()}
-                className="rounded-lg bg-amber-400 px-4 py-2 text-base font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
+                className="bg-sky-500 px-4 py-2 text-base font-semibold text-zinc-100 hover:bg-sky-400 disabled:opacity-50"
               >
                 Save
               </button>
@@ -123,7 +201,7 @@ export default function FlagCard({ flag, showDate = false, allowNote = false, li
                 setDraft(controlNote ?? "");
                 setEditing(true);
               }}
-              className="no-print mt-1 self-start text-base font-medium text-sky-300 hover:text-sky-200"
+              className="no-print mt-1 self-start text-base font-medium text-sky-300 hover:text-sky-300"
             >
               {controlNote ? "Edit control-room note" : "+ Add control-room note"}
             </button>

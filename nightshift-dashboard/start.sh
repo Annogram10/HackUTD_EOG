@@ -10,5 +10,7 @@ BACK=$!
 (cd frontend && npm run dev) &
 FRONT=$!
 trap "kill $BACK $FRONT 2>/dev/null" INT TERM EXIT
+IP=$(ipconfig getifaddr en0 2>/dev/null)
 echo "Dashboard: http://localhost:3000   API: http://localhost:8000/docs"
+[ -n "$IP" ] && echo "Phone/glasses base URL: http://$IP:8000   (same Wi-Fi as this laptop)"
 wait

@@ -28,9 +28,9 @@ interface Band {
 
 // A sensor over time, with limit lines and shaded bands where a problem was in progress.
 export function SeriesChart({
-  title, unit, points, lines = [], bands = [], height = 190,
+  title, unit, points, lines = [], bands = [], height = 190, bare = false,
 }: {
-  title: string; unit: string; points: [number, number][]; lines?: Line[]; bands?: Band[]; height?: number;
+  title: string; unit: string; points: [number, number][]; lines?: Line[]; bands?: Band[]; height?: number; bare?: boolean;
 }) {
   if (points.length < 2) return <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-zinc-500">{title}: no data</div>;
   const H = height;
@@ -48,7 +48,7 @@ export function SeriesChart({
   const last = points[points.length - 1][1];
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+    <div className={bare ? "" : "rounded-xl border border-zinc-800 bg-zinc-900 p-4"}>
       <div className="flex items-baseline justify-between">
         <h3 className="text-lg text-zinc-300">{title}</h3>
         <span className="text-base tabular-nums text-zinc-100">
@@ -63,12 +63,12 @@ export function SeriesChart({
         })}
         {ticks(lo, hi).map((v, i) => (
           <g key={i}>
-            <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="#27272a" />
-            <text x={PAD.l - 6} y={y(v) + 4} textAnchor="end" fontSize="11" fill="#71717a">{fmtNum(v)}</text>
+            <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="#32363d" />
+            <text x={PAD.l - 6} y={y(v) + 4} textAnchor="end" fontSize="11" fill="#8b929c">{fmtNum(v)}</text>
           </g>
         ))}
         {ticks(t0, t1, 4).map((t, i) => (
-          <text key={i} x={x(t)} y={H - 8} textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"} fontSize="11" fill="#71717a">{hhmm(t)}</text>
+          <text key={i} x={x(t)} y={H - 8} textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"} fontSize="11" fill="#8b929c">{hhmm(t)}</text>
         ))}
         {lines.map((l) => (
           <g key={l.label}>
@@ -76,7 +76,7 @@ export function SeriesChart({
             <text x={W - PAD.r - 2} y={y(l.value) - 4} textAnchor="end" fontSize="11" fill={l.color}>{l.label}</text>
           </g>
         ))}
-        <polyline points={path} fill="none" stroke="#38bdf8" strokeWidth="2" strokeLinejoin="round" />
+        <polyline points={path} fill="none" stroke="#c8ccd2" strokeWidth="2" strokeLinejoin="round" />
       </svg>
     </div>
   );
@@ -107,31 +107,31 @@ export function WhatIfChart({
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Tank level with and without the plan">
       {ticks(lo, hi).map((v, i) => (
         <g key={i}>
-          <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="#27272a" />
-          <text x={PAD.l - 6} y={y(v) + 4} textAnchor="end" fontSize="11" fill="#71717a">{Math.round(v)}%</text>
+          <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="#32363d" />
+          <text x={PAD.l - 6} y={y(v) + 4} textAnchor="end" fontSize="11" fill="#8b929c">{Math.round(v)}%</text>
         </g>
       ))}
       {ticks(0, span, 4).map((m, i) => (
-        <text key={i} x={x(m)} y={H - 8} textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"} fontSize="11" fill="#71717a">
+        <text key={i} x={x(m)} y={H - 8} textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"} fontSize="11" fill="#8b929c">
           {i === 0 ? "now" : `+${(m / 60).toFixed(1)} h`}
         </text>
       ))}
-      <line x1={PAD.l} x2={W - PAD.r} y1={y(warning)} y2={y(warning)} stroke="#fbbf24" strokeDasharray="6 4" />
-      <text x={W - PAD.r - 2} y={y(warning) - 4} textAnchor="end" fontSize="11" fill="#fbbf24">warning {warning}%</text>
-      <line x1={PAD.l} x2={W - PAD.r} y1={y(shutdown)} y2={y(shutdown)} stroke="#f87171" strokeWidth="1.5" />
-      <text x={W - PAD.r - 2} y={y(shutdown) - 4} textAnchor="end" fontSize="11" fill="#f87171">shutdown {shutdown}%</text>
-      <polyline points={toPath(doNothing)} fill="none" stroke="#f87171" strokeWidth="2.5" strokeDasharray="7 5" />
-      <polyline points={toPath(withPlan)} fill="none" stroke="#34d399" strokeWidth="3" strokeLinejoin="round" />
+      <line x1={PAD.l} x2={W - PAD.r} y1={y(warning)} y2={y(warning)} stroke="#f2b33d" strokeDasharray="6 4" />
+      <text x={W - PAD.r - 2} y={y(warning) - 4} textAnchor="end" fontSize="11" fill="#f2b33d">warning {warning}%</text>
+      <line x1={PAD.l} x2={W - PAD.r} y1={y(shutdown)} y2={y(shutdown)} stroke="#ef6b6e" strokeWidth="1.5" />
+      <text x={W - PAD.r - 2} y={y(shutdown) - 4} textAnchor="end" fontSize="11" fill="#ef6b6e">shutdown {shutdown}%</text>
+      <polyline points={toPath(doNothing)} fill="none" stroke="#ef6b6e" strokeWidth="2.5" strokeDasharray="7 5" />
+      <polyline points={toPath(withPlan)} fill="none" stroke="#3fb97f" strokeWidth="3" strokeLinejoin="round" />
       {tripPt && (
         <g>
-          <circle cx={x((tripPt.ts - now) / 60)} cy={y(tripPt.level_pct)} r="6" fill="#ef4444" stroke="#18181b" strokeWidth="2" />
-          <text x={x((tripPt.ts - now) / 60) + 10} y={y(tripPt.level_pct) + 22} fontSize="12" fill="#fca5a5">tank trips, wells shut in</text>
+          <circle cx={x((tripPt.ts - now) / 60)} cy={y(tripPt.level_pct)} r="6" fill="#e5484d" stroke="#17191c" strokeWidth="2" />
+          <text x={x((tripPt.ts - now) / 60) + 10} y={y(tripPt.level_pct) + 22} fontSize="12" fill="#f5a3a5">tank trips, wells shut in</text>
         </g>
       )}
       {marks.map((m, i) => (
         <g key={i}>
-          <line x1={x(m.min)} x2={x(m.min)} y1={PAD.t} y2={H - PAD.b} stroke="#34d399" strokeDasharray="2 4" opacity="0.7" />
-          <text x={x(m.min) + 4} y={PAD.t + 12 + i * 13} fontSize="11" fill="#6ee7b7">{m.label}</text>
+          <line x1={x(m.min)} x2={x(m.min)} y1={PAD.t} y2={H - PAD.b} stroke="#3fb97f" strokeDasharray="2 4" opacity="0.7" />
+          <text x={x(m.min) + 4} y={PAD.t + 12 + i * 13} fontSize="11" fill="#7fd3ab">{m.label}</text>
         </g>
       ))}
     </svg>

@@ -5,29 +5,76 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/AppProvider";
+import { PageSkeleton } from "@/components/Skeleton";
 import FlagCard from "@/components/FlagCard";
 import Stat from "@/components/Stat";
 import { eventsUrl, facName, formatDate, formatDateTime, formatTime, getHandoff } from "@/lib/api";
-import { useReport } from "@/lib/hooks";
+import PriorityList from "@/components/PriorityList";
+import { flagSignature, usePriorities, useReport } from "@/lib/hooks";
 import type { Handoff } from "@/lib/types";
 
 export default function Report() {
-  const { shift, dataset } = useApp();
-  const report = useReport(shift?.id);
+  const { shift, dataset, loading, asOf } = useApp();
+  const report = useReport(shift, asOf);
+  const priorities = usePriorities(shift, dataset, asOf);
   const [hand, setHand] = useState<Handoff | null>(null);
 
   useEffect(() => {
     if (!dataset) return;
-    getHandoff(dataset).then(setHand).catch(() => setHand(null));
-  }, [dataset]);
+    getHandoff(dataset, asOf ?? undefined).then(setHand).catch(() => setHand(null));
+  }, [dataset, asOf]);
 
-  if (!shift || !report) return <div className="h-96 animate-pulse rounded-2xl bg-zinc-900" />;
+  if (loading || !dataset) return <PageSkeleton cards={2} />;
+
+  const checkFirst = (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-2xl font-semibold">Check these first next shift</h2>
+        <p className="text-base text-zinc-500">
+          {shift ? `From the ${formatDate(shift.date)} night shift` : "From the sensors"} plus problems still in progress. These are checks for a person to make. Dismissed flags are left out.
+        </p>
+      </div>
+      {priorities ? <PriorityList key={flagSignature(shift) ?? dataset} initial={priorities} /> : <div className="h-32 animate-pulse rounded-xl bg-zinc-900" />}
+    </section>
+  );
+
+  const handoffBlock = hand && (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+      <h2 className="text-2xl font-semibold">Summary: {hand.headline}</h2>
+      <p className="mb-3 text-sm text-zinc-500">
+        As of {formatDateTime(hand.as_of)}
+        {hand.agent_mode ? ` · saved by the triage agent (${hand.agent_mode === "nemotron" ? "Nemotron" : "offline script"})` : ""}
+      </p>
+      <ul className="space-y-1.5 text-lg text-zinc-200">
+        {hand.lines.map((l, i) => <li key={i}>{l}</li>)}
+      </ul>
+    </section>
+  );
+
+  // No phone upload for this dataset yet: still show everything the sensors know.
+  if (!shift || !report)
+    return (
+      <div className="space-y-8">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <h1 className="text-3xl font-bold">Handover</h1>
+          <div className="no-print flex gap-3">
+            <a href={eventsUrl(dataset)} className="rounded-lg border border-zinc-700 px-5 py-2.5 text-base font-semibold text-zinc-200 hover:bg-zinc-800">Export events.json</a>
+            <button onClick={() => window.print()} className="bg-sky-500 px-5 py-2.5 text-base font-semibold text-zinc-100 hover:bg-sky-400">Print</button>
+          </div>
+        </div>
+        <p className="rounded-xl border border-dashed border-zinc-800 p-6 text-lg text-zinc-400">
+          {asOf !== null ? "No shift had started yet at this time." : "No phone report for this dataset yet."} When the operator ends a shift on the phone, their flags, notes and route appear here.
+        </p>
+        {handoffBlock}
+        {checkFirst}
+      </div>
+    );
 
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold">Handover report: {formatDate(report.shift.date)} night</h1>
+          <h1 className="text-3xl font-bold">Handover: {formatDate(report.shift.date)} night</h1>
           <p className="mt-1 text-lg text-zinc-400">
             Operator {report.shift.operator} · {formatDateTime(report.shift.started_at)} to {formatDateTime(report.shift.ended_at)} · uploaded {formatDateTime(report.shift.uploaded_at)}
           </p>
@@ -38,30 +85,21 @@ export default function Report() {
               Export events.json
             </a>
           )}
-          <button onClick={() => window.print()} className="rounded-lg bg-amber-400 px-5 py-2.5 text-base font-semibold text-zinc-950 hover:bg-amber-300">
-            Print report
+          <button onClick={() => window.print()} className="bg-sky-500 px-5 py-2.5 text-base font-semibold text-zinc-100 hover:bg-sky-400">
+            Print
           </button>
         </div>
       </div>
 
-      {hand && (
-        <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-          <h2 className="text-2xl font-semibold">Sensor handoff: {hand.headline}</h2>
-          <p className="mb-3 text-sm text-zinc-500">
-            As of {formatDateTime(hand.as_of)} · written from the detection, countdown and cost tools
-            {hand.agent_mode ? ` · saved by the triage agent (${hand.agent_mode === "nemotron" ? "Nemotron" : "offline script"})` : ""}
-          </p>
-          <ul className="space-y-1.5 text-lg text-zinc-200">
-            {hand.lines.map((l, i) => <li key={i}>{l}</li>)}
-          </ul>
-        </section>
-      )}
+      {handoffBlock}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="Flags" value={report.totals.total} />
-        <Stat label="Confirmed issues" value={report.totals.confirmed} tone="text-red-400" />
-        <Stat label="Needs review" value={report.totals.pending} tone="text-amber-400" />
-        <Stat label="Dismissed" value={report.totals.dismissed} tone="text-zinc-400" />
+      {checkFirst}
+
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800 lg:grid-cols-4">
+        <Stat bare label="Flags" value={report.totals.total} />
+        <Stat bare label="Confirmed issues" value={report.totals.confirmed} tone="text-red-400" />
+        <Stat bare label="Needs review" value={report.totals.pending} tone="text-amber-400" />
+        <Stat bare label="Dismissed" value={report.totals.dismissed} tone="text-zinc-400" />
       </div>
 
       <section className="space-y-4">

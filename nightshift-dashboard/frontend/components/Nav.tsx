@@ -4,21 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
-  { href: "/", label: "Overview" },
-  { href: "/alerts", label: "Alerts" },
+  { href: "/", label: "Now" },
   { href: "/flags", label: "Flags" },
   { href: "/report", label: "Handover" },
-  { href: "/next-shift", label: "Next shift" },
-  { href: "/agent", label: "Agent trace" },
+  { href: "/agent", label: "How it decided" },
 ];
 
 export default function Nav() {
   const path = usePathname();
   return (
-    <header className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
+    <header className="border-b border-zinc-800 bg-zinc-950">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-6 py-4">
-        <Link href="/" className="text-2xl font-bold tracking-tight text-zinc-100">
-          Night<span className="text-amber-400">Shift</span>
+        <Link href="/" className="flex items-center gap-3 text-2xl font-bold tracking-tight text-zinc-100">
+          NightShift
         </Link>
         <nav className="flex flex-wrap gap-1">
           {LINKS.map((l) => {
@@ -27,8 +25,8 @@ export default function Nav() {
               <Link
                 key={l.href}
                 href={l.href}
-                className={`rounded-lg px-4 py-2 text-base font-medium transition-colors ${
-                  active ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-100"
+                className={`px-4 py-2 text-base font-medium ${
+                  active ? "border-b-2 border-sky-400 text-zinc-100" : "border-b-2 border-transparent text-zinc-400 hover:text-zinc-100"
                 }`}
               >
                 {l.label}

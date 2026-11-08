@@ -128,6 +128,8 @@ def best_for_trucks(c: Ctx, trucks: int) -> dict:
                         else:
                             hi = mid
                     consider(trips, {**base, p: max(0.0, lo - 1e-3)}, "partial")
+    if best is None:  # no truck trip can arrive before the repair ends: trucks cannot help, plan without them
+        return best_for_trucks(c, 0)
     return best[1]
 
 

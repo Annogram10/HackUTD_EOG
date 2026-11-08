@@ -1,72 +1,81 @@
 "use client";
 
-// SHIFT OVERVIEW: risk brief, headline numbers, the site map, and every tank's level + countdown.
+// NOW: what is wrong right now and what to do about it, then the map and every facility.
 
 import Link from "next/link";
 import { useState } from "react";
+import AlertCard from "@/components/AlertCard";
+import { NowSkeleton } from "@/components/Skeleton";
+import EvidenceCharts from "@/components/EvidenceCharts";
+import RiskCard from "@/components/RiskCard";
+import TimeTravel from "@/components/TimeTravel";
 import { FacStatusBadge } from "@/components/Badges";
 import { useApp } from "@/components/AppProvider";
-import RiskBrief from "@/components/RiskBrief";
 import SiteMap, { MapLegend } from "@/components/SiteMap";
-import Stat from "@/components/Stat";
-import { fmtHours, formatDateTime, money } from "@/lib/api";
-import { usePriorities } from "@/lib/hooks";
+import { fmtHours, money } from "@/lib/api";
 import type { FacilityStatus } from "@/lib/types";
 
 const RANK: Record<FacilityStatus, number> = { tripped: 0, failure: 1, leak: 2, worn: 3, ok: 4 };
 
-export default function Overview() {
-  const { overview, shift, loading } = useApp();
-  const priorities = usePriorities(shift?.id);
+function plural(n: number, one: string, many: string) {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+export default function Now() {
+  const { overview, shift, loading, asOf } = useApp();
   const [picked, setPicked] = useState<string | null>(null);
 
-  if (!overview || (loading && !overview)) return <div className="h-96 animate-pulse rounded-2xl bg-zinc-900" />;
+  if (!overview || (loading && !overview)) return <NowSkeleton />;
 
-  const first = overview.systems.find((s) => s.id === picked)
-    ?? overview.systems.find((s) => shift?.route_planned.some((id) => s.facilities.some((f) => f.id === id)))
-    ?? overview.systems.find((s) => s.facilities.some((f) => f.status !== "ok"))
-    ?? overview.systems[0];
-  const system = first;
+  const system =
+    overview.systems.find((s) => s.id === picked) ??
+    overview.systems.find((s) => s.facilities.some((f) => f.status !== "ok")) ??
+    overview.systems[0];
   const flags = shift?.flags ?? [];
-  const missed = shift ? shift.route_planned.filter((s) => !shift.route_walked.includes(s)).length : 0;
+  const review = flags.filter((f) => f.status === "pending").length;
+  const phoneLine = shift ? (
+    <>
+      From the phone: {plural(flags.length, "flag", "flags")}
+      {review ? `, ${review} not reviewed yet` : ""}. <Link href="/flags" className="text-sky-400 underline underline-offset-2 hover:text-sky-300">See flags</Link>
+    </>
+  ) : asOf !== null ? "No shift had started yet at this time, so there are no phone flags to show." : "No phone report for this dataset yet. Flags from the field appear here once the phone uploads.";
   const allFacs = overview.systems.flatMap((s) => s.facilities);
   const sorted = [...allFacs].sort((a, b) => RANK[a.status] - RANK[b.status] || (a.hours_to_limit?.p50 ?? 99) - (b.hours_to_limit?.p50 ?? 99));
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-bold">Shift overview</h1>
-        <p className="mt-1 text-lg text-zinc-400">
-          Sensor data as of {formatDateTime(overview.now_ts)}. These are things to check, not diagnoses.
-        </p>
-      </div>
+      <RiskCard footer={phoneLine}>
+        <TimeTravel bare />
+      </RiskCard>
+      <EvidenceCharts />
 
-      <RiskBrief items={priorities} />
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <Stat label="Pump failures" value={overview.counts.failures} tone={overview.counts.failures ? "text-red-400" : "text-emerald-400"} sub="in progress" />
-        <Stat label="Possible leaks" value={overview.counts.leaks} tone={overview.counts.leaks ? "text-orange-400" : "text-emerald-400"} sub="in progress" />
-        <Stat label="Pumps wearing out" value={overview.counts.worn} tone={overview.counts.worn ? "text-amber-400" : "text-emerald-400"} sub="in progress" />
-        <Stat label="Flags last shift" value={flags.length} sub={`${flags.filter((f) => f.status === "pending").length} need review`} />
-        <Stat label="Stops checked" value={shift ? `${shift.route_planned.length - missed} / ${shift.route_planned.length}` : "–"}
-          tone={missed ? "text-amber-400" : "text-emerald-400"} sub={missed ? `${missed} missed` : "full route"} />
-      </div>
+      {overview.alerts.length > 0 && (
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-2xl font-semibold">What to do</h2>
+            <p className="text-base text-zinc-500">Most urgent first. These are suggestions for a person to approve, nothing here operates equipment.</p>
+          </div>
+          {overview.alerts.map((a) => <AlertCard key={a.event_id} a={a} />)}
+        </section>
+      )}
 
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-2xl font-semibold">Network map</h2>
-          <div className="flex flex-wrap gap-2">
-            {overview.systems.map((s) => {
-              const bad = s.facilities.some((f) => f.status !== "ok");
-              return (
-                <button key={s.id} onClick={() => setPicked(s.id)}
-                  className={`rounded-full px-4 py-1.5 text-base font-medium ring-1 ${s.id === system.id ? "bg-zinc-100 text-zinc-950 ring-zinc-100" : "bg-zinc-900 text-zinc-300 ring-zinc-700 hover:bg-zinc-800"}`}>
-                  {bad && <span className="mr-2 inline-block h-2 w-2 rounded-full bg-red-500" />}
-                  {s.id}
-                </button>
-              );
-            })}
-          </div>
+          <h2 className="text-2xl font-semibold">Map</h2>
+          {overview.systems.length > 1 && (
+            <div className="flex flex-wrap gap-2">
+              {overview.systems.map((s) => {
+                const bad = s.facilities.some((f) => f.status !== "ok");
+                return (
+                  <button key={s.id} onClick={() => setPicked(s.id)}
+                    className={`px-4 py-1.5 text-base font-medium ring-1 ${s.id === system.id ? "bg-zinc-800 text-zinc-100 ring-sky-400" : "bg-zinc-900 text-zinc-300 ring-zinc-700 hover:bg-zinc-800"}`}>
+                    {bad && <span className="mr-2 inline-block h-2 w-2 rounded-full bg-red-500" />}
+                    {s.id}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         <SiteMap system={system} shift={shift} />
         <MapLegend />
@@ -77,20 +86,22 @@ export default function Overview() {
         )}
       </section>
 
-      <section>
-        <h2 className="mb-3 text-2xl font-semibold">Every facility: tank level and countdown</h2>
-        <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900">
+      <details className="group rounded-xl border border-zinc-800 bg-zinc-900" open={overview.alerts.length === 0}>
+        <summary className="cursor-pointer select-none px-5 py-4 text-xl font-semibold text-zinc-100">
+          All {allFacs.length} facilities <span className="text-base font-normal text-zinc-500">(tank level and time to shutdown)</span>
+        </summary>
+        <div className="overflow-x-auto border-t border-zinc-800">
           <table className="w-full text-left text-lg">
             <thead className="text-sm uppercase tracking-wide text-zinc-500">
-              <tr><th className="px-4 py-3">Facility</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Tank</th><th className="px-4 py-3">Time to shutdown</th><th className="px-4 py-3 text-right">Lost revenue if shut in</th></tr>
+              <tr><th className="px-4 py-3">Facility</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Tank</th><th className="px-4 py-3 text-right">Time to shutdown</th><th className="px-4 py-3 text-right">Lost revenue if shut in</th></tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {sorted.map((f) => (
                 <tr key={f.id} className="hover:bg-zinc-800/50">
                   <td className="px-4 py-3 font-semibold"><Link href={`/facility/${f.id}`} className="hover:text-amber-300 hover:underline">{f.name}</Link></td>
-                  <td className="px-4 py-3"><FacStatusBadge status={f.status} /></td>
+                  <td className="px-4 py-3"><FacStatusBadge status={f.status} level={f.risk_level} /></td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-end gap-3">
                       <div className="relative h-3 w-32 rounded bg-zinc-800">
                         <div className={`h-full rounded ${f.level_pct >= f.shutdown_pct - 0.1 ? "bg-red-500" : f.level_pct >= f.warning_pct ? "bg-amber-400" : "bg-sky-500"}`} style={{ width: `${f.level_pct}%` }} />
                         <div className="absolute inset-y-0 w-px bg-red-300" style={{ left: `${f.shutdown_pct}%` }} />
@@ -98,7 +109,7 @@ export default function Overview() {
                       <span className="tabular-nums text-zinc-300">{f.level_pct.toFixed(0)}%</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 tabular-nums">
+                  <td className="px-4 py-3 text-right">
                     {f.status === "tripped" ? <span className="font-semibold text-red-300">Tripped</span>
                       : f.hours_to_limit ? <span className="font-semibold text-red-300">{fmtHours(f.hours_to_limit.p50)}</span>
                       : <span className="text-zinc-600">pump is running</span>}
@@ -109,7 +120,7 @@ export default function Overview() {
             </tbody>
           </table>
         </div>
-      </section>
+      </details>
     </div>
   );
 }

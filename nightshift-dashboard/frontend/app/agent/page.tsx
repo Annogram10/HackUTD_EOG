@@ -2,6 +2,7 @@
 
 // AGENT TRACE: what the triage agent concluded, then every tool call it made to get there.
 
+import { PageSkeleton } from "@/components/Skeleton";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { facName, getAgentTrace, money, rerunAgent } from "@/lib/api";
@@ -105,7 +106,7 @@ export default function AgentTrace() {
     };
   }, [running, dataset]);
 
-  if (!run) return <div className="h-96 animate-pulse rounded-2xl bg-zinc-900" />;
+  if (!run) return <PageSkeleton cards={3} />;
   const live = run.mode === "nemotron";
   const { rows, final } = toRows(run.steps);
   const toolCalls = run.steps.filter((s) => s.kind === "tool");
@@ -155,13 +156,13 @@ export default function AgentTrace() {
             const line = isTool && s.result ? summarize(s.tool ?? "", s.result) : null;
             return (
               <li key={s.step} className="relative">
-                <span className={`absolute -left-[35px] top-1 flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ring-4 ring-zinc-950 ${isTool ? "bg-violet-400 text-violet-950" : "bg-sky-400 text-sky-950"}`}>
-                  {isTool ? n : "✓"}
+                <span className="absolute -left-[37px] top-1 flex h-7 min-w-7 items-center justify-center border border-zinc-600 bg-zinc-800 px-1 text-sm font-semibold text-zinc-100">
+                  {isTool ? n : "End"}
                 </span>
                 {isTool ? (
                   <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
                     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                      <span className="font-mono text-lg font-semibold text-violet-200">{s.tool}</span>
+                      <span className="font-mono text-lg font-semibold text-zinc-100">{s.tool}</span>
                       <span className="text-base text-zinc-500">{argsLine(s.args)}</span>
                       <span className="ml-auto text-sm text-zinc-600">{s.ms} ms</span>
                     </div>

@@ -6,7 +6,7 @@ import { formatDate, formatDateTime } from "@/lib/api";
 import { useApp } from "./AppProvider";
 
 export default function TopBar() {
-  const { datasets, dataset, setDataset, overview, shifts, shift, select, offline, loading } = useApp();
+  const { datasets, dataset, setDataset, overview, asOf, playing, shifts, shift, offline, loading } = useApp();
 
   if (offline)
     return (
@@ -20,7 +20,7 @@ export default function TopBar() {
     <div className="no-print border-b border-zinc-800 bg-zinc-900/40">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3">
         <label className="flex items-center gap-3">
-          <span className="text-sm uppercase tracking-wide text-zinc-500">Dataset</span>
+          <span className="text-sm uppercase tracking-wide text-zinc-500">Data</span>
           <select
             value={dataset ?? ""}
             onChange={(e) => setDataset(e.target.value)}
@@ -34,28 +34,27 @@ export default function TopBar() {
           </select>
         </label>
         {overview && (
-          <p className="text-base text-zinc-300">
-            Data runs to <span className="font-semibold">{formatDateTime(overview.now_ts)}</span>
+          <p className="flex items-center gap-2 text-base text-zinc-300">
+            {asOf === null ? (
+              <span className="flex items-center gap-2 bg-emerald-500/15 px-2.5 py-0.5 text-sm font-semibold text-emerald-300 ring-1 ring-emerald-400/50">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                Live
+              </span>
+            ) : (
+              <span className="flex items-center gap-2 bg-zinc-800 px-2.5 py-0.5 text-sm font-semibold text-zinc-200 ring-1 ring-zinc-500">
+                <span className="h-2 w-2 rounded-full bg-zinc-300" />
+                {playing ? "Replaying" : "Replay"}
+              </span>
+            )}
+            <span className="font-semibold">{formatDateTime(overview.now_ts)}</span>
           </p>
         )}
-        {shifts.length > 0 && shift && (
-          <label className="flex items-center gap-3">
-            <span className="text-sm uppercase tracking-wide text-zinc-500">Shift</span>
-            <select
-              value={shift.id}
-              onChange={(e) => select(e.target.value)}
-              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-base font-semibold text-zinc-100"
-            >
-              {shifts.map((s, i) => (
-                <option key={s.id} value={s.id}>
-                  {formatDate(s.date)} night · {s.operator}
-                  {i === 0 ? " (latest)" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
+        {shift && (
+          <p className="text-base text-zinc-400">
+            Showing <span className="font-semibold text-zinc-200">{formatDate(shift.date)} night</span> from the phone
+          </p>
         )}
-        {shift && <p className="text-sm text-zinc-500">Uploaded from the iPhone {formatDateTime(shift.uploaded_at)}</p>}
+        {shifts.length === 0 && <p className="text-sm text-zinc-500">No phone report for this data yet</p>}
         {loading && <span className="ml-auto text-sm text-zinc-500">Loading…</span>}
       </div>
     </div>

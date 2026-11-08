@@ -1,8 +1,8 @@
 // Shared data shapes. Must match backend/main.py.
 
-export type FlagType = "leak" | "smoke" | "damage";
+export type FlagType = "leak" | "smoke" | "damage" | "alarm";
 export type FlagStatus = "pending" | "confirmed" | "dismissed";
-export type Trigger = "camera" | "data";
+export type Trigger = "camera" | "voice" | "data";
 
 export interface Flag {
   id: string;
@@ -35,6 +35,7 @@ export interface Shift {
 export type FacilityStatus = "ok" | "worn" | "leak" | "failure" | "tripped";
 
 export interface FacilityCard {
+  risk_level?: RiskLevel; // green = nothing to act on (a minor decrease is fine)
   id: string;
   name: string;
   system_id: string;
@@ -77,6 +78,8 @@ export interface Plan {
 export type Category = "pump_failure" | "pipeline_leak" | "pump_degradation";
 
 export interface Alert {
+  truck_cost?: TruckCost;
+  level?: RiskLevel; // red danger, amber check soon, green minor (a small decrease is fine)
   event_id: string;
   category: Category;
   system_id: string;
@@ -225,4 +228,71 @@ export interface Handoff {
   agent_text?: string;
   agent_mode?: string;
   events_count: number;
+}
+
+export type RiskLevel = "green" | "amber" | "red";
+
+export interface Timeline {
+  dataset: string;
+  first: number; // unix seconds
+  last: number;
+  step_s: number;
+  bands: { level: RiskLevel; start: number; end: number }[]; // pump-failure stretches: amber and red
+  slow_bands: { level: RiskLevel; start: number; end: number }[]; // a leak or worn pump is open (days long)
+  alarms: number[]; // moments a red alarm would have started
+}
+
+export interface Risk {
+  dataset: string;
+  as_of: string;
+  now: number;
+  level: RiskLevel;
+  rules_level: RiskLevel;
+  alarm: boolean;
+  alarm_id: string | null;
+  headline: string;
+  reasons: { level: RiskLevel; facility_id: string; text: string }[];
+  facilities: Record<string, RiskLevel>;
+  ai: { available: boolean; level?: RiskLevel; headline?: string; why?: string; money?: string; model?: string; error?: string } | null;
+  money: {
+    rows: { facility_id: string; name: string; fix: string; cost: number; do_nothing: number | null; saves: number | null; trucks: TruckCost }[];
+    trip_price: number; // what one truck trip costs (ops.json)
+    trip_bbl: number; // water one trip takes away
+    total_cost: number;
+    total_do_nothing: number;
+    total_saves: number;
+    text: string;
+    from_ai: boolean; // the sentence was written by the model (every dollar figure in it is checked against the real numbers)
+  };
+  spoken_text: string;
+}
+
+export interface EvidenceChart {
+  asset: string;
+  metric: string;
+  label: string;
+  unit: string;
+  base: number; // normal value before the problem
+  current: number;
+  change: number; // % change (points for the tank level)
+  caption: string;
+  points: [number, number][];
+}
+
+export interface Evidence {
+  dataset: string;
+  as_of: string;
+  now: number;
+  ai: { available: boolean; model?: string; error?: string } | null;
+  sections: { facility_id: string; name: string; system: string; category: string; level: RiskLevel; onset_unix: number; onset_ts: string; charts: EvidenceChart[] }[];
+}
+
+export interface TruckCost {
+  trip_price: number;
+  trip_bbl: number;
+  trucks: number;
+  trips: number; // per truck
+  trucks_total: number;
+  shut_in_total: number; // the part of the plan that is lost sales from wells shut in
+  arrive_min: number | null;
 }

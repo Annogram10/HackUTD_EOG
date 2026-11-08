@@ -79,7 +79,7 @@ check("leaks/wear have null hours_to_limit", all(not e.get("hours_to_limit") for
 r, _ = get("/voice/alerts")
 check("voice alerts", r.status_code == 200 and all(x["text"] for x in r.json()), f"{len(r.json())} sentences")
 r, _ = get(f"/voice/facility/{f0['id']}")
-check("voice facility status", r.status_code == 200 and f0["name"] in r.json()["text"], r.json()["text"][:80])
+check("voice facility status", r.status_code == 200 and "percent full" in r.json()["text"], r.json()["text"][:80])
 
 r, _ = get("/shifts")
 shifts = r.json()

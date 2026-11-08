@@ -10,15 +10,16 @@ import { fmtHours } from "@/lib/api";
 import type { FacilityCard, Shift, System } from "@/lib/types";
 
 type Tone = "ok" | "amber" | "orange" | "red";
-const BORDER: Record<Tone, string> = { ok: "border-emerald-500", amber: "border-amber-400", orange: "border-orange-500", red: "border-red-500" };
-const DOT: Record<Tone, string> = { ok: "bg-emerald-500", amber: "bg-amber-400", orange: "bg-orange-500", red: "bg-red-500" };
-const STROKE: Record<Tone, string> = { ok: "#52525b", amber: "#fbbf24", orange: "#f97316", red: "#ef4444" };
+const BORDER: Record<Tone, string> = { ok: "border-emerald-500", amber: "border-amber-400", orange: "border-amber-500", red: "border-red-500" };
+const DOT: Record<Tone, string> = { ok: "bg-emerald-500", amber: "bg-amber-400", orange: "bg-amber-500", red: "bg-red-500" };
+const STROKE: Record<Tone, string> = { ok: "#4d535c", amber: "#f2b33d", orange: "#f2b33d", red: "#e5484d" };
 
 function tone(f: FacilityCard, shift: Shift | null): Tone {
   const flags = shift?.flags.filter((x) => x.equipment_id === f.id) ?? [];
   if (f.status === "tripped" || f.status === "failure" || flags.some((x) => x.status === "confirmed")) return "red";
-  if (f.status === "leak") return "orange";
-  if (f.status === "worn" || flags.some((x) => x.status === "pending")) return "amber";
+  const minor = f.risk_level === "green"; // a small decrease is fine: no colour
+  if (f.status === "leak" && !minor) return "orange";
+  if ((f.status === "worn" && !minor) || flags.some((x) => x.status === "pending")) return "amber";
   return "ok";
 }
 
@@ -88,34 +89,28 @@ export default function SiteMap({ system, shift }: { system: System; shift: Shif
   return (
     <div className="relative aspect-[16/9] w-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full" aria-hidden>
-        <defs>
-          <pattern id="gravel" width="2" height="3.4" patternUnits="userSpaceOnUse">
-            <circle cx="0.5" cy="0.6" r="0.12" fill="#52525b" opacity="0.45" />
-            <circle cx="1.5" cy="2.2" r="0.1" fill="#52525b" opacity="0.45" />
-          </pattern>
-        </defs>
-        <rect width={W} height={H} fill="url(#gravel)" />
+
         {facs.map((f) => {
           const p = pos.get(f.id)!;
           const leak = f.status === "leak";
           return (
-            <line key={f.id} x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? STROKE.orange : "#52525b"} strokeWidth={leak ? 6 : 5}
+            <line key={f.id} x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? STROKE.orange : "#4d535c"} strokeWidth={leak ? 6 : 5}
               strokeDasharray={leak ? "10 6" : undefined} vectorEffect="non-scaling-stroke" strokeLinecap="round" opacity="0.9" />
           );
         })}
         {missed.map((id) => (
           <line key={id} x1={pos.get(id)![0]} y1={pos.get(id)![1]} x2={(walkedPts.at(-1) ?? pos.get(id)!)[0]} y2={(walkedPts.at(-1) ?? pos.get(id)!)[1]}
-            stroke="#a1a1aa" strokeDasharray="4 6" strokeWidth="3" vectorEffect="non-scaling-stroke" opacity="0.7" />
+            stroke="#a9afb8" strokeDasharray="4 6" strokeWidth="3" vectorEffect="non-scaling-stroke" opacity="0.7" />
         ))}
         {walkedPts.length > 1 && (
-          <polyline points={walkedPts.map((p) => p.join(",")).join(" ")} fill="none" stroke="#38bdf8" strokeWidth="4" strokeLinecap="round"
+          <polyline points={walkedPts.map((p) => p.join(",")).join(" ")} fill="none" stroke="#c8ccd2" strokeWidth="4" strokeLinecap="round"
             strokeLinejoin="round" vectorEffect="non-scaling-stroke" opacity="0.9" />
         )}
       </svg>
 
       <div className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={pct(disp)}>
-        <span className="h-7 w-7 rotate-45 rounded-sm border-2 border-sky-300 bg-zinc-950" />
-        <span className="mt-2 whitespace-nowrap rounded bg-zinc-950/85 px-2 py-0.5 text-sm font-semibold text-sky-200">Disposal site</span>
+        <span className="h-7 w-7 rotate-45 rounded-sm border-2 border-zinc-300 bg-zinc-950" />
+        <span className="mt-2 whitespace-nowrap rounded bg-zinc-950/85 px-2 py-0.5 text-sm font-semibold text-zinc-200">Disposal site</span>
         <span className="whitespace-nowrap rounded bg-zinc-950/85 px-1.5 text-xs text-zinc-400">{system.disposal_site.pressure_psi} psi</span>
       </div>
       <div className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={pct(yard)}>
@@ -132,24 +127,22 @@ export default function SiteMap({ system, shift }: { system: System; shift: Shif
         const run = f.pump_status === 1;
         return (
           <Link key={f.id} href={`/facility/${f.id}`} style={pct(pos.get(f.id)!)}
-            className={`absolute w-44 -translate-x-1/2 -translate-y-1/2 rounded-xl border-2 bg-zinc-950/95 p-2.5 shadow-xl transition-transform hover:scale-105 ${BORDER[t]} ${isMissed ? "border-dashed" : ""}`}>
+            className={`absolute w-44 -translate-x-1/2 -translate-y-1/2 rounded-xl border-2 bg-zinc-950/95 p-2.5 transition-transform hover:scale-105 ${BORDER[t]} ${isMissed ? "border-dashed" : ""}`}>
             {stop > 0 && (
-              <span className="absolute -left-3 -top-3 flex h-7 w-7 items-center justify-center rounded-full bg-sky-400 text-sm font-bold text-sky-950 ring-2 ring-zinc-950">{stop}</span>
+              <span className="absolute -left-3 -top-3 flex h-7 w-7 items-center justify-center rounded-full bg-zinc-300 text-sm font-bold text-zinc-950 ring-2 ring-zinc-950">{stop}</span>
             )}
             <div className="flex items-center gap-2">
               <span className={`h-3 w-3 shrink-0 rounded-full ${DOT[t]}`} />
               <span className="truncate text-base font-bold text-zinc-100">{f.name}</span>
             </div>
-            <div className="mt-1.5 flex items-center gap-1.5" title="wells → tank → pump">
+            <div className="mt-1.5 flex items-center gap-1.5" title="wells, tank, pump">
               {f.wells.map((w) => (
                 <span key={w.id} className={`h-2.5 w-2.5 rounded-full ${w.producing ? "bg-emerald-400" : "bg-zinc-600"}`} title={`${w.id} ${w.producing ? "producing" : "shut in"}`} />
               ))}
-              <span className="text-zinc-600">→</span>
               <div className="relative h-3.5 flex-1 rounded-sm bg-zinc-800" title={`Tank ${f.level_pct}%`}>
                 <div className={`h-full rounded-sm ${f.level_pct >= f.shutdown_pct - 0.1 ? "bg-red-500" : f.level_pct >= f.warning_pct ? "bg-amber-400" : "bg-sky-500"}`} style={{ width: `${f.level_pct}%` }} />
                 <div className="absolute inset-y-0 w-px bg-red-300" style={{ left: `${f.shutdown_pct}%` }} />
               </div>
-              <span className="text-zinc-600">→</span>
               <span className={`text-xs font-bold ${f.pump_status === 2 ? "text-red-400" : run ? "text-emerald-400" : "text-zinc-500"}`}>
                 {f.pump_status === 2 ? "FAULT" : run ? "ON" : "off"}
               </span>
@@ -170,7 +163,7 @@ export default function SiteMap({ system, shift }: { system: System; shift: Shif
 export function MapLegend() {
   return (
     <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-base text-zinc-300">
-      {[["bg-emerald-500", "Normal"], ["bg-amber-400", "Pump wearing out / needs review"], ["bg-orange-500", "Possible leak"], ["bg-red-500", "Pump failure / confirmed"]].map(([c, l]) => (
+      {[["bg-emerald-500", "Normal"], ["bg-amber-400", "Pump wearing out / needs review"], ["bg-amber-500", "Possible leak"], ["bg-red-500", "Pump failure / confirmed"]].map(([c, l]) => (
         <li key={l} className="flex items-center gap-2"><span className={`h-4 w-4 rounded-full ${c}`} />{l}</li>
       ))}
       <li className="flex items-center gap-2"><span className="h-1 w-8 rounded bg-sky-400" />Route walked last shift</li>

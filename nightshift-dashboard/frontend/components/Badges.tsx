@@ -1,4 +1,5 @@
-import type { Category, FacilityStatus, FlagStatus, FlagType, PriorityLevel, Trigger } from "@/lib/types";
+import { WarningIcon } from "./Icons";
+import type { Category, FacilityStatus, FlagStatus, FlagType, PriorityLevel, RiskLevel, Trigger } from "@/lib/types";
 
 const STATUS: Record<FlagStatus, string> = {
   pending: "bg-amber-500/15 text-amber-300 ring-amber-500/40",
@@ -7,9 +8,10 @@ const STATUS: Record<FlagStatus, string> = {
 };
 const STATUS_LABEL: Record<FlagStatus, string> = { pending: "Needs review", confirmed: "Confirmed", dismissed: "Dismissed" };
 const TYPE: Record<FlagType, string> = {
-  leak: "bg-sky-500/15 text-sky-300 ring-sky-500/40",
-  smoke: "bg-zinc-300/15 text-zinc-200 ring-zinc-300/40",
-  damage: "bg-orange-500/15 text-orange-300 ring-orange-500/40",
+  leak: "bg-zinc-800 text-zinc-200 ring-zinc-600",
+  smoke: "bg-zinc-800 text-zinc-200 ring-zinc-600",
+  damage: "bg-zinc-800 text-zinc-200 ring-zinc-600",
+  alarm: "bg-red-500/15 text-red-300 ring-red-500/50",
 };
 const LEVEL: Record<PriorityLevel, string> = {
   high: "bg-red-500/15 text-red-300 ring-red-500/40",
@@ -18,7 +20,7 @@ const LEVEL: Record<PriorityLevel, string> = {
 };
 const CATEGORY: Record<Category, { label: string; cls: string }> = {
   pump_failure: { label: "Pump failure", cls: "bg-red-500/15 text-red-300 ring-red-500/40" },
-  pipeline_leak: { label: "Possible pipeline leak", cls: "bg-orange-500/15 text-orange-300 ring-orange-500/40" },
+  pipeline_leak: { label: "Possible pipeline leak", cls: "bg-amber-500/15 text-amber-300 ring-amber-500/40" },
   pump_degradation: { label: "Pump wearing out", cls: "bg-amber-500/15 text-amber-300 ring-amber-500/40" },
 };
 export const FAC_STATUS: Record<FacilityStatus, { label: string; cls: string }> = {
@@ -29,23 +31,31 @@ export const FAC_STATUS: Record<FacilityStatus, { label: string; cls: string }> 
   tripped: { label: "Tank tripped, wells shut in", cls: "bg-red-600/25 text-red-200 ring-red-500/60" },
 };
 
-const base = "inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ring-1";
+const base = "inline-flex items-center px-2.5 py-0.5 text-sm font-medium ring-1";
 
 export const StatusBadge = ({ status }: { status: FlagStatus }) => (
   <span className={`${base} ${STATUS[status] ?? STATUS.pending}`}>{STATUS_LABEL[status] ?? status}</span>
 );
 export const TypeBadge = ({ type }: { type: FlagType }) => (
-  <span className={`${base} ${TYPE[type] ?? TYPE.damage}`}>Possible {type}</span>
+  <span className={`${base} ${TYPE[type] ?? TYPE.damage}`}>{type === "alarm" ? "Alarm" : `Possible ${type}`}</span>
 );
 export const LevelBadge = ({ level }: { level: PriorityLevel }) => (
-  <span className={`${base} uppercase ${LEVEL[level]}`}>{level}</span>
+  <span className={`${base} gap-1.5 uppercase ${LEVEL[level]}`}>
+    {level !== "low" && <WarningIcon />}
+    {level}
+  </span>
 );
-export const CategoryBadge = ({ category }: { category: Category }) => (
-  <span className={`${base} ${CATEGORY[category].cls}`}>{CATEGORY[category].label}</span>
+export const CategoryBadge = ({ category, minor = false }: { category: Category; minor?: boolean }) => (
+  <span className={`${base} ${minor && category !== "pump_failure" ? "bg-zinc-800 text-zinc-300 ring-zinc-600" : CATEGORY[category].cls}`}>{CATEGORY[category].label}</span>
 );
-export const FacStatusBadge = ({ status }: { status: FacilityStatus }) => (
-  <span className={`${base} ${FAC_STATUS[status].cls}`}>{FAC_STATUS[status].label}</span>
-);
+export const FacStatusBadge = ({ status, level }: { status: FacilityStatus; level?: RiskLevel }) => {
+  const minor = level === "green" && (status === "worn" || status === "leak");
+  return (
+    <span className={`${base} ${minor ? "bg-zinc-800 text-zinc-300 ring-zinc-600" : FAC_STATUS[status].cls}`}>
+      {FAC_STATUS[status].label}{minor ? ", minor" : ""}
+    </span>
+  );
+};
 export const TriggerBadge = ({ trigger }: { trigger: Trigger }) => (
-  <span className={`${base} bg-violet-500/15 text-violet-300 ring-violet-500/40`}>{trigger === "camera" ? "Camera" : "Data check"}</span>
+  <span className={`${base} bg-zinc-800 text-zinc-300 ring-zinc-600`}>{trigger === "camera" ? "Camera" : trigger === "voice" ? "Voice" : "Data check"}</span>
 );

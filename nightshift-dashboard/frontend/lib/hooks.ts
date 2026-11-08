@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { getNextShift, getReport } from "./api";
-import type { Priority, Report } from "./types";
+import type { Priority, Report, Shift } from "./types";
+
+// Refetch whenever the shift changes OR any of its flags change (new upload, new decision).
+const keyOf = (s?: Shift | null) => (s ? `${s.id}|${s.flags.map((f) => `${f.id}:${f.status}`).join(",")}` : undefined);
 
 // Fetches once per key. `data` is null while loading (or if the request failed).
 function useFetched<T>(key: string | undefined, load: (k: string) => Promise<T>) {
@@ -19,5 +22,12 @@ function useFetched<T>(key: string | undefined, load: (k: string) => Promise<T>)
   return state && state.key === key ? state.data : null;
 }
 
-export const usePriorities = (shiftId?: string) => useFetched<Priority[]>(shiftId, getNextShift);
-export const useReport = (shiftId?: string) => useFetched<Report>(shiftId, getReport);
+// Works with or without an uploaded shift (with none, priorities come from the sensors alone) and follows the replay time.
+export const usePriorities = (shift: Shift | null | undefined, dataset: string | null | undefined, asOf: number | null = null) =>
+  useFetched<Priority[]>(dataset ? `${dataset}|${asOf ?? "live"}|${keyOf(shift) ?? ""}` : undefined, (k) => {
+    const [ds, at, rest] = [k.split("|")[0], k.split("|")[1], k.split("|")[2]];
+    return getNextShift(rest || undefined, ds, at === "live" ? undefined : Number(at));
+  });
+export const useReport = (shift?: Shift | null, asOf: number | null = null) =>
+  useFetched<Report>(keyOf(shift), (k) => getReport(k.split("|")[0], asOf ?? undefined));
+export const flagSignature = keyOf;

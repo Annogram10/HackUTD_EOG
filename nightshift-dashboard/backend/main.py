@@ -23,8 +23,11 @@ iPhone / dashboard:
     GET  /report?shift_id=   GET /next-shift?shift_id=
 
 Run:  uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+App format (phone/glasses): GET /alerts, GET /facility/{id}, GET /handoff, POST /report, POST /vision/check (raw JPEG).
 """
 
+import base64
 import json
 import sqlite3
 import uuid
@@ -33,7 +36,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -41,7 +44,9 @@ from pydantic import BaseModel, Field
 
 from app import agent as agent_mod
 from app import dataset as D
-from app import vision
+from app import evidence as evidence_mod
+from app import risk as risk_mod
+from app import speech, vision
 from app.forecast import current_state
 from app.handoff import build_handoff, spoken
 from app.triage import events_json, fac_name, facility_status, money, run_triage
@@ -51,8 +56,7 @@ DB_PATH = BASE / "nightshift.db"
 PHOTOS = BASE / "photos"
 PHOTOS.mkdir(exist_ok=True)
 
-TYPE_WEIGHT = {"smoke": 30, "leak": 20, "damage": 10}
-HISTORY_DAYS = 7
+TYPE_WEIGHT = {"smoke": 30, "alarm": 25, "leak": 20, "damage": 10}
 SENSOR_SCORE = {"pump_failure": 60, "pipeline_leak": 40, "pump_degradation": 20}
 
 app = FastAPI(title="NightShift API")
@@ -155,7 +159,7 @@ def get_shift(c, shift_id: Optional[str], dataset: Optional[str] = None) -> dict
 
 # ---------- models ----------
 
-FlagType = Literal["leak", "smoke", "damage"]
+FlagType = Literal["leak", "smoke", "damage", "alarm"]
 FlagStatus = Literal["pending", "confirmed", "dismissed"]
 
 
@@ -167,7 +171,7 @@ class FlagUpload(BaseModel):
     timestamp: str
     status: FlagStatus = "pending"
     note: Optional[str] = None
-    trigger: Literal["camera", "data"] = "camera"
+    trigger: Literal["camera", "data", "voice"] = "camera"
     reason: Optional[str] = None
 
 
@@ -193,7 +197,7 @@ def save_shift(c, s: ShiftUpload) -> dict:
     dsname = s.dataset or default_dataset()
     ds = ds_for(dsname)
     shift_id = s.id or f"shift-{dsname}-{s.date}"
-    c.execute("DELETE FROM flags WHERE shift_id = ?", (shift_id,))
+    c.execute("DELETE FROM flags WHERE shift_id = ? AND id NOT LIKE 'alarm-%'", (shift_id,))
     c.execute(
         "INSERT OR REPLACE INTO shifts VALUES (?,?,?,?,?,?,?,?,?)",
         (shift_id, dsname, s.date, s.operator, s.started_at, s.ended_at,
@@ -227,6 +231,16 @@ def upload_shift(shift: ShiftUpload):
         return save_shift(c, shift)
 
 
+def seen_by(flags: list, now: Optional[int]) -> list:
+    """Flags that already existed at `now` (unix seconds). None = no time limit."""
+    if now is None:
+        return flags
+    def ts(f):
+        t = f["timestamp"]
+        return datetime.fromisoformat(t.replace("Z", "+00:00") if t.endswith("Z") or "+" in t[10:] else t + "+00:00").timestamp()
+    return [f for f in flags if ts(f) <= now]
+
+
 def one_flag(c, flag_id: str) -> dict:
     row = c.execute("SELECT * FROM flags WHERE id = ?", (flag_id,)).fetchone()
     if not row:
@@ -249,6 +263,49 @@ def confirm_flag(flag_id: str):
 @app.post("/flag/{flag_id}/dismiss")
 def dismiss_flag(flag_id: str):
     return set_status(flag_id, "dismissed")
+
+
+@app.post("/flag/{flag_id}/reopen")
+def reopen_flag(flag_id: str):
+    """Undo a confirm or dismiss: the flag goes back to 'needs review'."""
+    return set_status(flag_id, "pending")
+
+
+def _drop_photo_file(photo_url: str) -> None:
+    name = (photo_url or "").split("?")[0].rsplit("/", 1)[-1]
+    if name:
+        (PHOTOS / name).unlink(missing_ok=True)
+
+
+@app.post("/flag/{flag_id}/photo")
+async def replace_photo(flag_id: str, request: Request):
+    """Raw JPEG body: replaces this flag's photo (the old file is removed)."""
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "empty body: send the raw JPEG bytes")
+    with db() as c:
+        one_flag(c, flag_id)
+        (PHOTOS / f"{flag_id}.jpg").write_bytes(data)
+        c.execute("UPDATE flags SET photo_url = ? WHERE id = ?", (f"/photos/{flag_id}.jpg?v={int(datetime.now().timestamp())}", flag_id))
+        return one_flag(c, flag_id)
+
+
+@app.delete("/flag/{flag_id}/photo")
+def clear_photo(flag_id: str):
+    with db() as c:
+        f = one_flag(c, flag_id)
+        _drop_photo_file(f["photo_url"])
+        c.execute("UPDATE flags SET photo_url = '' WHERE id = ?", (flag_id,))
+        return one_flag(c, flag_id)
+
+
+@app.delete("/flag/{flag_id}")
+def delete_flag(flag_id: str):
+    with db() as c:
+        f = one_flag(c, flag_id)
+        _drop_photo_file(f["photo_url"])
+        c.execute("DELETE FROM flags WHERE id = ?", (flag_id,))
+    return {"ok": True, "deleted": flag_id}
 
 
 @app.post("/flag/{flag_id}/note")
@@ -302,7 +359,13 @@ def overview(dataset: Optional[str] = None, now: Optional[int] = None):
             "facilities": [_facility_card(ds, tri, fid) for fid in s["facility_ids"]],
             "shared": tri["shared_trucks"].get(sid),
         })
-    alerts = tri["alerts"]
+    rules = risk_mod.rules_risk(tri)
+    alerts = [{**a, "level": risk_mod._alert_level(a, tri["now"], ds)[0],
+               **({"truck_cost": risk_mod.truck_cost(ds, a)} if a["category"] == "pump_failure" and a.get("plan") else {})}
+              for a in tri["alerts"]]
+    for s in systems:
+        for f in s["facilities"]:
+            f["risk_level"] = rules["facilities"].get(f["id"], "green")
     return {
         "dataset": ds.name, "now_ts": tri["now_ts"], "first_ts": tri["t_first_ts"], "systems": systems,
         "alerts": alerts,
@@ -314,9 +377,29 @@ def overview(dataset: Optional[str] = None, now: Optional[int] = None):
     }
 
 
+SEVERITY = {"pump_failure": (3, "high"), "pipeline_leak": (2, "medium"), "pump_degradation": (1, "low")}
+TYPE_NAME = {"pump_failure": "pump_failure", "pipeline_leak": "pipeline_leak", "pump_degradation": "pump_wear"}
+
+
+def app_alert(a: dict) -> dict:
+    sev, word = SEVERITY[a["category"]]
+    h = a.get("hours_to_limit")
+    plan = a.get("plan")
+    return {
+        "id": a["event_id"], "facility": a["facility_id"], "facility_name": a["facility_name"], "system": a["system_id"],
+        "type": TYPE_NAME[a["category"]], "severity": sev, "severity_word": word,
+        "hours_to_shutdown": h["p50"] if h else None, "tripped": bool(a.get("tripped")),
+        "best_plan": a.get("action_text") or ("Send an inspector to check" if a["category"] != "pump_failure" else None),
+        "cost": plan["cost"] if plan else None, "spoken_text": spoken(a),
+    }
+
+
 @app.get("/alerts")
 def alerts(dataset: Optional[str] = None, now: Optional[int] = None):
-    return run_triage(ds_for(dataset), now)["alerts"]
+    """App format. Ranked by severity (high first), then fewest hours to shutdown."""
+    ds = ds_for(dataset)
+    out = [app_alert(a) for a in run_triage(ds, now if now is not None else CLOCK.get(ds.name))["alerts"]]
+    return sorted(out, key=lambda x: (-x["severity"], x["hours_to_shutdown"] if x["hours_to_shutdown"] is not None else 1e9))
 
 
 METRIC_INFO = [
@@ -388,10 +471,21 @@ def facility(fac_id: str, dataset: Optional[str] = None, hours: float = 72, now:
         "start_level_pct": f.pump["start_level_pct"], "stop_level_pct": f.pump["stop_level_pct"],
         "wells_detail": [{**w, "rev_per_hour": round(ds.well_rev_per_hour(w), 2)} for w in f.wells],
         "response_min": f.response_min, "cycle_min": f.cycle_min,
-        "flags": [flag_row(r) for r in flag_rows],
+        "flags": seen_by([flag_row(r) for r in flag_rows], now),
         "assets": {"tank": f.tank["id"], "pump": f.pump["id"], "pipeline": f.pipeline["id"],
                    "wells": [w["id"] for w in f.wells]},
     }
+
+
+@app.get("/facility/{fac_id}")
+def facility_app(fac_id: str, dataset: Optional[str] = None, now: Optional[int] = None):
+    """App format: {id, name, status, readings, spoken_text}."""
+    ds = ds_for(dataset)
+    now = now if now is not None else CLOCK.get(ds.name)
+    full = facility(fac_id, dataset, 1, now)
+    readings = [{"label": r["label"], "value": r["value"], "unit": r["unit"], "limit": r.get("limit")} for r in full["readings"]]
+    return {"id": fac_id, "name": full["name"], "system": full["system_id"], "status": full["status"], "readings": readings,
+            "alerts": [app_alert(a) for a in full["alerts"]], "spoken_text": voice_facility(fac_id, dataset)["text"]}
 
 
 @app.get("/agent/trace")
@@ -439,18 +533,22 @@ def voice_facility(fac_id: str, dataset: Optional[str] = None):
     tri = run_triage(ds)
     c = _facility_card(ds, tri, fac_id)
     mine = [spoken(a) for a in tri["alerts"] if a["facility_id"] == fac_id]
-    base = f"{c['name']}: tank {c['level_pct']:.0f} percent full, pump {'running' if c['pump_status'] == 1 else 'fault' if c['pump_status'] == 2 else 'stopped'}."
+    base = f"{speech.facility(c['name'])}: tank {speech.num_words(c['level_pct'])} percent full, pump {'running' if c['pump_status'] == 1 else 'fault' if c['pump_status'] == 2 else 'stopped'}."
     return {"facility_id": fac_id, "text": " ".join([base] + (mine or ["No problems in progress."]))}
 
 
-class VisionIn(BaseModel):
-    image_url: str  # https URL or a data: URL of one camera frame
-
-
 @app.post("/vision/check")
-def vision_check(body: VisionIn):
-    """One glasses camera frame -> possible leak / smoke / damage / none. A human still confirms or dismisses."""
-    return vision.check_image(body.image_url)
+async def vision_check(request: Request):
+    """Raw JPEG (Content-Type image/jpeg) in -> {flag, type, confidence, description}. A person still confirms or dismisses."""
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "empty body: send the raw JPEG bytes")
+    r = vision.check_image("data:image/jpeg;base64," + base64.b64encode(data).decode())
+    if not r.get("available"):
+        return {"flag": False, "type": "none", "confidence": 0, "description": "", "available": False, "error": r.get("error")}
+    t = r["finding"]
+    return {"flag": t != "none", "type": t, "confidence": r.get("confidence"), "description": r["description"], "available": True,
+            "needs_human_confirmation": True}
 
 
 # ---------- shifts, report, next shift ----------
@@ -469,10 +567,110 @@ def read_shift(shift_id: str):
         return get_shift(c, shift_id)
 
 
+def flag_type_for(t: str) -> str:
+    t = (t or "").lower()
+    if t in ("leak", "smoke", "damage"):
+        return t
+    if any(k in t for k in ("leak", "spill", "drip", "oil", "liquid", "puddle")):
+        return "leak"
+    if any(k in t for k in ("smoke", "fire", "vapor", "vapour", "flame")):
+        return "smoke"
+    return "damage"
+
+
+class ReportNote(BaseModel):
+    text: str = ""
+
+
+class ReportFlag(BaseModel):
+    id: Optional[str] = None
+    type: str = "damage"  # leak | smoke | damage (anything else is stored as damage with the original in reason)
+    facility: Optional[str] = None  # facility id or name
+    location: Optional[str] = None
+    created_at: Optional[str] = None
+    timestamp: Optional[str] = None
+    source: str = "camera"  # camera | voice
+    trigger: Optional[str] = None  # same meaning as source
+    description: Optional[str] = None  # Nemotron's sentence from /vision/check, shown as "Why it was flagged"
+    status: str = "waiting"  # waiting | confirmed | dismissed
+    note: Optional[str] = None
+    notes: list[ReportNote] = Field(default_factory=list)
+    photo_jpeg_base64: Optional[str] = None  # JPEG, with or without a data: prefix
+    photo_base64: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class ReportIn(BaseModel):
+    """What the iOS app sends (snake_case): shift_id, started_at, ended_at, flags[], notes[], generated_at."""
+    dataset: Optional[str] = None
+    shift_id: Optional[str] = None
+    operator: str = "Operator"
+    date: Optional[str] = None
+    started_at: Optional[str] = None
+    ended_at: Optional[str] = None
+    generated_at: Optional[str] = None
+    route_planned: list[str] = Field(default_factory=list)
+    route_walked: list[str] = Field(default_factory=list)
+    flags: list[ReportFlag] = Field(default_factory=list)
+    notes: list[ReportNote] = Field(default_factory=list)
+
+
+@app.post("/report")
+def post_report(body: ReportIn):
+    """The phone sends the whole round as one JSON body, photos as base64. Re-sending the same shift_id replaces it."""
+    now = datetime.now().isoformat(timespec="seconds")
+    ds = ds_for(body.dataset)
+    flags, photos = [], {}
+    for f in body.flags:
+        fid = f.id or f"f_{uuid.uuid4().hex[:6]}"
+        url = ""
+        raw = f.photo_jpeg_base64 or f.photo_base64
+        if raw:
+            try:
+                photos[fid] = base64.b64decode(raw.split(",", 1)[-1])
+            except Exception:
+                raise HTTPException(400, f"flag {fid}: photo is not valid base64")
+            url = f"/photos/{fid}.jpg"
+        ftype = flag_type_for(f.type)
+        reasons = [x for x in (f.description, f.reason) if x]
+        if ftype != f.type and not f.description:
+            reasons.append(f"app flag type: {f.type}")
+        trig = (f.trigger or f.source or "camera").lower()
+        trig = trig if trig in ("camera", "voice", "data") else "camera"
+        note = " ".join([t for t in [f.note] + [n.text for n in f.notes] if t]) or None
+        flags.append(FlagUpload(id=fid, type=ftype, location=f.facility or f.location or "unknown", photo_url=url,
+                                timestamp=f.created_at or f.timestamp or now,
+                                status={"waiting": "pending"}.get(f.status, f.status) if f.status in ("waiting", "pending", "confirmed", "dismissed") else "pending",
+                                note=note, trigger=trig, reason="; ".join(reasons) or None))
+    # One flag per item: the same facility and the same kind of problem is replaced by the newest one,
+    # not added again. (Its older photo is dropped too.)
+    newest = {}
+    for fl in flags:
+        fac = resolve_facility(ds, fl.location)
+        key = (fac if fac in ds.facilities else "_".join(fac.lower().replace("-", " ").split()), fl.type)
+        if key not in newest or fl.timestamp >= newest[key].timestamp:
+            newest[key] = fl
+    keep = {id(x) for x in newest.values()}
+    replaced = len(flags) - len(keep)
+    flags = [fl for fl in flags if id(fl) in keep]
+    for fl in flags:
+        if fl.id in photos:
+            (PHOTOS / f"{fl.id}.jpg").write_bytes(photos[fl.id])
+    started = body.started_at or now
+    shift = ShiftUpload(id=body.shift_id, dataset=body.dataset, date=body.date or started[:10], operator=body.operator,
+                        started_at=started, ended_at=body.ended_at or body.generated_at or now,
+                        route_planned=body.route_planned, route_walked=body.route_walked, flags=flags)
+    with db() as c:
+        saved = save_shift(c, shift)
+    return {"ok": True, "shift_id": saved["id"], "flags_saved": len(saved["flags"]), "replaced_duplicates": replaced,
+            "flags": saved["flags"]}
+
+
 @app.get("/report")
-def get_report(shift_id: Optional[str] = None, dataset: Optional[str] = None):
+def get_report(shift_id: Optional[str] = None, dataset: Optional[str] = None, now: Optional[int] = None):
     with db() as c:
         shift = get_shift(c, shift_id, dataset)
+    shift = {**shift, "flags": seen_by(shift["flags"], now)}  # in a replay, flags from later than "now" do not exist yet
     flags = shift["flags"]
     by_type: dict = {}
     for f in flags:
@@ -501,36 +699,49 @@ def level_for(score: int) -> str:
     return "high" if score >= 60 else "medium" if score >= 30 else "low"
 
 
+def _flag_counts(flags: list) -> str:
+    """'a leak flag' / '4 flags (3 leak, 1 smoke)'"""
+    if len(flags) == 1:
+        t = flags[0]["type"]
+        return f"{'an' if t[0] in 'aeiou' else 'a'} {t} flag"
+    by: dict = {}
+    for f in flags:
+        by[f["type"]] = by.get(f["type"], 0) + 1
+    return f"{len(flags)} flags (" + ", ".join(f"{n} {t}" for t, n in sorted(by.items(), key=lambda x: -x[1])) + ")"
+
+
 @app.get("/next-shift")
-def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None):
+def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None, now: Optional[int] = None):
     """
     Simple, explainable scoring per facility (dismissed flags are ignored):
       +50 confirmed flag last shift   +25 unreviewed flag last shift
-      +30/+20/+10 worst flag type (smoke/leak/damage)   +10 per previous night flagged (last 7 days)
+      +30/+20/+10 worst flag type (smoke/leak/damage)
+      Only the selected (previous) shift counts, earlier nights are not used.
       +15 stop planned but missed
       +60 / +40 / +20 sensor problem still in progress (pump failure / leak / worn pump), latest shift only
     """
     with db() as c:
-        shift = get_shift(c, shift_id, dataset)
-        past_rows = c.execute(
-            """SELECT f.*, s.date AS shift_date FROM flags f JOIN shifts s ON s.id = f.shift_id
-               WHERE s.dataset = ? AND s.date < ? AND s.date >= ? AND f.status != 'dismissed'""",
-            (shift["dataset"], shift["date"], (date.fromisoformat(shift["date"]) - timedelta(days=HISTORY_DAYS)).isoformat())).fetchall()
+        try:
+            shift = get_shift(c, shift_id, dataset)
+        except HTTPException:
+            if shift_id:
+                raise
+            # No phone upload for this dataset yet (e.g. a brand new test/ folder): rank from the sensors alone.
+            shift = {"id": None, "dataset": dataset or default_dataset(), "date": None, "flags": [],
+                     "route_planned": [], "route_walked": []}
         newest = c.execute("SELECT id FROM shifts WHERE dataset = ? ORDER BY started_at DESC LIMIT 1", (shift["dataset"],)).fetchone()
     ds = ds_for(shift["dataset"])
-    now_flags = [f for f in shift["flags"] if f["status"] != "dismissed"]
-    past_flags = [dict(flag_row(r), shift_date=r["shift_date"]) for r in past_rows]
+    now_flags = [f for f in seen_by(shift["flags"], now if now is not None else CLOCK.get(shift["dataset"])) if f["status"] != "dismissed"]
     walked = set(shift["route_walked"])
     missed = {s for s in shift["route_planned"] if s not in walked}
     sensor = {}
-    if newest and newest["id"] == shift["id"]:
-        for a in run_triage(ds)["alerts"]:
+    if newest is None or newest["id"] == shift["id"]:
+        for a in run_triage(ds, now if now is not None else CLOCK.get(ds.name))["alerts"]:
             sensor.setdefault(a["facility_id"], []).append(a)
 
     out = []
-    for eid in {f["equipment_id"] for f in now_flags + past_flags} | missed | set(sensor):
+    for eid in {f["equipment_id"] for f in now_flags} | missed | set(sensor):
         now = [f for f in now_flags if f["equipment_id"] == eid]
-        past = [f for f in past_flags if f["equipment_id"] == eid]
         score, reasons = 0, []
         for a in sorted(sensor.get(eid, []), key=lambda a: -SENSOR_SCORE[a["category"]]):
             score += SENSOR_SCORE[a["category"]]
@@ -544,11 +755,11 @@ def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None
         pending = [f for f in now if f["status"] == "pending"]
         if confirmed:
             score += 50
-            reasons.append(f"Operator confirmed a {confirmed[0]['type']} flag last shift")
+            reasons.append(f"Operator confirmed {_flag_counts(confirmed)} last shift")
         if pending:
             score += 25
-            reasons.append(f"Unreviewed {pending[0]['type']} flag from last shift")
-        everything = now + past
+            reasons.append(f"Unreviewed: {_flag_counts(pending)} from last shift")
+        everything = now
         if everything:
             worst = max(everything, key=lambda f: TYPE_WEIGHT[f["type"]])["type"]
             score += TYPE_WEIGHT[worst]
@@ -557,10 +768,6 @@ def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None
             if f["trigger"] == "data" and f["reason"]:
                 reasons.append(f"Data check: {f['reason']}")
                 break
-        nights = len({f["shift_date"] for f in past})
-        if nights:
-            score += 10 * nights
-            reasons.append(f"Flagged on {nights} previous night{'s' if nights > 1 else ''}, repeat issue")
         if eid in missed:
             score += 15
             reasons.append("Stop was planned last shift but not checked")
@@ -570,3 +777,161 @@ def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None
         out.append({"equipment_id": eid, "location": fac_name(eid) if eid in ds.facilities else eid, "score": score,
                     "level": level_for(score), "reasons": reasons, "latest_flag": latest})
     return sorted(out, key=lambda p: p["score"], reverse=True)
+
+
+@app.get("/map")
+def map_points(dataset: Optional[str] = None, shift_id: Optional[str] = None, now: Optional[int] = None):
+    """
+    Everything a map needs, already ordered by importance (rank 1 = check first).
+    Same ranking as Next shift: confirmed/unreviewed flags + problems in progress. Facilities with nothing wrong follow.
+    """
+    ds = ds_for(dataset)
+    now = now if now is not None else CLOCK.get(ds.name)
+    tri = run_triage(ds, now)
+    prio = get_next_shift(shift_id, ds.name, now)
+    by_id = {p["equipment_id"]: p for p in prio}
+    ranked = [p["equipment_id"] for p in prio if p["equipment_id"] in ds.facilities]
+    status_rank = {"tripped": 0, "failure": 1, "leak": 2, "worn": 3, "ok": 4}
+    rest = sorted((f for f in ds.facilities if f not in by_id),
+                  key=lambda f: (status_rank.get(facility_status(tri, f), 4), f))
+    points = []
+    for i, fid in enumerate(ranked + rest, start=1):
+        f = ds.facilities[fid]
+        p = by_id.get(fid)
+        alerts = [a for a in tri["alerts"] if a["facility_id"] == fid]
+        h = next((a["hours_to_limit"]["p50"] for a in alerts if a.get("hours_to_limit")), None)
+        points.append({
+            "rank": i, "id": fid, "name": fac_name(fid), "system": f.system_id, "lat": f.lat, "lon": f.lon,
+            "importance": p["score"] if p else 0, "level": p["level"] if p else "none",
+            "status": facility_status(tri, fid), "hours_to_shutdown": h,
+            "reasons": p["reasons"] if p else [],
+            "spoken_text": " ".join(spoken(a) for a in alerts) if alerts else "",
+        })
+    systems = [{"id": sid, "center": s["center"], "truck_yard": s["truck_yard"], "disposal_site": s["disposal_site"]}
+               for sid, s in ds.systems.items()]
+    return {"dataset": ds.name, "as_of": tri["now_ts"], "systems": systems, "facilities": points}
+
+
+# ---------- danger check, time travel, alarm ----------
+
+def _warm_timelines() -> None:
+    for d in D.list_datasets():
+        try:
+            risk_mod.timeline(D.load(d["name"]))
+        except Exception:
+            pass
+
+
+import threading  # noqa: E402
+
+threading.Thread(target=_warm_timelines, daemon=True).start()
+
+CLOCK: dict = {}  # dataset -> unix time the phone and glasses should see (set by the dashboard's time-travel slider)
+
+
+@app.get("/timeline")
+def get_timeline(dataset: Optional[str] = None):
+    """Slider range plus the amber/red stretches and the moments an alarm would have gone off."""
+    return risk_mod.timeline(ds_for(dataset))
+
+
+def _unix_of(iso: str) -> float:
+    return datetime.fromisoformat(iso.replace("Z", "+00:00") if iso.endswith("Z") else iso + "+00:00").timestamp()
+
+
+def record_alarm(ds, out: dict, live: bool, cleanup: bool = True) -> None:
+    """
+    When an alarm goes off, log it as a flag (trigger "data") so it shows on the Flags page, the handover and next
+    shift until a person confirms or dismisses it. One flag per facility per problem, so repeats do nothing.
+    """
+    # An alarm flag that nobody decided on goes away when its alarm is over (or a newer one has started).
+    current = {}
+    if cleanup and out.get("alarm_id"):
+        for seg in out["alarm_id"].split(":", 1)[1].split(","):
+            f, _, o = seg.partition("@")
+            current[f] = o
+    if cleanup:  # only the dashboard's own check tidies up, so the phone's polling never fights a replay
+        with db() as c:
+            rows = c.execute("""SELECT f.id FROM flags f JOIN shifts s ON s.id = f.shift_id
+                                WHERE s.dataset = ? AND f.id LIKE 'alarm-%' AND f.status = 'pending'""", (ds.name,)).fetchall()
+            for r in rows:
+                fid, _, onset = r["id"][len("alarm-"):].rpartition("-")
+                if int(onset) <= out["now"] and current.get(fid) != onset:
+                    c.execute("DELETE FROM flags WHERE id = ?", (r["id"],))
+    if not out.get("alarm"):
+        return
+    ai = out.get("ai") or {}
+    why = ai.get("why") if ai.get("available") else None
+    reds = [r for r in out["reasons"] if r["level"] == "red"]
+    with db() as c:
+        shifts = c.execute("SELECT id, started_at FROM shifts WHERE dataset = ? AND id NOT LIKE 'alarms-%' ORDER BY started_at DESC",
+                           (ds.name,)).fetchall()
+        if live and shifts:
+            shift_id = shifts[0]["id"]
+        else:  # replay: the shift in progress at that moment, else the last one that started before it
+            before = [s for s in shifts if _unix_of(s["started_at"]) <= out["now"]]
+            shift_id = before[0]["id"] if before else None
+        if shift_id is None:  # no phone shift yet at this time: keep the alarm in a system log shift
+            shift_id = f"alarms-{ds.name}"
+            if not c.execute("SELECT 1 FROM shifts WHERE id = ?", (shift_id,)).fetchone():
+                c.execute("INSERT INTO shifts VALUES (?,?,?,?,?,?,?,?,?)",
+                          (shift_id, ds.name, out["as_of"][:10], "System alarms", out["as_of"], out["as_of"],
+                           out["as_of"], "[]", "[]"))
+        for r in reds:
+            fid = r["facility_id"]
+            onset = next((seg.split("@")[1] for seg in out["alarm_id"].split(":", 1)[1].split(",") if seg.startswith(fid + "@")), out["now"])
+            flag_id = f"alarm-{fid}-{onset}"
+            if c.execute("SELECT 1 FROM flags WHERE id = ?", (flag_id,)).fetchone():
+                continue
+            # the AI sentence is about one facility: only attach it to the flag of the facility it names
+            reason = r["text"] + (f". {why}" if why and fac_name(fid) in why else "")
+            c.execute(
+                """INSERT INTO flags (id, shift_id, type, location, equipment_id, photo_url, timestamp, status, note,
+                   control_note, trigger_src, reason) VALUES (?,?,?,?,?,?,?,?,NULL,NULL,?,?)""",
+                (flag_id, shift_id, "alarm", fac_name(fid) if fid in ds.facilities else fid, fid, "", out["as_of"],
+                 "pending", "data", reason))
+
+
+@app.get("/risk")
+def get_risk(dataset: Optional[str] = None, now: Optional[int] = None, ai: bool = True):
+    """Is this moment dangerous? Rules plus a Nemotron second opinion (it can raise the level, never lower it)."""
+    ds = ds_for(dataset)
+    out = risk_mod.assess(ds, now, use_ai=ai)
+    record_alarm(ds, out, live=(now is None and ds.name not in CLOCK))
+    return out
+
+
+class ClockIn(BaseModel):
+    dataset: Optional[str] = None
+    now: Optional[int] = None  # null = back to the latest data
+
+
+@app.post("/clock")
+def set_clock(body: ClockIn):
+    """Time travel for everyone: the phone and glasses see this moment until it is cleared."""
+    ds = ds_for(body.dataset)
+    if body.now is None:
+        CLOCK.pop(ds.name, None)
+    else:
+        CLOCK[ds.name] = int(min(max(body.now, ds.t_first), ds.t_last))
+    return {"dataset": ds.name, "now": CLOCK.get(ds.name), "live": ds.name not in CLOCK}
+
+
+@app.get("/alarm")
+def get_alarm(dataset: Optional[str] = None, now: Optional[int] = None):
+    """
+    For the phone and the glasses: poll this every few seconds. When `alarm` is true, sound/vibrate and speak
+    `spoken_text`. `alarm_id` changes when a new red situation starts, so the phone can alarm once per situation.
+    """
+    ds = ds_for(dataset)
+    eff = now if now is not None else CLOCK.get(ds.name)
+    out = risk_mod.assess(ds, eff, use_ai=True)
+    record_alarm(ds, out, live=(eff is None), cleanup=False)
+    return {k: out[k] for k in ("dataset", "as_of", "level", "alarm", "alarm_id", "headline", "spoken_text")} | {
+        "live": ds.name not in CLOCK, "reasons": [r["text"] for r in out["reasons"]]}
+
+
+@app.get("/evidence")
+def get_evidence(dataset: Optional[str] = None, now: Optional[int] = None, ai: bool = True):
+    """Charts of what dropped (or rose) at each facility with a problem, picked and captioned by Nemotron."""
+    return evidence_mod.build(ds_for(dataset), now, use_ai=ai)

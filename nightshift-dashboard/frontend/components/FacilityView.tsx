@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import AlertCard from "@/components/AlertCard";
 import { useApp } from "@/components/AppProvider";
+import { PageSkeleton } from "@/components/Skeleton";
 import { FacStatusBadge } from "@/components/Badges";
 import { SeriesChart, WhatIfChart } from "@/components/charts";
 import FlagCard from "@/components/FlagCard";
@@ -70,44 +71,44 @@ function SensorPicker({ f, dataset }: { f: FacilityDetail; dataset: string }) {
 
 export default function FacilityView() {
   const { id } = useParams<{ id: string }>();
-  const { dataset, shifts } = useApp();
+  const { dataset, shifts, asOf } = useApp();
   const [got, setGot] = useState<{ key: string; data: FacilityDetail | null } | null>(null);
-  const key = `${dataset}/${id}`;
+  const key = `${dataset}/${id}/${asOf ?? "live"}`;
   const f = got && got.key === key ? got.data : undefined; // undefined = loading
 
   useEffect(() => {
     if (!dataset) return;
     let alive = true;
-    getFacility(dataset, id).then((r) => alive && setGot({ key, data: r })).catch(() => alive && setGot({ key, data: null }));
+    getFacility(dataset, id, asOf ?? undefined).then((r) => alive && setGot({ key, data: r })).catch(() => alive && setGot({ key, data: null }));
     return () => { alive = false; };
-  }, [dataset, id, key]);
+  }, [dataset, id, key, asOf]);
 
-  if (f === undefined) return <div className="h-96 animate-pulse rounded-2xl bg-zinc-900" />;
+  if (f === undefined) return <PageSkeleton cards={3} />;
   if (f === null)
     return (
       <div className="space-y-3">
         <h1 className="text-3xl font-bold">Facility not found in this dataset</h1>
-        <Link href="/" className="text-sky-300 hover:underline">← Back to the map</Link>
+        <Link href="/" className="text-sky-400 underline underline-offset-2 hover:text-sky-300">Back to the map</Link>
       </div>
     );
 
   const bands = f.events.map((e) => ({
     from: Math.floor(new Date(e.onset_ts).getTime() / 1000),
     to: e.end_ts ? Math.floor(new Date(e.end_ts).getTime() / 1000) : f.now,
-    color: e.category === "pump_failure" ? "#ef4444" : e.category === "pipeline_leak" ? "#f97316" : "#fbbf24",
+    color: e.category === "pump_failure" ? "#e5484d" : e.category === "pipeline_leak" ? "#f2b33d" : "#f2b33d",
     label: `${e.category.replace("_", " ")} (${e.status})`,
   }));
   const lim = (label: string) => f.readings.find((r) => r.label === label);
   const linesFor = (metric: string) =>
-    metric === "level_pct" ? [{ value: f.warning_pct, label: `warning ${f.warning_pct}%`, color: "#fbbf24" }, { value: f.shutdown_pct, label: `shutdown ${f.shutdown_pct}%`, color: "#f87171" }]
-    : metric === "flow_bpd" && lim("Pump flow") ? [{ value: lim("Pump flow")!.limit, label: "rated flow", color: "#34d399" }] : [];
+    metric === "level_pct" ? [{ value: f.warning_pct, label: `warning ${f.warning_pct}%`, color: "#f2b33d" }, { value: f.shutdown_pct, label: `shutdown ${f.shutdown_pct}%`, color: "#ef6b6e" }]
+    : metric === "flow_bpd" && lim("Pump flow") ? [{ value: lim("Pump flow")!.limit, label: "rated flow", color: "#3fb97f" }] : [];
   const flagFacts = shifts.length ? f.flags : [];
   const failure = f.alerts.find((a) => a.category === "pump_failure");
 
   return (
     <div className="space-y-8">
       <div>
-        <Link href="/" className="text-base text-sky-300 hover:text-sky-200">← Network map</Link>
+        <Link href="/" className="text-base text-sky-400 underline underline-offset-2 hover:text-sky-300">Network map</Link>
         <div className="mt-2 flex flex-wrap items-center gap-4">
           <h1 className="text-4xl font-bold">{f.name}</h1>
           <FacStatusBadge status={f.status} />
@@ -186,7 +187,7 @@ export default function FacilityView() {
             {f.events.map((e) => (
               <li key={e.event_id} className="flex flex-wrap items-baseline gap-x-5 gap-y-1 px-5 py-3 text-lg">
                 <span className="font-semibold capitalize">{e.category.replace("_", " ")}</span>
-                <span className="text-zinc-400">{formatDateTime(e.onset_ts)} → {e.end_ts ? formatDateTime(e.end_ts) : "ongoing"}</span>
+                <span className="text-zinc-400">{formatDateTime(e.onset_ts)} to {e.end_ts ? formatDateTime(e.end_ts) : "ongoing"}</span>
                 <span className="text-sm text-zinc-500">confidence {Math.round(e.confidence * 100)}%</span>
               </li>
             ))}
