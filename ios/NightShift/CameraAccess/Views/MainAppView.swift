@@ -9,9 +9,7 @@
 //
 // MainAppView.swift
 //
-// Central navigation hub that displays different views based on DAT SDK registration and device states.
-// When unregistered, shows the registration flow. When registered, shows the device selection screen
-// for choosing which Meta wearable device to stream from.
+// Root view: NightShift's single home screen (map, route, check-first card).
 //
 
 import MWDATCore
@@ -22,11 +20,8 @@ struct MainAppView: View {
   var viewModel: WearablesViewModel
 
   var body: some View {
-    if viewModel.registrationState == .registered {
-      CameraView(wearables: wearables, wearablesVM: viewModel)
-    } else {
-      // User not registered - show registration/onboarding flow
-      HomeScreenView(viewModel: viewModel)
-    }
+    // NightShift has one screen. Connecting the glasses (Meta AI registration) is in
+    // its Settings, so the map and alarms work before the glasses are linked.
+    HomeView(wearables: wearables, wearablesVM: viewModel)
   }
 }

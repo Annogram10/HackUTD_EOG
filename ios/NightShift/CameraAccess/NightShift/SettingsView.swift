@@ -1,15 +1,21 @@
 //
-// ShiftView.swift
+// SettingsView.swift
 //
-// The NightShift shift screen, shown as a sheet over the camera screen so the
-// preview (and the vision checks that read from it) keep running.
+// Everything that isn't on the home map, behind the gear button: glasses and camera,
+// map system filter, shift tools, "I'm at" facility, camera checks, voice, flags,
+// upload queue and backend address. Shown as a sheet over the home screen, so the
+// camera stream (and the vision checks that read from it) keep running.
 //
 
 import SwiftUI
 import UIKit
 
-struct ShiftView: View {
+struct SettingsView: View {
   var controller: NightShiftController
+  var wearablesVM: WearablesViewModel
+  var cameraVM: CameraViewModel
+  @Environment(\.dismiss) private var dismiss
+  @State private var showCamera = false
   var network = NetworkMonitor.shared
   var backend = BackendStatus.shared
   @State private var confirmEndShift = false
@@ -21,7 +27,11 @@ struct ShiftView: View {
   var body: some View {
     NavigationStack {
       List {
-        Section {
+        glassesSection
+
+        mapSection
+
+        Section("Shift") {
           if let since = controller.unfinishedShiftStart {
             Label(
               "Shift in progress since \(since.formatted(date: .abbreviated, time: .shortened))",
@@ -50,14 +60,6 @@ struct ShiftView: View {
             Task { await controller.refresh() }
           }
           .disabled(controller.isRefreshing)
-        }
-
-        Section {
-          NavigationLink {
-            FacilityMapView(controller: controller)
-          } label: {
-            Label(mapLinkTitle, systemImage: "map")
-          }
         }
 
         facilitySection
@@ -99,8 +101,19 @@ struct ShiftView: View {
 
         statusSection
       }
-      .navigationTitle("Shift")
+      .environment(\.defaultMinListRowHeight, 56)
+      .navigationTitle("Settings")
       .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done") { dismiss() }
+            .frame(minWidth: 56, minHeight: 56)
+            .accessibilityLabel("Close settings")
+        }
+      }
+      .fullScreenCover(isPresented: $showCamera) {
+        CameraView(viewModel: cameraVM, wearablesVM: wearablesVM)
+      }
       .alert("Add note", isPresented: Binding(
         get: { noteFlagID != nil },
         set: { if !$0 { noteFlagID = nil } }
@@ -125,6 +138,63 @@ struct ShiftView: View {
     }
     // Keep the field showing the address in use after Save, Paste or Reset.
     .onChange(of: controller.backendURL) { addressText = controller.backendURL.absoluteString }
+  }
+
+  /// Glasses link (Meta AI registration) and the camera screen.
+  private var glassesSection: some View {
+    Section("Glasses") {
+      Label(
+        cameraVM.hasActiveDevice ? "Glasses connected" : "Glasses not connected",
+        systemImage: cameraVM.hasActiveDevice ? "eyeglasses" : "eyeglasses.slash"
+      )
+      .foregroundStyle(cameraVM.hasActiveDevice ? .green : .secondary)
+      if wearablesVM.registrationState == .registered {
+        Button("Open glasses camera", systemImage: "video") { showCamera = true }
+        Button("Disconnect glasses", systemImage: "xmark.circle", role: .destructive) {
+          wearablesVM.disconnectGlasses()
+        }
+      } else {
+        Button(
+          wearablesVM.registrationState == .registering ? "Connecting…" : "Connect my glasses",
+          systemImage: "link"
+        ) {
+          wearablesVM.connectGlasses()
+        }
+        .disabled(wearablesVM.registrationState == .registering)
+        Text("You'll go to the Meta AI app to approve, then come back here.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  /// Which system the home map shows, and a manual map refresh.
+  private var mapSection: some View {
+    Section("Map") {
+      Picker("Show", selection: Binding(
+        get: { controller.mapSystemFilter },
+        set: { controller.mapSystemFilter = $0 }
+      )) {
+        Text("All systems").tag(String?.none)
+        ForEach(controller.map?.systemIDs ?? [], id: \.self) { id in
+          Text(id).tag(Optional(id))
+        }
+      }
+      Button("Refresh map", systemImage: "arrow.clockwise") {
+        Task { await controller.refreshMap() }
+      }
+      .disabled(controller.isLoadingMap)
+      if let asOf = controller.map?.asOf {
+        Text("Data as of \(asOf)\(controller.map?.dataset.map { " · \($0)" } ?? "")")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+      if let error = controller.mapError {
+        Text("Map update failed: \(error)")
+          .font(.caption)
+          .foregroundStyle(.red)
+      }
+    }
   }
 
   private var statusSection: some View {
@@ -258,11 +328,6 @@ struct ShiftView: View {
           .foregroundStyle(feedback.ok ? .green : .red)
       }
     }
-  }
-
-  private var mapLinkTitle: String {
-    guard let first = controller.map?.facilities.first, (first.importance ?? 0) > 0 else { return "Map" }
-    return "Map · check first: \(first.displayName)"
   }
 
   private var visionStatusText: String {

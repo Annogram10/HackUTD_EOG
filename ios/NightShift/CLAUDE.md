@@ -16,7 +16,10 @@ The BACKEND (separate Python server in the repo root) does ALL calculation: dete
 - You cannot test on the glasses; give a short hand-test checklist after each task.
 
 ## Layout
-All NightShift code is in CameraAccess/NightShift/ (Config, Models, NightShiftAPI, NightShiftController, ShiftView, FlagRow, VoiceCommand, VoiceCommandListener, FrameGrabber, ShiftStore, UploadQueue, DataCache, NetworkMonitor, UploadStatusView, MockData/). Speaker.swift does chime + text-to-speech. CameraView.swift has the camera screen, the Test voice button and the clipboard button that opens ShiftView.
+All NightShift code is in CameraAccess/NightShift/ (Config, Models, NightShiftAPI, NightShiftController, HomeView, FacilityMapView, SettingsView, FlagRow, AlarmMonitor, AlarmSiren, VoiceCommand, VoiceCommandListener, FrameGrabber, ShiftStore, UploadQueue, DataCache, NetworkMonitor, MockData/). Speaker.swift does chime + text-to-speech.
+- One screen: HomeView (root, via MainAppView) = top bar (NightShift, glasses indicator, gear), FacilityMapView (map + route, ranked list collapsed by default), bottom card ("Check first: <rank 1>", Read aloud, Start/End shift). Everything else is in SettingsView (gear sheet): glasses connect/disconnect + "Open glasses camera", map system filter, shift tools, "I'm at", camera checks, voice, flags, uploads, backend address.
+- HomeView owns the CameraViewModel so the glasses stream and vision checks keep running behind the map; CameraView (Views/) is the camera screen opened full-screen from Settings.
+- User-visible name is "NightShift" (CFBundleDisplayName). The Xcode project, target and bundle id keep their CameraAccess names.
 
 ## Backend contract
 - GET /alerts -> [{id, facility, facility_name, system, type, severity (number), severity_word, hours_to_shutdown, tripped, best_plan, cost, spoken_text}] already in priority order

@@ -21,17 +21,15 @@ import UIKit
 
 private let updateRequiredTitle = "Update required"
 
+/// Glasses camera screen, opened from NightShift Settings. The view model is owned by
+/// the home screen, so closing this screen keeps the session and stream (and the
+/// vision checks that read from it) running.
 struct CameraView: View {
-  @State private var viewModel: CameraViewModel
+  @Bindable var viewModel: CameraViewModel
   @Bindable var wearablesVM: WearablesViewModel
+  @Environment(\.dismiss) private var dismiss
   @State private var showSettingsMenu: Bool = false
   @State private var isLaunchingUpdate: Bool = false
-  @State private var showShift: Bool = false
-
-  init(wearables: WearablesInterface, wearablesVM: WearablesViewModel) {
-    self._viewModel = State(wrappedValue: CameraViewModel(wearables: wearables))
-    self._wearablesVM = Bindable(wearablesVM)
-  }
 
   private var isUpdateRequired: Bool {
     wearablesVM.requiresFirmwareUpdate
@@ -102,20 +100,6 @@ struct CameraView: View {
       Button("Cancel", role: .cancel) {}
     } message: {
       Text("To preview your glasses camera, you'll be taken to the Meta AI app to grant access, then returned here.")
-    }
-    .onAppear {
-      // NightShift samples frames from this screen's decoded preview for vision checks.
-      NightShiftController.shared.attachCamera(
-        frame: { [viewModel] in viewModel.currentVideoFrame },
-        isStreaming: { [viewModel] in viewModel.isStreaming }
-      )
-    }
-    .onDisappear {
-      NightShiftController.shared.detachCamera()
-    }
-    .sheet(isPresented: $showShift) {
-      ShiftView(controller: NightShiftController.shared)
-        .presentationDetents([.medium, .large])
     }
     .navigationBarHidden(true)
   }
@@ -196,12 +180,12 @@ struct CameraView: View {
 
   private func placeholder(title: String, subtitle: String?, showWaitingRow: Bool) -> some View {
     VStack(spacing: 12) {
-      Image(.cameraAccessIcon)
+      Image(systemName: "eyeglasses")
         .resizable()
-        .renderingMode(.template)
         .foregroundStyle(.white)
         .aspectRatio(contentMode: .fit)
         .frame(width: 88)
+        .accessibilityHidden(true)
 
       Text(title)
         .font(.system(size: 20, weight: .semibold))
@@ -243,9 +227,10 @@ struct CameraView: View {
 
       Spacer()
 
-      iconButton("list.bullet.clipboard", id: "shift_button") {
-        showShift = true
+      iconButton("xmark", id: "close_camera_button") {
+        dismiss()
       }
+      .accessibilityLabel("Close camera")
 
       // Top bar carries only the app-level settings/Disconnect control.
       iconButton("gearshape", id: "settings_button") {
@@ -253,6 +238,7 @@ struct CameraView: View {
           showSettingsMenu.toggle()
         }
       }
+      .accessibilityLabel("Glasses options")
       .overlay(alignment: .trailing) {
         if showSettingsMenu {
           CustomButton(
@@ -292,6 +278,7 @@ struct CameraView: View {
         .frame(width: 22, height: 22)
         .padding(.leading, 16)
     }
+    .frame(minWidth: 56, minHeight: 56)
     .accessibilityIdentifier(id)
   }
 
@@ -602,7 +589,7 @@ private struct RecordingTimerLabel: View {
 // MARK: - Update banner
 
 struct UpdateRequiredMessage: View {
-  private let message = "Your glasses need a firmware update before Camera Access can start."
+  private let message = "Your glasses need a software update before NightShift can use the camera."
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {

@@ -14,16 +14,17 @@ import SwiftUI
 
 struct FacilityMapView: View {
   var controller: NightShiftController
+  /// The ranked list under the map; collapsed by default on the home screen.
+  @Binding var isListExpanded: Bool
   @State private var position: MapCameraPosition = .automatic
   @State private var selected: MapFacility?
-  /// nil = all systems.
-  @State private var systemFilter: String?
 
-  /// Backend order (already ranked), narrowed to the chosen system. Never re-sorted.
+  /// Backend order (already ranked), narrowed to the system chosen in Settings.
+  /// Never re-sorted.
   private var facilities: [MapFacility] {
     let all = controller.map?.facilities ?? []
-    guard let systemFilter else { return all }
-    return all.filter { $0.system == systemFilter }
+    guard let filter = controller.mapSystemFilter else { return all }
+    return all.filter { $0.system == filter }
   }
 
   /// Facilities that need checking, in rank order: the route.
@@ -33,16 +34,8 @@ struct FacilityMapView: View {
 
   private var systems: [MapSystem] {
     let all = controller.map?.systems ?? []
-    guard let systemFilter else { return all }
-    return all.filter { $0.id == systemFilter }
-  }
-
-  /// System ids in the order the backend lists them (systems first, then any only
-  /// seen on facilities).
-  private var systemIDs: [String] {
-    var seen = Set<String>()
-    let ids = (controller.map?.systems.map(\.id) ?? []) + (controller.map?.facilities.compactMap(\.system) ?? [])
-    return ids.filter { seen.insert($0).inserted }
+    guard let filter = controller.mapSystemFilter else { return all }
+    return all.filter { $0.id == filter }
   }
 
   private var routeLine: MKPolyline? {
@@ -62,11 +55,13 @@ struct FacilityMapView: View {
           if let yard = coordinate(system.truckYard) {
             Annotation("\(system.id) truck yard", coordinate: yard) {
               siteIcon("box.truck.fill")
+                .accessibilityLabel("\(system.id) truck yard")
             }
           }
           if let site = system.disposalSite, let lat = site.lat, let lon = site.lon {
             Annotation(site.id ?? "\(system.id) disposal", coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)) {
               siteIcon("drop.fill")
+                .accessibilityLabel("\(system.id) water disposal site")
             }
           }
         }
@@ -79,71 +74,61 @@ struct FacilityMapView: View {
               Button {
                 selected = facility
               } label: {
-                if facility.needsCheck {
-                  pin(for: facility)
-                } else {
-                  smallPin(for: facility)
+                Group {
+                  if facility.needsCheck {
+                    pin(for: facility)
+                  } else {
+                    smallPin(for: facility)
+                  }
                 }
+                // Large invisible tap area around the small drawn pin.
+                .frame(minWidth: 56, minHeight: 56)
+                .contentShape(Rectangle())
               }
               .buttonStyle(.plain)
+              .accessibilityHint("Shows details")
             }
           }
         }
       }
       .mapStyle(.standard(pointsOfInterest: .excludingAll))
-      .frame(minHeight: 280)
       // Re-frame the map when the system changes.
-      .onChange(of: systemFilter) { position = .automatic }
+      .onChange(of: controller.mapSystemFilter) { position = .automatic }
 
-      Picker("System", selection: $systemFilter) {
-        Text("All systems").tag(String?.none)
-        ForEach(systemIDs, id: \.self) { id in
-          Text(id).tag(Optional(id))
-        }
-      }
-      .pickerStyle(.segmented)
-      .padding(.horizontal)
-      .padding(.vertical, 6)
-
-      List {
-        Section {
-          if let error = controller.mapError {
-            Label(error, systemImage: "exclamationmark.triangle")
-              .font(.caption)
-              .foregroundStyle(.red)
-          }
-          if facilities.isEmpty {
-            Text(controller.isLoadingMap ? "Loading map…" : "No map data yet. Tap Refresh.")
-              .foregroundStyle(.secondary)
-          }
-          // Backend order: already ranked by importance.
-          ForEach(facilities) { facility in
-            Button {
-              selected = facility
-            } label: {
-              row(for: facility)
+      if isListExpanded {
+        List {
+          Section {
+            if let error = controller.mapError {
+              Label("Couldn't update the map. Showing the last one.", systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.red)
+                .accessibilityHint(error)
             }
-            .buttonStyle(.plain)
-          }
-        } header: {
-          Text(routeStops.isEmpty ? "Nothing to check" : "Route: \(routeStops.count) stop\(routeStops.count == 1 ? "" : "s") in rank order")
-        } footer: {
-          if let asOf = controller.map?.asOf {
-            Text("Data as of \(asOf)\(controller.map?.dataset.map { " · \($0)" } ?? "")")
+            if facilities.isEmpty {
+              Text(controller.isLoadingMap ? "Loading…" : "Nothing to show yet.")
+                .foregroundStyle(.secondary)
+            }
+            // Backend order: already ranked by importance.
+            ForEach(facilities) { facility in
+              Button {
+                selected = facility
+              } label: {
+                row(for: facility)
+                  .frame(minHeight: 56)
+              }
+              .buttonStyle(.plain)
+              .accessibilityHint("Shows details")
+            }
+          } header: {
+            Text(routeStops.isEmpty ? "Nothing to check" : "Visit in this order: \(routeStops.count) place\(routeStops.count == 1 ? "" : "s")")
           }
         }
+        .listStyle(.plain)
+        .frame(maxHeight: 320)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
       }
-      .listStyle(.plain)
     }
-    .navigationTitle("Map")
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbar {
-      Button("Refresh", systemImage: "arrow.clockwise") {
-        Task { await controller.refreshMap() }
-      }
-      .disabled(controller.isLoadingMap)
-    }
-    .task { await controller.refreshMap() }
+    .animation(.easeInOut(duration: 0.2), value: isListExpanded)
     .sheet(item: $selected) { facility in
       FacilityDetailCard(facility: facility, controller: controller)
         .presentationDetents([.medium, .large])
@@ -263,13 +248,13 @@ private struct FacilityDetailCard: View {
     NavigationStack {
       List {
         Section {
-          LabeledContent("Rank", value: facility.rank.map(String.init) ?? "—")
-          LabeledContent("Level", value: FacilityMapView.levelText(facility.level))
-          LabeledContent("Status", value: facility.status ?? "—")
+          LabeledContent("Visit order", value: facility.rank.map(String.init) ?? "—")
+          LabeledContent("How serious", value: FacilityMapView.levelText(facility.level))
+          LabeledContent("Sensor reading", value: facility.status ?? "—")
           if let hours = facility.hoursToShutdown {
             LabeledContent("Hours to shutdown", value: String(hours))
           }
-          LabeledContent("Facility id", value: facility.id)
+          LabeledContent("ID", value: facility.id)
         }
         Section("Why") {
           if facility.reasons.isEmpty {
@@ -282,13 +267,19 @@ private struct FacilityDetailCard: View {
         }
         Section {
           if let text = facility.spokenText {
-            Button("Read out", systemImage: "speaker.wave.2") {
+            Button {
               Task { await Speaker.shared.speak(text) }
+            } label: {
+              Label("Read aloud", systemImage: "speaker.wave.2")
+                .frame(minHeight: 56)
             }
           }
-          Button("I'm at this facility", systemImage: "mappin.and.ellipse") {
+          Button {
             controller.setCurrentFacility(facility.id)
             dismiss()
+          } label: {
+            Label("I'm here now", systemImage: "mappin.and.ellipse")
+              .frame(minHeight: 56)
           }
           .disabled(facility.id == controller.currentFacilityID)
         }
@@ -306,5 +297,14 @@ extension MapFacility {
   var coordinate: CLLocationCoordinate2D? {
     guard let lat, let lon else { return nil }
     return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+  }
+}
+
+extension FacilityMap {
+  /// System ids in the order the backend lists them (systems first, then any only
+  /// seen on facilities).
+  var systemIDs: [String] {
+    var seen = Set<String>()
+    return (systems.map(\.id) + facilities.compactMap(\.system)).filter { seen.insert($0).inserted }
   }
 }

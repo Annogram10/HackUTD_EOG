@@ -25,6 +25,8 @@ final class NightShiftController {
   /// GET /map: facilities ranked by importance, in backend order (loaded from cache first).
   private(set) var map: FacilityMap?
   private(set) var isLoadingMap = false
+  /// System shown on the home map (nil = all). Set from Settings.
+  var mapSystemFilter: String?
   /// Error text of the last failed map load; nil after a success.
   private(set) var mapError: String?
 
