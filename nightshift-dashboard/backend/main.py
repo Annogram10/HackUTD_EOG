@@ -832,8 +832,26 @@ def _save_report(body: ReportIn, collapse: bool) -> dict:
         if fl.id in photos:
             (PHOTOS / f"{fl.id}.jpg").write_bytes(photos[fl.id])
     started = body.started_at or now
-    shift = ShiftUpload(id=body.shift_id, dataset=body.dataset, date=body.date or started[:10], operator=body.operator,
-                        started_at=started, ended_at=body.ended_at or body.generated_at or now,
+    ended = body.ended_at or body.generated_at or now
+    date = body.date or started[:10]
+    # The phone stamps flags with its real clock (e.g. Nov 8), but the data is a recorded week (e.g. Oct 5-11) and
+    # the dashboard may be replaying it. Times after the end of the data are moved onto the data's timeline, so
+    # "now" on the phone becomes the moment everyone sees (the replay time, or the latest reading when live).
+    # Relative timing is kept: a flag raised 10 minutes before upload lands 10 minutes before that moment.
+    try:
+        ref = parse_ts(body.generated_at or body.ended_at or datetime.now(timezone.utc))
+    except ValueError:
+        ref = int(datetime.now(timezone.utc).timestamp())
+    if ref > ds.t_last + 3600:
+        anchor = effective_now(ds, None)[0] or int(ds.t_last)
+        offset = ref - anchor
+        move = lambda t: D.iso(parse_ts(t) - offset)  # noqa: E731
+        for fl in flags:
+            fl.timestamp = move(fl.timestamp)
+        started, ended = move(started), move(ended)
+        date = started[:10]
+    shift = ShiftUpload(id=body.shift_id, dataset=body.dataset, date=date, operator=body.operator,
+                        started_at=started, ended_at=ended,
                         route_planned=body.route_planned, route_walked=body.route_walked, flags=flags)
     with db() as c:
         saved = save_shift(c, shift, replace_flags=collapse)
