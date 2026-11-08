@@ -3,6 +3,7 @@
 // Under the nav on every page, always visible: LIVE / REPLAY (from the backend), the stale-data banner, dataset.
 
 import { formatDate, formatDateTime } from "@/lib/api";
+import AlarmStrip from "./AlarmStrip";
 import { useApp } from "./AppProvider";
 
 export default function TopBar() {
@@ -11,6 +12,8 @@ export default function TopBar() {
 
   return (
     <div className="no-print sticky top-0 z-40">
+      {/* the alarm strip shares this sticky block, so it stacks above the bar instead of covering it */}
+      <AlarmStrip />
       {offline && (
         <div role="alert" className="border-b border-red-700 bg-red-950 px-6 py-3 text-base font-semibold text-red-100">
           Backend unreachable. Data may be stale
@@ -27,14 +30,14 @@ export default function TopBar() {
           {mode && overview && (
             <p className="flex items-center gap-3 text-base" aria-live="polite">
               {replay ? (
-                <span className="flex items-center gap-1 bg-[#A83C47] px-3 py-1 font-mono text-sm font-bold uppercase tracking-wider text-zinc-100">
+                <span className="flex items-center gap-1 bg-[#A83C47] px-3 py-1 text-base font-bold uppercase tracking-[0.08em] text-zinc-100">
                   {"// "}{playing ? "Replaying" : "Replay mode"}
                   <span aria-hidden className="blink-cursor">▌</span>
                 </span>
               ) : (
                 <span className="flex items-center gap-2 bg-emerald-500/15 px-3 py-1 text-base font-bold uppercase tracking-wide text-emerald-300 ring-1 ring-emerald-400/60">
                   <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                  <span className="font-mono text-sm tracking-wider">LIVE</span>
+                  <span className="text-base tracking-[0.08em]">LIVE</span>
                 </span>
               )}
               <span className="font-semibold text-zinc-100">

@@ -125,7 +125,15 @@ export function WhatIfChart({
       {tripPt && (
         <g>
           <circle cx={x((tripPt.ts - now) / 60)} cy={y(tripPt.level_pct)} r="6" fill="#ff2d2d" stroke="#342b30" strokeWidth="2" />
-          <text x={x((tripPt.ts - now) / 60) + 10} y={y(tripPt.level_pct) + 22} fontSize="12" fill="#ff9a9a">tank trips, wells shut in</text>
+          {(() => {
+            const tx = x((tripPt.ts - now) / 60);
+            const nearRight = tx > W * 0.6; // keep the label inside the chart: put it left of the point near the edge
+            return (
+              <text x={nearRight ? tx - 10 : tx + 10} y={y(tripPt.level_pct) + 22} textAnchor={nearRight ? "end" : "start"} fontSize="12" fill="#ff9a9a">
+                tank trips, wells shut in
+              </text>
+            );
+          })()}
         </g>
       )}
       {marks.map((m, i) => (

@@ -3,9 +3,24 @@
 /* Flat dark theme. Grey surfaces with thin borders. Colour means status only (green normal, amber check soon,
    red danger). One blue accent for things you can click. */
 @theme {
-  --font-sans: var(--font-plex-sans), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-rajdhani), "Rajdhani", ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, Menlo, monospace;
-  --font-heading: var(--font-chakra-petch), "Chakra Petch", var(--font-plex-sans), sans-serif;
+  --font-heading: var(--font-rajdhani), "Rajdhani", ui-sans-serif, sans-serif;
+  --font-display: var(--font-stencil), "Big Shoulders Stencil", var(--font-rajdhani), sans-serif;
+
+  /* Rajdhani is narrow with a small x-height: the whole scale is one step larger so body text is 16 px or more */
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.35;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.4;
+  --text-base: 1.125rem;
+  --text-base--line-height: 1.45;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.45;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.4;
+  /* body text never thinner than 500 */
+  --font-weight-normal: 500;
 
   /* Avon Grid: plum greys. 950 page, 900 panel, 800 raised, 700 border; 100-500 text tiers (AA on panels). */
   --color-zinc-950: #1a0710;
@@ -87,14 +102,17 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
+  font-weight: 500;
   font-variant-numeric: tabular-nums; /* every reading, countdown and cost lines up */
 }
 code, kbd, .font-mono { font-family: var(--font-mono); }
 /* every number (readings, times, countdowns, costs) uses the mono face with tabular figures */
 .tabular-nums, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-h1, h2, h3, .font-heading { font-family: var(--font-heading); letter-spacing: 0.01em; }
+h2, h3, .font-heading { font-family: var(--font-heading); font-weight: 700; letter-spacing: 0.01em; }
+/* big titles only: the logo, page titles, the danger headline, the big countdown label */
+h1, .font-display { font-family: var(--font-display); font-weight: 800; letter-spacing: 0.02em; }
 /* small uppercase HUD labels above panels: SYS//STATUS */
-.hud { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rose-text); }
+.hud { font-family: var(--font-sans); font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--rose-text); }
 
 /* ALARM: three pulses on the screen border, then it stays on */
 body::after {

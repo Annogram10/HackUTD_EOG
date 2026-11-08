@@ -40,7 +40,7 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
           {risk.level !== "green" && <WarningIcon />}
           {look.label}
         </span>
-        <h2 className="text-2xl font-bold text-zinc-100">
+        <h2 className={`text-2xl text-zinc-100 ${risk.level === "red" ? "font-display text-3xl" : "font-bold"}`}>
           {risk.level === "green" ? "Quiet night in Avon, choom." : risk.headline}
         </h2>
       </div>

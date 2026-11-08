@@ -52,13 +52,13 @@ export default function AlertCard({ a, compact = false }: { a: Alert; compact?: 
               <p className="text-xl font-semibold text-red-300">Tank already at shutdown. Wells stay shut in until the repair ends.</p>
             ) : (
               <>
-                <p className="text-sm uppercase tracking-wide text-zinc-500">Tank reaches shutdown in</p>
+                <p className="font-display text-xl uppercase tracking-wide text-zinc-300">Tank reaches shutdown in</p>
                 <p data-countdown className={`text-5xl font-bold tabular-nums ${urgent ? "text-red-400" : "text-amber-300"}`}>
                   {a.hours_to_limit ? fmtHours(a.hours_to_limit.p50) : "n/a"}
                 </p>
                 {a.hours_to_limit && (
-                  <p className={`font-mono text-sm font-semibold tracking-wider ${urgent ? "text-red-300" : "text-amber-300"}`}>
-                    TANK FLATLINE IN {a.hours_to_limit.p50.toFixed(1)}H
+                  <p className={`text-base font-bold uppercase tracking-[0.08em] ${urgent ? "text-red-300" : "text-amber-300"}`}>
+                    Tank flatline in <span className="font-mono">{a.hours_to_limit.p50.toFixed(1)}H</span>
                   </p>
                 )}
                 {a.hours_to_limit && (

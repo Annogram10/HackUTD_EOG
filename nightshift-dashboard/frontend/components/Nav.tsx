@@ -20,11 +20,11 @@ export default function Nav() {
       <div aria-hidden className="scanlines pointer-events-none absolute inset-0 z-10" />
       <div className="relative mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-5">
         <Link href="/" className="flex flex-col leading-none" aria-label="NightShift, home">
-          <span className="neon-sign font-heading text-3xl font-bold tracking-wide">
+          <span className="neon-sign font-display text-4xl font-extrabold tracking-wide">
             <span className="neon-night">Ni<span className="neon-flicker">g</span>ht</span>
             <span className="neon-shift">Shift</span>
           </span>
-          <span className="mt-1.5 font-mono text-xs tracking-[0.3em] text-zinc-400">AVON NEVER SLEEPS</span>
+          <span className="mt-1 text-sm font-semibold tracking-[0.3em] text-zinc-400">AVON NEVER SLEEPS</span>
         </Link>
         <nav className="flex flex-wrap gap-1">
           {LINKS.map((l) => {
@@ -34,7 +34,7 @@ export default function Nav() {
                 key={l.href}
                 href={l.href}
                 aria-current={active ? "page" : undefined}
-                className={`border-b-2 bg-zinc-950/70 px-3 py-2 font-mono text-sm uppercase tracking-wider ${
+                className={`border-b-2 bg-zinc-950/70 px-3 py-2 text-base font-semibold uppercase tracking-[0.08em] ${
                   active ? "border-sky-400 text-zinc-100" : "border-transparent text-zinc-400 hover:text-zinc-100"
                 }`}
               >
