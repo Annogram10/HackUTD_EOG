@@ -165,8 +165,9 @@ final class Speaker: NSObject {
     /// play-and-record (for example, a video recording with mic), it is left as is so its
     /// mode isn't disturbed. `.defaultToSpeaker` sends audio to the phone's loudspeaker,
     /// not the earpiece, when the glasses aren't connected.
-    /// While an alarm sounds, other audio is ducked and the session keeps playing when
-    /// locked. It stays play-and-record (with the glasses' Bluetooth mic and output) so
+    /// The alarm uses the same session configuration as speech (switching it at alarm
+    /// start rebuilt the Bluetooth route and garbled the siren); this only re-checks the
+    /// session. It stays play-and-record (with the glasses' Bluetooth mic and output) so
     /// the operator can answer by voice ("what's the issue", "dismiss", "prioritize").
     static var isAlarmMode = false {
         didSet {
@@ -175,22 +176,35 @@ final class Speaker: NSObject {
         }
     }
 
+    /// One fixed session configuration for speech and the alarm alike. Changing the mode
+    /// or options when an alarm starts makes iOS rebuild the Bluetooth route, which
+    /// garbled the first seconds of the siren; with nothing to change this is a no-op.
+    private static let sessionOptions: AVAudioSession.CategoryOptions = [
+        .allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker, .duckOthers,
+    ]
+
     static func activateAudioSession() {
         let session = AVAudioSession.sharedInstance()
-        var options: AVAudioSession.CategoryOptions = [.allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker]
-        if isAlarmMode {
-            options.insert(.duckOthers)
-        }
-        let mode: AVAudioSession.Mode = isAlarmMode ? .default : .spokenAudio
-        if session.category != .playAndRecord || session.categoryOptions != options || session.mode != mode {
-            try? session.setCategory(.playAndRecord, mode: mode, options: options)
+        if session.category != .playAndRecord || session.categoryOptions != sessionOptions || session.mode != .default {
+            try? session.setCategory(.playAndRecord, mode: .default, options: sessionOptions)
         }
         try? session.setActive(true)
-        // Settings > Audio out: "Phone" plays through the iPhone speaker instead of the
-        // glasses (for demos). Re-applied every time, since iOS drops the override when the
-        // route or category changes. The glasses' Bluetooth headset link carries mic and
-        // speaker together, so in this mode the phone's mic is used too.
-        try? session.overrideOutputAudioPort(Config.audioToPhone ? .speaker : .none)
+        applyOutputRoute()
+    }
+
+    /// Settings > Audio out: "Phone" plays through the iPhone speaker instead of the
+    /// glasses (for demos). Only touches the route when it's wrong (each change is a
+    /// route rebuild); iOS drops the override on route changes, so this is re-checked
+    /// before every phrase. The glasses' Bluetooth headset link carries mic and speaker
+    /// together, so in Phone mode the phone's mic is used too.
+    static func applyOutputRoute() {
+        let session = AVAudioSession.sharedInstance()
+        let onSpeaker = session.currentRoute.outputs.contains { $0.portType == .builtInSpeaker }
+        if Config.audioToPhone {
+            if !onSpeaker { try? session.overrideOutputAudioPort(.speaker) }
+        } else if onSpeaker, session.availableInputs?.contains(where: { $0.portType == .bluetoothHFP }) == true {
+            try? session.overrideOutputAudioPort(.none)
+        }
     }
 }
 

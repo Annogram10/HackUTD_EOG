@@ -147,12 +147,14 @@ final class VoiceCommandListener {
     let session = AVAudioSession.sharedInstance()
     // Prefer the glasses mic (Bluetooth HFP) over the phone's, unless audio is set to
     // play from the phone: choosing the glasses mic would pull the output back to them.
-    if Config.audioToPhone {
-      let builtIn = session.availableInputs?.first(where: { $0.portType == .builtInMic })
-      try? session.setPreferredInput(builtIn)
-      try? session.overrideOutputAudioPort(.speaker)
-    } else if let glassesInput = session.availableInputs?.first(where: { $0.portType == .bluetoothHFP }) {
-      try? session.setPreferredInput(glassesInput)
+    // Only set when different: each change rebuilds the route (and would glitch a siren
+    // that's playing).
+    let wanted = Config.audioToPhone
+      ? session.availableInputs?.first(where: { $0.portType == .builtInMic })
+      : session.availableInputs?.first(where: { $0.portType == .bluetoothHFP })
+    if let wanted, session.preferredInput?.uid != wanted.uid {
+      try? session.setPreferredInput(wanted)
+      Speaker.applyOutputRoute()
     }
 
     let engine = AVAudioEngine()
