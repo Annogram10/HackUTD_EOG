@@ -119,3 +119,19 @@ html[data-alarm="red"] body::after {
 @media (prefers-reduced-motion: reduce) {
   .owl-pair, .owl-ghost { animation: none; }
 }
+
+/* City map: pipeline flow pulses toward the disposal site, red glow around a facility in danger, the facility's
+   sign flickers 3 times then stays red, landmark signs breathe slowly. Reduced motion: all off. */
+.city-flow { animation: city-flow 1.6s linear infinite; }
+@keyframes city-flow { to { stroke-dashoffset: -24; } }
+.city-danger { animation: city-danger 2.4s ease-in-out infinite; }
+@keyframes city-danger { 50% { stroke-opacity: 0.25; } }
+.city-sign { animation: city-sign 4s ease-in-out infinite; }
+@keyframes city-sign { 50% { opacity: 0.35; } }
+.fac-danger { box-shadow: 0 0 18px #e5484d55; }
+.fac-sign { text-shadow: 0 0 8px #e5484d; animation: fac-sign 0.24s step-end 3; }
+@keyframes fac-sign { 0% { opacity: 1; } 40% { opacity: 0.15; } 70% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .city-flow, .city-danger, .city-sign, .fac-sign { animation: none; }
+  .city-flow { display: none; }
+}
