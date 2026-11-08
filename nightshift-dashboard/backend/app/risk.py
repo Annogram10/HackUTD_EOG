@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 
 from . import dataset as D
 from .handoff import _plan_words, spoken
+from .lru import LRU
 from .timeutil import parse_ts
 from .triage import (FORECAST_QUANTILE, SEVERITY_COLOR, drop, fac_name, repair_hours_left, run_triage, severity,
                      worst_severity)
@@ -114,7 +115,7 @@ def _money(tri: dict) -> dict:
 
 AI_TIMEOUT_S = 8          # one model call never holds anything longer than this
 AI_FAIL_TTL_S = 60        # a failed call is remembered this long, so a dead model is not retried on every poll
-_ai_cache: dict = {}      # key -> (result, time stored)
+_ai_cache = LRU(256)      # key -> (result, time stored)
 _ai_inflight: set = set()
 _ai_lock = threading.Lock()
 _ai_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="nemotron")
@@ -317,7 +318,7 @@ def assess(ds, now=None, use_ai: bool = True, peek_ai: bool = False) -> dict:
     }
 
 
-_timeline_cache: dict = {}
+_timeline_cache = LRU(32)
 
 
 def timeline(ds, step_min: int = 30) -> dict:
@@ -328,8 +329,9 @@ def timeline(ds, step_min: int = 30) -> dict:
     the whole bar.
     """
     key = (ds.name, ds.token, step_min)
-    if key in _timeline_cache:
-        return _timeline_cache[key]
+    hit = _timeline_cache.get(key)
+    if hit is not None:
+        return hit
     t0, t1 = int(ds.t_first), int(ds.t_last)
     start = t0 + 6 * 3600  # detection needs some history before it can judge
     pts = []

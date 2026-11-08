@@ -23,12 +23,13 @@ from . import dataset as D
 from .detect import detect_events
 from .forecast import forecast_shutdown
 from .handoff import build_handoff
+from .lru import LRU
 from .triage import events_json, fac_name, run_triage
 
 NVIDIA_URL = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1") + "/chat/completions"
 MODEL = os.environ.get("NEMOTRON_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
 
-_runs: dict = {}
+_runs = LRU(32)  # one agent run per (dataset, files, moment)
 _lock = threading.Lock()
 
 
@@ -251,6 +252,11 @@ def _execute(run: Run):
         run.status, run.error = "error", str(e)[:200]
 
 
+def find_run(dataset_name: str, now: Optional[int] = None) -> Optional[Run]:
+    """An agent run that already exists for this moment, without starting one."""
+    return _runs.get((dataset_name, D.load(dataset_name).token, now))
+
+
 def get_run(dataset_name: str, now: Optional[int] = None, force: bool = False) -> Run:
     """Starts the agent the first time a dataset is asked for. Nobody has to type a prompt."""
     key = (dataset_name, D.load(dataset_name).token, now)
@@ -259,4 +265,4 @@ def get_run(dataset_name: str, now: Optional[int] = None, force: bool = False) -
             run = Run(dataset_name, now)
             _runs[key] = run
             threading.Thread(target=_execute, args=(run,), daemon=True).start()
-        return _runs[key]
+        return _runs.get(key)

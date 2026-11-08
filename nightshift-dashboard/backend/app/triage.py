@@ -9,9 +9,10 @@ from . import optimize as opt
 from .dataset import Dataset, iso
 from .detect import detect_events
 from .forecast import current_state, forecast_shutdown
+from .lru import LRU
 from .timeutil import parse_ts
 
-_cache: dict = {}
+_cache = LRU(256)  # one entry per (dataset, moment)
 
 # ---------- one severity scale for everything (map, next shift, risk colour, alarm, handoff, dashboard) ----------
 # high   -> red, the alarm fires:  the tank already tripped, or a pump failure whose tank reaches shutdown before
@@ -144,8 +145,9 @@ def _marks(c: opt.Ctx, p: dict) -> list:
 def run_triage(ds: Dataset, now: Optional[int] = None) -> dict:
     now = ds.t_last if now is None else min(int(now), ds.t_last)
     key = (ds.name, ds.token, now)
-    if key in _cache:
-        return _cache[key]
+    hit = _cache.get(key)
+    if hit is not None:
+        return hit
 
     events = detect_events(ds, now)
     alerts, by_sys = [], {}

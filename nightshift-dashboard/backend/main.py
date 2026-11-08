@@ -613,8 +613,9 @@ def handoff(dataset: Optional[str] = None, now: Optional[int] = None):
     tri = run_triage(ds, now)
     h = build_handoff(tri)
     h["mode"] = mode
-    run = agent_mod.get_run(ds.name, now)
-    if run.status == "done" and run.handoff_text:
+    # attach the agent's text only if it already ran for this moment: a replay must not start an agent per step
+    run = agent_mod.get_run(ds.name, None) if mode == "live" else agent_mod.find_run(ds.name, now)
+    if run and run.status == "done" and run.handoff_text:
         h["agent_text"] = run.handoff_text
         h["agent_mode"] = run.mode
     h["events_count"] = len(tri["events"])
