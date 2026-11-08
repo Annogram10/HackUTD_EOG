@@ -433,3 +433,40 @@ private func freshDefaults() -> UserDefaults {
     #expect(missing.contains("isn't on the server"))
   }
 }
+
+// MARK: - City map
+
+/// The phone draws the same city as the dashboard (frontend/lib/city.ts). Expected
+/// values were produced by running city.ts on data/full_week system S1.
+@Suite struct CityMapTests {
+  private func s1() -> (CityMap.Layout, CityMap.City) {
+    let facilities: [(id: String, at: CityMap.LatLon)] = [
+      ("S1_FACILITY_A", .init(lat: 31.912, lon: -102.34)),
+      ("S1_FACILITY_B", .init(lat: 31.835, lon: -102.36)),
+      ("S1_FACILITY_C", .init(lat: 31.79, lon: -102.25)),
+    ]
+    let layout = CityMap.layout(
+      facilities: facilities, disposal: .init(lat: 31.87, lon: -102.295), truckYard: .init(lat: 31.65, lon: -102.6))
+    return (layout, CityMap.buildCity(systemID: "S1", layout: layout))
+  }
+
+  @Test func layoutMatchesDashboard() throws {
+    let (layout, _) = s1()
+    let a = try #require(layout.pos["S1_FACILITY_A"])
+    #expect(abs(a.x - 42.628528) < 1e-5 && abs(a.y - 10.756967) < 1e-5)
+    #expect(abs(layout.disp.x - 52.106135) < 1e-5 && abs(layout.disp.y - 23.413934) < 1e-5)
+    let yard = try #require(layout.yard)
+    #expect(abs(yard.x - 23.748205) < 1e-5 && abs(yard.y - 51.25) < 1e-5)
+  }
+
+  @Test func cityMatchesDashboard() throws {
+    let (_, city) = s1()
+    #expect(city.blocks.count == 1683)
+    #expect(city.streets.count == 1685)
+    #expect(city.lights.count == 140)
+    #expect(city.district == "NEON FLATS")
+    #expect(city.landmarks.map(\.name) == ["Owlsaka Tower", "Brinetechnica", "Pumpitech", "Tank Tao", "Megatank H10", "Hootsuka Works"])
+    let first = try #require(city.landmarks.first)
+    #expect(abs(first.rect.x - 12.0556) < 1e-5 && abs(first.rect.y - 29.923991) < 1e-5)
+  }
+}

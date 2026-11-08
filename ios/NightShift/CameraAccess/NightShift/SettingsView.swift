@@ -31,7 +31,6 @@ struct SettingsView: View {
   @State private var apiKeyText = ""
   @State private var apiKeySaved: String?
   @AppStorage(Config.Keys.defaultSystem) private var defaultSystem = ""
-  @AppStorage(Config.Keys.showDemoMapLayers) private var showDemoLayers = true
 
   var body: some View {
     VStack(spacing: 0) {
@@ -304,7 +303,6 @@ struct SettingsView: View {
         Text("Connect the glasses to open the camera.")
           .foregroundStyle(NS.textSecondary)
       }
-      Toggle("Demo wells and pipelines on map", isOn: $showDemoLayers)
       Button("Next alert", systemImage: "forward") {
         Task { await controller.speakNextAlert() }
       }
@@ -381,7 +379,7 @@ struct SettingsView: View {
           controller.mapSystemFilter = $0
         }
       )) {
-        Text("All systems").tag(String?.none)
+        Text("Top problem").tag(String?.none)
         ForEach(controller.map?.systemIDs ?? [], id: \.self) { id in
           Text(id).tag(Optional(id))
         }
