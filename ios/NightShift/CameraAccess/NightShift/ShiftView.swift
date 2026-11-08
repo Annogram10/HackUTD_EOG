@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct ShiftView: View {
   var controller: NightShiftController
@@ -66,7 +67,12 @@ struct ShiftView: View {
         }
       }
     }
-    .task { await controller.testConnection() }
+    .task {
+      addressText = controller.backendURL.absoluteString
+      await controller.testConnection()
+    }
+    // Keep the field showing the address in use after Save, Paste or Reset.
+    .onChange(of: controller.backendURL) { addressText = controller.backendURL.absoluteString }
   }
 
   private var statusSection: some View {
@@ -130,21 +136,14 @@ struct ShiftView: View {
       }
       // Borderless styles keep each button separately tappable inside a List row.
       HStack(spacing: 16) {
-        PasteButton(payloadType: String.self) { strings in
-          guard let pasted = strings.first else { return }
-          Task { @MainActor in
-            addressText = pasted
-            saveAddress()
-          }
-        }
-        .labelStyle(.titleOnly)
-        .buttonBorderShape(.capsule)
+        Button("Paste") { pasteAddress() }
+          .buttonStyle(.borderless)
         Button("Save") { saveAddress() }
           .buttonStyle(.borderless)
           .disabled(addressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         Spacer()
         Button("Reset to default", role: .destructive) {
-          addressText = ""
+          addressText = Config.defaultBaseURL.absoluteString
           addressError = nil
           Task { await controller.resetBackendAddress() }
         }
@@ -157,14 +156,30 @@ struct ShiftView: View {
 
   /// Normalizes and saves the typed address, then tests it; shows a red message if invalid.
   private func saveAddress() {
-    let input = addressText
-    guard Config.normalizedBaseURL(from: input) != nil else {
+    guard let url = Config.normalizedBaseURL(from: addressText) else {
       addressError = "Not a valid https address."
       return
     }
+    save(url)
+  }
+
+  /// Reads the clipboard (text first, then a copied link), shows the cleaned address
+  /// in the field, then saves and tests it.
+  private func pasteAddress() {
+    let pasteboard = UIPasteboard.general
+    let pasted = pasteboard.string ?? pasteboard.url?.absoluteString
+    guard let pasted, let url = Config.normalizedBaseURL(from: pasted) else {
+      addressError = "Clipboard has no address"
+      return
+    }
+    save(url)
+  }
+
+  /// Shows the normalized address in the field, then saves it and runs Test connection.
+  private func save(_ url: URL) {
+    addressText = url.absoluteString
     addressError = nil
-    addressText = ""
-    Task { _ = await controller.saveBackendAddress(input) }
+    Task { _ = await controller.saveBackendAddress(url.absoluteString) }
   }
 
   private func facilityName(for id: String?) -> String? {
