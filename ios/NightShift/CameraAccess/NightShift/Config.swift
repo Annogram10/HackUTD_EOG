@@ -10,8 +10,8 @@ enum Config {
   /// `true` serves bundled mock JSON (MockAPI); `false` talks to `baseURL` (RealAPI).
   static let useMock = false
 
-  /// Built-in backend address (HTTPS via Cloudflare tunnel, so no ATS exception is needed).
-  static let defaultBaseURL = URL(string: "https://fri-favourite-ids-bool.trycloudflare.com")!
+  /// Built-in backend address: the permanent ngrok domain (HTTPS, so no ATS exception is needed).
+  static let defaultBaseURL = URL(string: "https://stubble-sensitize-reset.ngrok-free.dev")!
 
   /// UserDefaults key for the address entered on the Shift screen.
   private static let baseURLKey = "NightShift.backendBaseURL"

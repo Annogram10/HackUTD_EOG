@@ -26,7 +26,7 @@ All NightShift code is in CameraAccess/NightShift/ (Config, Models, NightShiftAP
 - POST /report -> one JSON body {operator, date, started_at, ended_at, flags:[{type "leak"|"smoke"|"damage", facility (id), timestamp (ISO 8601), note, status "confirmed"|"dismissed"|"pending", trigger "camera"|"voice", photo_base64}]}
 - Facility ids are strings like S5_FACILITY_C; spoken names look like "S five Facility C".
 - Decode tolerantly: ignore unknown fields, optional fields default to nil.
-- Backend base URL: Config.swift (changes whenever the tunnel restarts).
+- Backend base URL: the default address is in Config.swift, editable on the Shift screen and saved on the phone; the permanent ngrok address is https://stubble-sensitize-reset.ngrok-free.dev.
 
 ## Working features (hand-tested on glasses)
 Camera stream, chime + spoken alerts through the glasses, voice commands (next, status of <facility>, confirm, dismiss, note <text>, flag leak/smoke/damage), frame grabber every 4 s, flags with photos stored offline, upload queue with retry, Shift screen (Start Shift, Next alert, Refresh, End Shift, Test connection), offline cache of backend data.

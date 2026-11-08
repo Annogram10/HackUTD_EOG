@@ -157,6 +157,9 @@ struct RealAPI: NightShiftAPI {
 
   /// Sends the request and records the outcome in `BackendStatus`.
   private func send(_ request: URLRequest, path: String) async throws -> Data {
+    var request = request
+    // Stops ngrok's browser-warning HTML page from replacing the JSON response.
+    request.setValue("true", forHTTPHeaderField: "ngrok-skip-browser-warning")
     do {
       let (data, response) = try await URLSession.shared.data(for: request)
       if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
