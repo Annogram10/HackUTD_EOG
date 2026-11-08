@@ -137,6 +137,7 @@ def init_db() -> None:
         if "priority" not in [r["name"] for r in c.execute("PRAGMA table_info(flags)")]:  # older database
             c.execute("ALTER TABLE flags ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
         c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        c.execute("CREATE TABLE IF NOT EXISTS reports (client_id TEXT PRIMARY KEY, response TEXT, created_at TEXT NOT NULL)")
 
 
 init_db()
@@ -282,11 +283,13 @@ class NoteIn(BaseModel):
     author: Literal["operator", "control"] = "operator"
 
 
-def save_shift(c, s: ShiftUpload) -> dict:
+def save_shift(c, s: ShiftUpload, replace_flags: bool = True) -> dict:
+    """replace_flags=False keeps the shift's earlier flags (an audit trail) and only adds or updates these."""
     dsname = s.dataset or default_dataset()
     ds = ds_for(dsname)
     shift_id = s.id or f"shift-{dsname}-{s.date}"
-    c.execute("DELETE FROM flags WHERE shift_id = ? AND id NOT LIKE 'alarm-%'", (shift_id,))
+    if replace_flags:
+        c.execute("DELETE FROM flags WHERE shift_id = ? AND id NOT LIKE 'alarm-%'", (shift_id,))
     c.execute(
         "INSERT OR REPLACE INTO shifts VALUES (?,?,?,?,?,?,?,?,?)",
         (shift_id, dsname, s.date, s.operator, s.started_at, s.ended_at,
@@ -721,11 +724,38 @@ class ReportIn(BaseModel):
     route_walked: list[str] = Field(default_factory=list)
     flags: list[ReportFlag] = Field(default_factory=list)
     notes: list[ReportNote] = Field(default_factory=list)
+    client_id: Optional[str] = None  # a UUID per send; a retry with the same one returns the first result
 
 
 @app.post("/report")
 def post_report(body: ReportIn):
-    """The phone sends the whole round as one JSON body, photos as base64. Re-sending the same shift_id replaces it."""
+    """
+    The phone sends the whole round as one JSON body, photos as base64.
+    With client_id: idempotent. The same client_id returns the stored result (nothing saved twice); a new client_id
+    is a new record and keeps every earlier flag (audit trail).
+    Without client_id (older app builds): re-sending the same shift_id replaces it, one flag per facility + type.
+    """
+    if body.client_id:
+        with db() as c:
+            claimed = c.execute("INSERT OR IGNORE INTO reports (client_id, response, created_at) VALUES (?, NULL, ?)",
+                                (body.client_id, datetime.now().isoformat(timespec="seconds"))).rowcount
+            if not claimed:
+                row = c.execute("SELECT response FROM reports WHERE client_id = ?", (body.client_id,)).fetchone()
+                done = json.loads(row["response"]) if row and row["response"] else {"ok": True, "in_progress": True}
+                return {**done, "duplicate": True}
+        try:
+            res = _save_report(body, collapse=False)
+        except BaseException:
+            with db() as c:  # let a retry try again
+                c.execute("DELETE FROM reports WHERE client_id = ?", (body.client_id,))
+            raise
+        with db() as c:
+            c.execute("UPDATE reports SET response = ? WHERE client_id = ?", (json.dumps(res), body.client_id))
+        return {**res, "duplicate": False}
+    return _save_report(body, collapse=True)
+
+
+def _save_report(body: ReportIn, collapse: bool) -> dict:
     now = datetime.now().isoformat(timespec="seconds")
     ds = ds_for(body.dataset)
     flags, photos = [], {}
@@ -750,17 +780,18 @@ def post_report(body: ReportIn):
                                 timestamp=f.created_at or f.timestamp or now,
                                 status={"waiting": "pending"}.get(f.status, f.status) if f.status in ("waiting", "pending", "confirmed", "dismissed") else "pending",
                                 note=note, trigger=trig, reason="; ".join(reasons) or None))
-    # One flag per item: the same facility and the same kind of problem is replaced by the newest one,
-    # not added again. (Its older photo is dropped too.)
-    newest = {}
-    for fl in flags:
-        fac = resolve_facility(ds, fl.location)
-        key = (fac if fac in ds.facilities else "_".join(fac.lower().replace("-", " ").split()), fl.type)
-        if key not in newest or fl.timestamp >= newest[key].timestamp:
-            newest[key] = fl
-    keep = {id(x) for x in newest.values()}
-    replaced = len(flags) - len(keep)
-    flags = [fl for fl in flags if id(fl) in keep]
+    # Older clients: one flag per item, the same facility and kind of problem is replaced by the newest one.
+    replaced = 0
+    if collapse:
+        newest = {}
+        for fl in flags:
+            fac = resolve_facility(ds, fl.location)
+            key = (fac if fac in ds.facilities else "_".join(fac.lower().replace("-", " ").split()), fl.type)
+            if key not in newest or fl.timestamp >= newest[key].timestamp:
+                newest[key] = fl
+        keep = {id(x) for x in newest.values()}
+        replaced = len(flags) - len(keep)
+        flags = [fl for fl in flags if id(fl) in keep]
     for fl in flags:
         if fl.id in photos:
             (PHOTOS / f"{fl.id}.jpg").write_bytes(photos[fl.id])
@@ -769,7 +800,7 @@ def post_report(body: ReportIn):
                         started_at=started, ended_at=body.ended_at or body.generated_at or now,
                         route_planned=body.route_planned, route_walked=body.route_walked, flags=flags)
     with db() as c:
-        saved = save_shift(c, shift)
+        saved = save_shift(c, shift, replace_flags=collapse)
     return {"ok": True, "shift_id": saved["id"], "flags_saved": len(saved["flags"]), "replaced_duplicates": replaced,
             "flags": saved["flags"]}
 
