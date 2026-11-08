@@ -90,66 +90,25 @@ html[data-alarm="red"] body::after {
 }
 @media (prefers-reduced-motion: reduce) { .owl-shake { animation: none; } }
 
-/* Red alert extra eyes: ~1.5 s, once. Flickers (60-120 ms) with 1-3 px sideways glitches, out of sync per variant,
-   then all open together at 53-73% (~300 ms), then fade out over ~300 ms and stay hidden. */
-.owl-eye { opacity: 0; animation: 1.5s step-end 1 forwards; }
-.owl-eye-a { animation-name: owl-eye-a; }
-.owl-eye-b { animation-name: owl-eye-b; }
-.owl-eye-c { animation-name: owl-eye-c; }
-@keyframes owl-eye-a {
-  0% { opacity: 0; transform: translateX(0); }
-  6% { opacity: 1; transform: translateX(2px); }
-  12% { opacity: 0; }
-  22% { opacity: 1; transform: translateX(-1.5px); }
-  28% { opacity: 0; }
-  40% { opacity: 1; transform: translateX(2.5px); }
-  46% { opacity: 0; transform: translateX(0); }
-  53% { opacity: 1; transform: translateX(0); }
-  73% { opacity: 1; animation-timing-function: linear; }
-  93%, 100% { opacity: 0; transform: translateX(0); }
-}
-@keyframes owl-eye-b {
-  0% { opacity: 0; transform: translateX(0); }
-  10% { opacity: 1; transform: translateX(-2px); }
-  17% { opacity: 0; }
-  31% { opacity: 1; transform: translateX(1px); }
-  37% { opacity: 0; transform: translateX(0); }
-  53% { opacity: 1; transform: translateX(0); }
-  73% { opacity: 1; animation-timing-function: linear; }
-  93%, 100% { opacity: 0; transform: translateX(0); }
-}
-@keyframes owl-eye-c {
-  0% { opacity: 0; transform: translateX(0); }
-  3% { opacity: 1; transform: translateX(1.5px); }
-  9% { opacity: 0; }
-  18% { opacity: 1; transform: translateX(-3px); }
-  25% { opacity: 0; }
-  34% { opacity: 1; transform: translateX(2px); }
-  39% { opacity: 0; transform: translateX(0); }
-  53% { opacity: 1; transform: translateX(0); }
-  73% { opacity: 1; animation-timing-function: linear; }
-  93%, 100% { opacity: 0; transform: translateX(0); }
-}
-@media (prefers-reduced-motion: reduce) { .owl-extra-eyes { display: none; } }
-
-/* Red alert main eyes, "going crazy": neon flicker + colour-split jitter + glitch slice, looping.
-   Small area and mostly dims (never a bright full flash). The two eyes run at different speeds so they are out of
-   sync. Reduced motion: steady neon eyes, no flicker. */
-.owl-crazy-0 { animation: owl-crazy 1.3s step-end infinite; }
-.owl-crazy-1 { animation: owl-crazy 1.05s step-end infinite 0.2s; }
-.owl-crazy-ghost-0 { animation: owl-ghost 0.9s step-end infinite; }
-.owl-crazy-ghost-1 { animation: owl-ghost 0.75s step-end infinite 0.3s; }
-.owl-crazy-slice-0 { animation: owl-slice 1.7s step-end infinite 0.4s; }
-.owl-crazy-slice-1 { animation: owl-slice 1.4s step-end infinite; }
-@keyframes owl-crazy {
+/* Red alert, "going crazy": three pairs of eyes, each flickering in and out on its own loop (different lengths and
+   offsets, so they never line up), with a small sideways glitch when one comes back. The orange ghost jitters.
+   Small area, dims to dark (never a bright flash). Reduced motion: all pairs steady. */
+.owl-pair { animation: owl-pair 1.4s step-end infinite; }
+.owl-pair-0 { animation-duration: 1.15s; animation-delay: 0.35s; }
+.owl-pair-1 { animation-duration: 1.6s; }
+.owl-pair-2 { animation-duration: 1.3s; animation-delay: 0.7s; }
+.owl-ghost { animation: owl-ghost 0.8s step-end infinite; }
+@keyframes owl-pair {
   0% { opacity: 1; transform: translateX(0); }
-  14% { opacity: 0.35; }
-  20% { opacity: 1; transform: translateX(1px); }
-  27% { opacity: 1; transform: translateX(0); }
-  52% { opacity: 0.55; transform: translateX(-1.5px); }
-  58% { opacity: 1; transform: translateX(0); }
-  81% { opacity: 0.2; }
-  86% { opacity: 1; }
+  18% { opacity: 0; }
+  30% { opacity: 1; transform: translateX(1.5px); }
+  36% { opacity: 1; transform: translateX(0); }
+  55% { opacity: 0.3; }
+  61% { opacity: 1; transform: translateX(-1px); }
+  67% { opacity: 1; transform: translateX(0); }
+  80% { opacity: 0; }
+  92% { opacity: 1; transform: translateX(2px); }
+  96% { transform: translateX(0); }
 }
 @keyframes owl-ghost {
   0% { transform: translateX(1px); }
@@ -157,65 +116,6 @@ html[data-alarm="red"] body::after {
   50% { transform: translateX(2px); }
   75% { transform: translateX(-0.5px); }
 }
-@keyframes owl-slice {
-  0% { opacity: 0; transform: translate(0, 0); }
-  40% { opacity: 0.9; transform: translate(2px, -2px); }
-  46% { opacity: 0.9; transform: translate(-2px, 2.5px); }
-  52% { opacity: 0; transform: translate(0, 0); }
-}
 @media (prefers-reduced-motion: reduce) {
-  .owl-crazy-0, .owl-crazy-1, .owl-crazy-ghost-0, .owl-crazy-ghost-1 { animation: none; }
-  .owl-crazy-slice-0, .owl-crazy-slice-1 { animation: none; opacity: 0; }
-}
-.alarm-flash { animation: alarm-flash 0.9s ease-in-out 3; }
-
-/* header: one thin line, red on alarm */
-header {
-  border-bottom: 1px solid #32363d !important;
-  background: #0e0f11 !important;
-}
-html[data-alarm="red"] header {
-  border-bottom-color: var(--alarm-red) !important;
-}
-
-@media print {
-  header,
-  .no-print {
-    display: none !important;
-  }
-  body::after {
-    display: none !important;
-  }
-}
-
-/* Handover report prints on white paper */
-@media print {
-  body {
-    background: #fff !important;
-    color: #000 !important;
-  }
-  main * {
-    background: transparent !important;
-    color: #000 !important;
-    border-color: #999 !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-  }
-  article,
-  li {
-    break-inside: avoid;
-  }
-}
-
-/* Time-travel slider: transparent track (the risk bands show through), plain grey handle */
-.timeslider { appearance: none; -webkit-appearance: none; background: transparent; height: 2rem; cursor: pointer; }
-.timeslider::-webkit-slider-runnable-track { background: transparent; height: 2rem; }
-.timeslider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; height: 1.75rem; width: 0.5rem; margin-top: 0.125rem; background: #dfe2e6; border: 2px solid #0e0f11; }
-.timeslider::-moz-range-track { background: transparent; height: 2rem; }
-.timeslider::-moz-range-thumb { height: 1.75rem; width: 0.5rem; background: #dfe2e6; border: 2px solid #0e0f11; border-radius: 0; }
-
-/* Keyboard focus is always visible (projector + keyboard demos). */
-:where(a, button, select, input, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid #5a9bf0;
-  outline-offset: 2px;
+  .owl-pair, .owl-ghost { animation: none; }
 }

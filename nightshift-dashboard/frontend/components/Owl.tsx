@@ -7,17 +7,16 @@
 import { useId } from "react";
 import type { RiskLevel } from "@/lib/types";
 
-// Red alert: the main eyes turn neon and keep flickering (going crazy), and small extra eyes open around the face (forehead, above the brows, both cheeks). Sizes are 30-60% of
-// the main eye (r 8). They mount when the level turns red, so the CSS sequence in globals.css plays once per entry:
-// out-of-sync flickers with small sideways glitches, all open together ~300 ms, then fade out. Reduced motion: hidden.
-const EXTRA_EYES = [
-  { cx: 24, cy: 6.5, r: 3.6, v: "a" }, // forehead
-  { cx: 9.5, cy: 9, r: 2.4, v: "b" }, // above the left brow
-  { cx: 38.5, cy: 9, r: 2.6, v: "c" }, // above the right brow
-  { cx: 8.5, cy: 30, r: 3.2, v: "c" }, // left cheek
-  { cx: 39.5, cy: 30, r: 2.8, v: "a" }, // right cheek
-  { cx: 24, cy: 41.5, r: 2.4, v: "b" }, // low on the belly
+// Red alert, "going crazy": three pairs of neon eyes stacked down the face (small on the forehead, the big main
+// pair, a pair on the cheeks). Each pair flickers in and out on its own loop, out of sync with the others, with an
+// orange colour-split ghost that jitters. Loops while the level is red; with reduced motion all three pairs hold steady.
+const EYE_PAIRS = [
+  { y: 9.5, dx: 4.5, r: 3, ring: 1.9, pupil: 0.6 }, // forehead
+  { y: 20, dx: 7.5, r: 6.8, ring: 4.4, pupil: 1.2 }, // main pair
+  { y: 30.5, dx: 12.5, r: 3.6, ring: 2.3, pupil: 0.7 }, // cheeks
 ];
+
+
 
 const LABEL: Record<RiskLevel, string> = {
   green: "Owl is happy: all normal",
@@ -97,23 +96,25 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       )}
       {red && (
         <>
-          {/* going crazy: dark sockets with neon cyan eyes that keep flickering, an orange colour-split ghost that
-              jitters sideways, and a thin glitch slice. Loops while the level is red (steady with reduced motion). */}
-          {[16.5, 31.5].map((cx, i) => (
-            <g key={cx}>
-              <circle cx={cx} cy="20" r="8" fill="#0e0f11" />
-              <g className={`owl-crazy-ghost owl-crazy-ghost-${i}`}>
-                <circle cx={cx} cy="20" r="5" fill="none" stroke="#FF7A2B" strokeWidth="1.6" opacity="0.75" />
-              </g>
-              <g className={`owl-crazy owl-crazy-${i}`} filter={`url(#${glow})`}>
-                <circle cx={cx} cy="20" r="5" fill="none" stroke="#19E6FF" strokeWidth="1.8" />
-                <circle cx={cx} cy="20" r="1.3" fill="#E6FDFF" />
-              </g>
-              <rect className={`owl-crazy-slice owl-crazy-slice-${i}`} x={cx - 7} y="19" width="14" height="1.2" fill="#19E6FF" opacity="0" />
+          {/* short angry brows over the main pair, clear of the forehead eyes */}
+          <path d="M10 13.8 L16 11.4" stroke="#dfe2e6" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M38 13.8 L32 11.4" stroke="#dfe2e6" strokeWidth="1.8" strokeLinecap="round" />
+          {EYE_PAIRS.map((p, i) => (
+            <g key={i} className={`owl-pair owl-pair-${i}`}>
+              {[24 - p.dx, 24 + p.dx].map((cx) => (
+                <g key={cx}>
+                  <circle cx={cx} cy={p.y} r={p.r} fill="#0e0f11" />
+                  <g className="owl-ghost">
+                    <circle cx={cx} cy={p.y} r={p.ring} fill="none" stroke="#FF7A2B" strokeWidth={p.r > 5 ? 1.5 : 0.8} opacity="0.75" />
+                  </g>
+                  <g filter={`url(#${glow})`}>
+                    <circle cx={cx} cy={p.y} r={p.ring} fill="none" stroke="#19E6FF" strokeWidth={p.r > 5 ? 1.7 : 0.9} />
+                    <circle cx={cx} cy={p.y} r={p.pupil} fill="#E6FDFF" />
+                  </g>
+                </g>
+              ))}
             </g>
           ))}
-          <path d="M9 14.5 L21 9.5" stroke="#dfe2e6" strokeWidth="2" strokeLinecap="round" />
-          <path d="M39 14.5 L27 9.5" stroke="#dfe2e6" strokeWidth="2" strokeLinecap="round" />
         </>
       )}
 
@@ -125,19 +126,6 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
         </>
       ) : (
         <path d={amber ? "M21.5 26.5 L26.5 26.5 L24 31 Z" : "M21.5 26 L26.5 26 L24 31 Z"} fill="#a9afb8" />
-      )}
-
-      {red && (
-        <g className="owl-extra-eyes" aria-hidden>
-          {EXTRA_EYES.map((e, i) => (
-            <g key={i} className={`owl-eye owl-eye-${e.v}`} style={{ animationDelay: `${(i % 3) * 25}ms` }}>
-              <circle cx={e.cx} cy={e.cy} r={e.r} fill="#0e0f11" />
-              <circle cx={e.cx + 0.6} cy={e.cy} r={e.r * 0.62} fill="none" stroke="#FF7A2B" strokeWidth="0.8" opacity="0.7" />
-              <circle cx={e.cx} cy={e.cy} r={e.r * 0.62} fill="none" stroke="#19E6FF" strokeWidth="0.9" filter={`url(#${glow})`} />
-              <circle cx={e.cx} cy={e.cy} r={Math.max(0.45, e.r * 0.2)} fill="#E6FDFF" />
-            </g>
-          ))}
-        </g>
       )}
 
       {/* feet */}
