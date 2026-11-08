@@ -14,6 +14,7 @@
 // decision for the issue's flag, which also acknowledges the alarm and reloads /map.
 //
 
+import AVFoundation
 import Observation
 import SwiftUI
 import UIKit
@@ -73,7 +74,7 @@ final class AlarmMonitor {
   /// True if the backend's current alarm was already acknowledged on this phone.
   var isBackendAlarmAcknowledged: Bool {
     guard let backendStatus, backendStatus.alarm else { return false }
-    return Self.identity(of: backendStatus) == acknowledgedID
+    return isAcknowledged(Self.identity(of: backendStatus))
   }
 
   /// Saves the backend's current alarm as acknowledged (after an on-screen decision
@@ -82,7 +83,26 @@ final class AlarmMonitor {
     if active != nil {
       acknowledge()
     } else if let backendStatus, backendStatus.alarm {
-      acknowledgedID = Self.identity(of: backendStatus)
+      markAcknowledged(Self.identity(of: backendStatus))
+    }
+  }
+
+  // MARK: - Escalation
+
+  /// Pico level by seconds since the alarm started, while unacknowledged.
+  static let escalation: [(level: Int, after: TimeInterval)] = [(1, 0), (2, 60), (3, 120)]
+  @ObservationIgnored private(set) var alarmStartedAt: Date?
+  @ObservationIgnored private(set) var nudgedLevels: Set<Int> = []
+  @ObservationIgnored private var escalationTask: Task<Void, Never>?
+
+  /// Sends any escalation nudge that is due. Driven every second while an alarm is
+  /// active; callable directly with a fake time in tests.
+  func escalationTick(now: Date) {
+    guard active != nil, let start = alarmStartedAt else { return }
+    let elapsed = now.timeIntervalSince(start)
+    for step in Self.escalation where elapsed >= step.after && !nudgedLevels.contains(step.level) {
+      nudgedLevels.insert(step.level)
+      effects.nudge(level: step.level)
     }
   }
 
@@ -120,24 +140,51 @@ final class AlarmMonitor {
   /// How long the alarm keeps the listener on, and an /issue answer stays actionable.
   private static let listenWindow: Duration = .seconds(180)
 
-  private static let acknowledgedKey = "NightShift.acknowledgedAlarmID"
+  /// Older builds saved only the last acknowledged id here.
+  private static let legacyAcknowledgedKey = "NightShift.acknowledgedAlarmID"
+  static let acknowledgedKey = "NightShift.acknowledgedAlarmIDs"
+  /// Enough history for weeks of alarms; oldest ids drop off first.
+  private static let acknowledgedLimit = 500
 
-  /// The last alarm_id the person acknowledged (persists across launches).
-  private var acknowledgedID: String? {
-    get { UserDefaults.standard.string(forKey: Self.acknowledgedKey) }
-    set { UserDefaults.standard.set(newValue, forKey: Self.acknowledgedKey) }
+  @ObservationIgnored private let defaults: UserDefaults
+  /// Off in tests so they never ask for microphone or speech permission.
+  @ObservationIgnored private let listensDuringAlarm: Bool
+
+  /// Every alarm id acknowledged on this phone (survives relaunch).
+  private var acknowledgedIDs: [String] {
+    get {
+      var ids = defaults.stringArray(forKey: Self.acknowledgedKey) ?? []
+      if let legacy = defaults.string(forKey: Self.legacyAcknowledgedKey), !ids.contains(legacy) {
+        ids.append(legacy)
+      }
+      return ids
+    }
+    set { defaults.set(Array(newValue.suffix(Self.acknowledgedLimit)), forKey: Self.acknowledgedKey) }
+  }
+
+  func isAcknowledged(_ id: String) -> Bool {
+    acknowledgedIDs.contains(id)
+  }
+
+  private func markAcknowledged(_ id: String) {
+    guard !isAcknowledged(id) else { return }
+    acknowledgedIDs.append(id)
   }
 
   init(
     api: any NightShiftAPI,
     voice: VoiceCommandListener,
     effects: (any AlarmEffects)? = nil,
-    clock: any AlarmClock = SystemAlarmClock()
+    clock: any AlarmClock = SystemAlarmClock(),
+    defaults: UserDefaults = .standard,
+    listensDuringAlarm: Bool = true
   ) {
     self.api = api
     self.voice = voice
     self.effects = effects ?? LiveAlarmEffects()
     self.clock = clock
+    self.defaults = defaults
+    self.listensDuringAlarm = listensDuringAlarm
   }
 
   // MARK: - Polling
@@ -181,7 +228,7 @@ final class AlarmMonitor {
       return
     }
     let id = Self.identity(of: status)
-    if id == acknowledgedID {
+    if isAcknowledged(id) {
       stop()
     } else if active.map(Self.identity(of:)) != id {
       begin(status)
@@ -206,9 +253,11 @@ final class AlarmMonitor {
     Task { await effects.speak("Monitoring restored") }
   }
 
-  /// alarm_id, or the headline if the backend didn't send one.
-  private static func identity(of status: AlarmStatus) -> String {
-    status.alarmId ?? status.headline ?? "alarm"
+  /// alarm_id ("<dataset>:<facility>:<event>"); older backends without it fall back to
+  /// facility id + level.
+  static func identity(of status: AlarmStatus) -> String {
+    if let id = status.alarmId { return id }
+    return "\(status.facilityIds.first ?? "unknown"):\(status.level ?? "unknown")"
   }
 
   // MARK: - Acknowledge
@@ -217,7 +266,7 @@ final class AlarmMonitor {
   /// flash, siren and speech on phone and glasses.
   func acknowledge() {
     if let active {
-      acknowledgedID = Self.identity(of: active)
+      markAcknowledged(Self.identity(of: active))
       onAcknowledged?(active)
     }
     stop()
@@ -229,20 +278,28 @@ final class AlarmMonitor {
     stop()
     active = status
     effects.startAlarm(monitor: self)
-    // Pico buzzer: level 2 at the start, then level 3 with each repeat below.
-    effects.nudge(level: 2)
-    Task { await startListening() }
+    // Escalation: Pico level 1 now, 2 at 60 s, 3 at 120 s while unacknowledged.
+    alarmStartedAt = clock.now
+    nudgedLevels = []
+    escalationTick(now: clock.now)
+    escalationTask = Task { @MainActor [weak self] in
+      while !Task.isCancelled {
+        guard let self else { return }
+        await self.clock.sleep(for: .seconds(1))
+        guard !Task.isCancelled else { return }
+        self.escalationTick(now: self.clock.now)
+      }
+    }
+    if listensDuringAlarm {
+      Task { await startListening() }
+    }
 
     speechTask = Task { @MainActor [weak self] in
-      // Let the siren sound first, then speak, then repeat until acknowledged.
+      // Let the siren sound first, then speak (siren ducked), and repeat until
+      // acknowledged.
       try? await Task.sleep(for: .seconds(2))
-      var isRepeat = false
       while !Task.isCancelled {
         guard let self, let text = self.active?.spokenText else { return }
-        if isRepeat {
-          self.effects.nudge(level: 3)
-        }
-        isRepeat = true
         self.effects.setSirenDucked(true)
         await self.effects.speak(text)
         self.effects.setSirenDucked(false)
@@ -258,6 +315,9 @@ final class AlarmMonitor {
     clearIssue()
     speechTask?.cancel()
     speechTask = nil
+    escalationTask?.cancel()
+    escalationTask = nil
+    alarmStartedAt = nil
     effects.stopAlarm()
     stopListeningIfStarted()
   }
@@ -370,11 +430,19 @@ final class LiveAlarmEffects: AlarmEffects {
   /// Longest a single phrase may take before speech is treated as failed.
   private static let speechTimeout: Duration = .seconds(45)
 
+  /// True from startAlarm until silenceSiren/stopAlarm; an interruption (phone call,
+  /// Siri) stops the siren's engine, and this says whether to restart it after.
+  private var sirenWanted = false
+  private var interruptionTask: Task<Void, Never>?
+  private var routeTask: Task<Void, Never>?
+
   func startAlarm(monitor: AlarmMonitor) {
     Speaker.shared.stopAll()
     Speaker.isAlarmMode = true
+    sirenWanted = true
     siren.start()
     showWindow(monitor: monitor)
+    watchInterruptions()
     hapticTask?.cancel()
     hapticTask = Task { @MainActor in
       let haptics = UINotificationFeedbackGenerator()
@@ -386,6 +454,11 @@ final class LiveAlarmEffects: AlarmEffects {
   }
 
   func stopAlarm() {
+    sirenWanted = false
+    interruptionTask?.cancel()
+    interruptionTask = nil
+    routeTask?.cancel()
+    routeTask = nil
     hapticTask?.cancel()
     hapticTask = nil
     siren.stop()
@@ -396,7 +469,38 @@ final class LiveAlarmEffects: AlarmEffects {
   }
 
   func silenceSiren() {
+    sirenWanted = false
     siren.stop()
+  }
+
+  /// After a phone call or Siri ends, reactivate the session and restart the siren
+  /// (if it should still be sounding). Route changes (glasses connect/disconnect)
+  /// restart it too, so it follows the new output.
+  private func watchInterruptions() {
+    interruptionTask?.cancel()
+    routeTask?.cancel()
+    interruptionTask = Task { @MainActor [weak self] in
+      for await note in NotificationCenter.default.notifications(named: AVAudioSession.interruptionNotification) {
+        let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+        if raw == AVAudioSession.InterruptionType.ended.rawValue {
+          self?.restartSirenIfWanted()
+        }
+      }
+    }
+    routeTask = Task { @MainActor [weak self] in
+      for await _ in NotificationCenter.default.notifications(named: AVAudioSession.routeChangeNotification) {
+        self?.restartSirenIfWanted()
+      }
+    }
+  }
+
+  /// Restarts only a siren that should be sounding but whose engine was stopped, so
+  /// ordinary route changes (the listener picking the glasses mic) don't make it stutter.
+  private func restartSirenIfWanted() {
+    guard sirenWanted, !siren.isPlaying else { return }
+    Speaker.activateAudioSession()
+    siren.stop()
+    siren.start()
   }
 
   func setSirenDucked(_ ducked: Bool) {

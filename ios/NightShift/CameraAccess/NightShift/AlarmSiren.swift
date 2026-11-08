@@ -13,7 +13,9 @@ final class AlarmSiren {
   private var engine: AVAudioEngine?
   private var player: AVAudioPlayerNode?
 
-  var isPlaying: Bool { player?.isPlaying == true }
+  /// Needs the engine running too: an interruption stops the engine but can leave the
+  /// player node marked as playing.
+  var isPlaying: Bool { engine?.isRunning == true && player?.isPlaying == true }
 
   func start() {
     guard engine == nil else { return }
