@@ -167,7 +167,8 @@ html[data-alarm="red"] body::after {
    sign flickers 3 times then stays red, landmark signs breathe slowly. Reduced motion: all off. */
 .city-flow { animation: city-flow 1.6s linear infinite; }
 @keyframes city-flow { to { stroke-dashoffset: -24; } }
-.city-danger { animation: city-danger 2.4s ease-in-out infinite; }
+/* static red tint: animating dozens of blocks in a 1,700-shape SVG made the alarm moment stutter */
+.city-danger { stroke-opacity: 0.7; }
 @keyframes city-danger { 50% { stroke-opacity: 0.25; } }
 .city-sign { animation: city-sign 4s ease-in-out infinite; }
 @keyframes city-sign { 50% { opacity: 0.4; } }

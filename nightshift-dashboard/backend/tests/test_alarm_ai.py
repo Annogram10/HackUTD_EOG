@@ -89,7 +89,7 @@ def test_ai_never_changes_level(monkeypatch):
     assert after["alarm"] == before["alarm"] and after["alarm_id"] == before["alarm_id"]
 
 
-ALARM_ID = r"^full_week:S\d+_FACILITY_[A-Z]:pf-\d+$"
+ALARM_ID = r"^full_week:S\d+_FACILITY_[A-Z]:pf-\d+(:r\d+)?$"
 
 
 def test_alarm_id_well_formed_and_stable_across_polls():
@@ -102,7 +102,7 @@ def test_alarm_id_well_formed_and_stable_across_polls():
     out = risk.assess(ds, ALARM_AT, use_ai=False)
     reds = [a for a in main.run_triage(ds, ALARM_AT)["alerts"] if risk._alert_level(a, ALARM_AT, ds)[0] == "red"]
     w = risk.worst_red(reds)
-    assert aid == f"full_week:{w['facility_id']}:pf-{w['onset_unix']}" == out["alarm_id"]
+    assert aid.split(":r")[0] == f"full_week:{w['facility_id']}:pf-{w['onset_unix']}" == out["alarm_id"]
 
 
 def test_alarm_id_survives_event_renumbering():
@@ -115,3 +115,26 @@ def test_alarm_id_survives_event_renumbering():
                 seen.setdefault(risk.alarm_id("full_week", [a]), set()).add(a["event_id"])
     assert len(seen) == 1, seen
     assert len(next(iter(seen.values()))) == 2  # the EV id really did change underneath
+
+
+def test_rewinding_the_replay_makes_a_new_alarm_for_the_phone():
+    """The phone never re-sounds an alarm id it acknowledged. Replaying after a rewind must give a new id;
+    playing forward through the same situation must not."""
+    try:
+        c.post("/clock", json={"dataset": "full_week", "now": ALARM_AT})
+        first = c.get("/alarm").json()["alarm_id"]
+        c.post("/clock", json={"dataset": "full_week", "now": ALARM_AT + 300})  # play forward one reading
+        assert c.get("/alarm").json()["alarm_id"] == first
+        c.post("/clock", json={"dataset": "full_week", "now": ALARM_AT - 3600})  # rewind
+        c.post("/clock", json={"dataset": "full_week", "now": ALARM_AT})  # and play into the alarm again
+        again = c.get("/alarm").json()["alarm_id"]
+        assert again != first and again.split(":r")[0] == first.split(":r")[0]
+        # the dashboard sees the same id as the phone
+        assert c.get("/risk", params={"dataset": "full_week", "ai": "false"}).json()["alarm_id"] == again
+    finally:
+        c.post("/clock", json={"dataset": "full_week", "now": None})
+
+
+def test_live_alarm_id_has_no_run_suffix():
+    out = main.risk_mod.assess(main.ds_for("full_week"), ALARM_AT, use_ai=False)
+    assert ":r" not in out["alarm_id"]

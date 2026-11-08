@@ -152,6 +152,10 @@ init_db()
 
 CLOCK: dict = {}  # dataset -> unix time everyone sees (replay)
 ACTIVE: dict = {"dataset": None}  # the dataset the dashboard has open; the phone uses it when it does not name one
+# Replay run per dataset: goes up each time the slider is moved back (or replay starts). The alarm_id carries it, so
+# replaying the same alarm after a rewind is a new alarm for the phone and glasses (they never re-sound an id they
+# already acknowledged). During one forward play the id stays the same: one alarm per situation.
+RUNS: dict = {}
 
 
 def _load_clock() -> None:
@@ -164,12 +168,14 @@ def _load_clock() -> None:
     CLOCK.clear()
     CLOCK.update({k: int(v) for k, v in (saved.get("times") or {}).items()})
     ACTIVE["dataset"] = saved.get("dataset")
+    RUNS.clear()
+    RUNS.update({k: int(v) for k, v in (saved.get("runs") or {}).items()})
 
 
 def _save_clock() -> None:
     with db() as c:
         c.execute("INSERT OR REPLACE INTO settings VALUES ('clock', ?)",
-                  (json.dumps({"dataset": ACTIVE["dataset"], "times": CLOCK}),))
+                  (json.dumps({"dataset": ACTIVE["dataset"], "times": CLOCK, "runs": RUNS}),))
 
 
 _load_clock()
@@ -1125,7 +1131,8 @@ def get_risk(dataset: Optional[str] = None, now: Optional[int] = None, ai: bool 
     """Is this moment dangerous? The rules decide; a Nemotron note is added when it is ready (it never changes the level)."""
     ds = ds_for(dataset)
     eff, mode = effective_now(ds, now)
-    out = risk_mod.assess(ds, eff, use_ai=ai)
+    out = dict(risk_mod.assess(ds, eff, use_ai=ai))
+    replay_alarm_id(ds, out, mode)
     record_alarm(ds, out, live=(mode == "live"))
     return {**out, "mode": mode}
 
@@ -1155,9 +1162,19 @@ def set_clock(body: ClockIn):
     if body.now is None:
         CLOCK.pop(ds.name, None)
     else:
-        CLOCK[ds.name] = int(min(max(body.now, ds.t_first), ds.t_last))
+        new = int(min(max(body.now, ds.t_first), ds.t_last))
+        old = CLOCK.get(ds.name)
+        if old is None or new < old:  # replay starts, or the slider went back: a new run
+            RUNS[ds.name] = RUNS.get(ds.name, 0) + 1
+        CLOCK[ds.name] = new
     _save_clock()
     return clock_state(ds)
+
+
+def replay_alarm_id(ds, out: dict, mode: str) -> None:
+    """In replay, tag the alarm_id with the run number (see RUNS). Live ids stay '<dataset>:<facility>:pf-<onset>'."""
+    if mode == "replay" and out.get("alarm_id"):
+        out["alarm_id"] = f"{out['alarm_id']}:r{RUNS.get(ds.name, 0)}"
 
 
 @app.get("/alarm")
@@ -1168,7 +1185,8 @@ def get_alarm(dataset: Optional[str] = None, now: Optional[int] = None):
     """
     ds = ds_for(dataset)
     eff, mode = effective_now(ds, now)
-    out = risk_mod.assess(ds, eff, use_ai=False, peek_ai=True)  # rules only: no model call on this path, ever
+    out = dict(risk_mod.assess(ds, eff, use_ai=False, peek_ai=True))  # rules only: no model call on this path, ever
+    replay_alarm_id(ds, out, mode)
     record_alarm(ds, out, live=(mode == "live"), cleanup=False)
     return {k: out[k] for k in ("dataset", "as_of", "level", "severity", "alarm", "alarm_id", "headline", "spoken_text", "note")} | {
         "mode": mode, "live": mode == "live", "reasons": [r["text"] for r in out["reasons"]],
