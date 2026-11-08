@@ -25,6 +25,9 @@ iPhone / dashboard:
 Run:  uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 App format (phone/glasses): GET /alerts, GET /facility/{id}, GET /handoff, POST /report, POST /vision/check (raw JPEG).
+
+Clock: GET/POST /clock. Every endpoint resolves its moment with effective_now(): ?now= wins, then the shared replay
+clock, else live. Responses for the phone carry mode ("live"|"replay") and as_of.
 """
 
 import base64
@@ -110,16 +113,63 @@ def init_db() -> None:
         c.executescript(SCHEMA)
         if "priority" not in [r["name"] for r in c.execute("PRAGMA table_info(flags)")]:  # older database
             c.execute("ALTER TABLE flags ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
+        c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
 
 
 init_db()
 
 
+# ---------- one clock for the dashboard, the phone and the glasses ----------
+# The dashboard's time-travel bar sets the dataset and the moment everyone sees. It is saved in SQLite, so a
+# backend restart keeps it. No replay time set = live (the latest reading).
+
+CLOCK: dict = {}  # dataset -> unix time everyone sees (replay)
+ACTIVE: dict = {"dataset": None}  # the dataset the dashboard has open; the phone uses it when it does not name one
+
+
+def _load_clock() -> None:
+    try:
+        with db() as c:
+            row = c.execute("SELECT value FROM settings WHERE key = 'clock'").fetchone()
+        saved = json.loads(row["value"]) if row else {}
+    except Exception:
+        saved = {}
+    CLOCK.clear()
+    CLOCK.update({k: int(v) for k, v in (saved.get("times") or {}).items()})
+    ACTIVE["dataset"] = saved.get("dataset")
+
+
+def _save_clock() -> None:
+    with db() as c:
+        c.execute("INSERT OR REPLACE INTO settings VALUES ('clock', ?)",
+                  (json.dumps({"dataset": ACTIVE["dataset"], "times": CLOCK}),))
+
+
+_load_clock()
+
+
 def default_dataset() -> str:
+    """The dataset the dashboard has open (from the clock), else the first folder (test/ first)."""
     names = [d["name"] for d in D.list_datasets()]
     if not names:
         raise HTTPException(500, f"no datasets found in {D.DATA_DIR}")
-    return names[0]
+    return ACTIVE["dataset"] if ACTIVE["dataset"] in names else names[0]
+
+
+def effective_now(ds, now_param: Optional[int]) -> tuple:
+    """
+    (now, mode) for a request. An explicit ?now= wins, then the shared replay clock; otherwise live (now None =
+    the latest reading). mode is "replay" whenever a time was chosen, "live" otherwise.
+    """
+    if now_param is not None:
+        return int(now_param), "replay"
+    if ds.name in CLOCK:
+        return CLOCK[ds.name], "replay"
+    return None, "live"
+
+
+def as_of_iso(ds, now: Optional[int]) -> str:
+    return D.iso(ds.t_last if now is None else min(int(now), ds.t_last))
 
 
 def ds_for(name: Optional[str]) -> D.Dataset:
@@ -375,6 +425,7 @@ def _facility_card(ds, tri, fid: str) -> dict:
 @app.get("/overview")
 def overview(dataset: Optional[str] = None, now: Optional[int] = None):
     ds = ds_for(dataset)
+    now, mode = effective_now(ds, now)
     tri = run_triage(ds, now)
     systems = []
     for sid, s in ds.systems.items():
@@ -392,7 +443,8 @@ def overview(dataset: Optional[str] = None, now: Optional[int] = None):
         for f in s["facilities"]:
             f["risk_level"] = rules["facilities"].get(f["id"], "green")
     return {
-        "dataset": ds.name, "now_ts": tri["now_ts"], "first_ts": tri["t_first_ts"], "systems": systems,
+        "dataset": ds.name, "now_ts": tri["now_ts"], "first_ts": tri["t_first_ts"], "mode": mode, "as_of": tri["now_ts"],
+        "systems": systems,
         "alerts": alerts,
         "counts": {
             "failures": sum(a["category"] == "pump_failure" for a in alerts),
@@ -423,7 +475,7 @@ def app_alert(a: dict) -> dict:
 def alerts(dataset: Optional[str] = None, now: Optional[int] = None):
     """App format. Ranked by severity (high first), then fewest hours to shutdown."""
     ds = ds_for(dataset)
-    out = [app_alert(a) for a in run_triage(ds, now if now is not None else CLOCK.get(ds.name))["alerts"]]
+    out = [app_alert(a) for a in run_triage(ds, effective_now(ds, now)[0])["alerts"]]
     return sorted(out, key=lambda x: (-x["severity"], x["hours_to_shutdown"] if x["hours_to_shutdown"] is not None else 1e9))
 
 
@@ -453,6 +505,7 @@ def _series(ds, asset: str, metric: str, now: int, hours: float, points: int = 4
 @app.get("/series")
 def series(asset: str, metric: str, dataset: Optional[str] = None, hours: float = 72, now: Optional[int] = None):
     ds = ds_for(dataset)
+    now = effective_now(ds, now)[0]
     n = ds.t_last if now is None else min(now, ds.t_last)
     return {"asset": asset, "metric": metric, "points": _series(ds, asset, metric, n, hours)}
 
@@ -462,6 +515,7 @@ def facility(fac_id: str, dataset: Optional[str] = None, hours: float = 72, now:
     ds = ds_for(dataset)
     if fac_id not in ds.facilities:
         raise HTTPException(404, f"facility {fac_id} not found")
+    now, mode = effective_now(ds, now)
     tri = run_triage(ds, now)
     f = ds.facilities[fac_id]
     card = _facility_card(ds, tri, fac_id)
@@ -489,7 +543,7 @@ def facility(fac_id: str, dataset: Optional[str] = None, hours: float = 72, now:
             """SELECT f.*, s.date AS shift_date FROM flags f JOIN shifts s ON s.id = f.shift_id
                WHERE s.dataset = ? AND f.equipment_id = ? ORDER BY f.timestamp DESC""", (ds.name, fac_id)).fetchall()
     return {
-        **card, "dataset": ds.name, "now": tri["now"], "readings": readings, "series": sers,
+        **card, "dataset": ds.name, "now": tri["now"], "mode": mode, "as_of": tri["now_ts"], "readings": readings, "series": sers,
         "alerts": [a for a in tri["alerts"] if a["facility_id"] == fac_id],
         "events": [e for e in tri["events"] if e["facility_id"] == fac_id][::-1],
         "pump_max_flow_bpd": f.pump["max_flow_bpd"],
@@ -506,11 +560,13 @@ def facility(fac_id: str, dataset: Optional[str] = None, hours: float = 72, now:
 def facility_app(fac_id: str, dataset: Optional[str] = None, now: Optional[int] = None):
     """App format: {id, name, status, readings, spoken_text}."""
     ds = ds_for(dataset)
-    now = now if now is not None else CLOCK.get(ds.name)
-    full = facility(fac_id, dataset, 1, now)
+    eff, mode = effective_now(ds, now)
+    fac_id = resolve_facility(ds, fac_id)
+    full = facility(fac_id, ds.name, 1, eff)
     readings = [{"label": r["label"], "value": r["value"], "unit": r["unit"], "limit": r.get("limit")} for r in full["readings"]]
     return {"id": fac_id, "name": full["name"], "system": full["system_id"], "status": full["status"], "readings": readings,
-            "alerts": [app_alert(a) for a in full["alerts"]], "spoken_text": voice_facility(fac_id, dataset)["text"]}
+            "alerts": [app_alert(a) for a in full["alerts"]], "mode": mode, "as_of": full["as_of"],
+            "spoken_text": voice_facility(fac_id, ds.name, eff)["text"]}  # same moment as the readings on screen
 
 
 @app.get("/agent/trace")
@@ -528,8 +584,10 @@ def agent_run(dataset: Optional[str] = None, now: Optional[int] = None):
 @app.get("/handoff")
 def handoff(dataset: Optional[str] = None, now: Optional[int] = None):
     ds = ds_for(dataset)
+    now, mode = effective_now(ds, now)
     tri = run_triage(ds, now)
     h = build_handoff(tri)
+    h["mode"] = mode
     run = agent_mod.get_run(ds.name, now)
     if run.status == "done" and run.handoff_text:
         h["agent_text"] = run.handoff_text
@@ -545,17 +603,18 @@ def events_export(dataset: Optional[str] = None, now: Optional[int] = None):
 
 
 @app.get("/voice/alerts")
-def voice_alerts(dataset: Optional[str] = None):
-    tri = run_triage(ds_for(dataset))
+def voice_alerts(dataset: Optional[str] = None, now: Optional[int] = None):
+    ds = ds_for(dataset)
+    tri = run_triage(ds, effective_now(ds, now)[0])
     return [{"event_id": a["event_id"], "facility_id": a["facility_id"], "text": spoken(a)} for a in tri["alerts"]]
 
 
 @app.get("/voice/facility/{fac_id}")
-def voice_facility(fac_id: str, dataset: Optional[str] = None):
+def voice_facility(fac_id: str, dataset: Optional[str] = None, now: Optional[int] = None):
     ds = ds_for(dataset)
     if fac_id not in ds.facilities:
         raise HTTPException(404, "facility not found")
-    tri = run_triage(ds)
+    tri = run_triage(ds, effective_now(ds, now)[0])
     c = _facility_card(ds, tri, fac_id)
     mine = [spoken(a) for a in tri["alerts"] if a["facility_id"] == fac_id]
     base = f"{speech.facility(c['name'])}: tank {speech.num_words(c['level_pct'])} percent full, pump {'running' if c['pump_status'] == 1 else 'fault' if c['pump_status'] == 2 else 'stopped'}."
@@ -695,6 +754,7 @@ def post_report(body: ReportIn):
 def get_report(shift_id: Optional[str] = None, dataset: Optional[str] = None, now: Optional[int] = None):
     with db() as c:
         shift = get_shift(c, shift_id, dataset)
+    now, mode = effective_now(ds_for(shift["dataset"]), now)
     shift = {**shift, "flags": seen_by(shift["flags"], now)}  # in a replay, flags from later than "now" do not exist yet
     flags = shift["flags"]
     by_type: dict = {}
@@ -717,6 +777,7 @@ def get_report(shift_id: Optional[str] = None, dataset: Optional[str] = None, no
         "stops_planned": len(shift["route_planned"]),
         "stops_walked": len([s for s in shift["route_planned"] if s in walked]),
         "missed_stops": [s for s in shift["route_planned"] if s not in walked],
+        "mode": mode,
     }
 
 
@@ -745,13 +806,15 @@ def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None
       +15 stop planned but missed
       +60 / +40 / +20 sensor problem still in progress (pump failure / leak / worn pump), latest shift only
     """
+    ds0 = ds_for(dataset)
+    dataset = ds0.name
+    eff, _ = effective_now(ds0, now)
     with db() as c:
         try:
             if shift_id is None:  # follow the replay time like the dashboard does: the shift in progress at that moment
-                eff = now if now is not None else CLOCK.get(dataset or default_dataset())
                 if eff is not None:
                     rows = c.execute("SELECT id, started_at FROM shifts WHERE dataset = ? AND id NOT LIKE 'alarms-%'",
-                                     (dataset or default_dataset(),)).fetchall()
+                                     (dataset,)).fetchall()
                     before = sorted((r for r in rows if _unix_of(r["started_at"]) <= eff), key=lambda r: _unix_of(r["started_at"]), reverse=True)
                     shift_id = before[0]["id"] if before else None
             shift = get_shift(c, shift_id, dataset)
@@ -759,16 +822,18 @@ def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None
             if shift_id:
                 raise
             # No phone upload for this dataset yet (e.g. a brand new test/ folder): rank from the sensors alone.
-            shift = {"id": None, "dataset": dataset or default_dataset(), "date": None, "flags": [],
+            shift = {"id": None, "dataset": dataset, "date": None, "flags": [],
                      "route_planned": [], "route_walked": []}
         newest = c.execute("SELECT id FROM shifts WHERE dataset = ? ORDER BY started_at DESC LIMIT 1", (shift["dataset"],)).fetchone()
     ds = ds_for(shift["dataset"])
-    now_flags = [f for f in seen_by(shift["flags"], now if now is not None else CLOCK.get(shift["dataset"])) if f["status"] != "dismissed"]
+    if ds.name != ds0.name:  # a shift id from another dataset: use that dataset's clock
+        eff, _ = effective_now(ds, now)
+    now_flags = [f for f in seen_by(shift["flags"], eff) if f["status"] != "dismissed"]
     walked = set(shift["route_walked"])
     missed = {s for s in shift["route_planned"] if s not in walked}
     sensor = {}
     if newest is None or newest["id"] == shift["id"]:
-        for a in run_triage(ds, now if now is not None else CLOCK.get(ds.name))["alerts"]:
+        for a in run_triage(ds, eff)["alerts"]:
             sensor.setdefault(a["facility_id"], []).append(a)
 
     out = []
@@ -822,7 +887,7 @@ def map_points(dataset: Optional[str] = None, shift_id: Optional[str] = None, no
     Same ranking as Next shift: confirmed/unreviewed flags + problems in progress. Facilities with nothing wrong follow.
     """
     ds = ds_for(dataset)
-    now = now if now is not None else CLOCK.get(ds.name)
+    now, mode = effective_now(ds, now)
     tri = run_triage(ds, now)
     prio = get_next_shift(shift_id, ds.name, now)
     by_id = {p["equipment_id"]: p for p in prio}
@@ -845,7 +910,7 @@ def map_points(dataset: Optional[str] = None, shift_id: Optional[str] = None, no
         })
     systems = [{"id": sid, "center": s["center"], "truck_yard": s["truck_yard"], "disposal_site": s["disposal_site"]}
                for sid, s in ds.systems.items()]
-    return {"dataset": ds.name, "as_of": tri["now_ts"], "systems": systems, "facilities": points}
+    return {"dataset": ds.name, "as_of": tri["now_ts"], "mode": mode, "systems": systems, "facilities": points}
 
 
 # ---------- danger check, time travel, alarm ----------
@@ -861,8 +926,6 @@ def _warm_timelines() -> None:
 import threading  # noqa: E402
 
 threading.Thread(target=_warm_timelines, daemon=True).start()
-
-CLOCK: dict = {}  # dataset -> unix time the phone and glasses should see (set by the dashboard's time-travel slider)
 
 
 @app.get("/timeline")
@@ -929,7 +992,7 @@ def get_risk_note(dataset: Optional[str] = None, now: Optional[int] = None):
     status: "ready" (note filled in), "pending" (ask again in a few seconds), "unavailable", or "none" (nothing to judge).
     """
     ds = ds_for(dataset)
-    out = risk_mod.assess(ds, now, use_ai=True)
+    out = risk_mod.assess(ds, effective_now(ds, now)[0], use_ai=True)
     ai = out["ai"]
     status = "none" if ai is None else "pending" if ai.get("pending") else "ready" if ai.get("available") else "unavailable"
     return {"dataset": ds.name, "as_of": out["as_of"], "level": out["level"], "status": status, "note": out["note"], "ai": ai}
@@ -939,9 +1002,10 @@ def get_risk_note(dataset: Optional[str] = None, now: Optional[int] = None):
 def get_risk(dataset: Optional[str] = None, now: Optional[int] = None, ai: bool = True):
     """Is this moment dangerous? The rules decide; a Nemotron note is added when it is ready (it never changes the level)."""
     ds = ds_for(dataset)
-    out = risk_mod.assess(ds, now, use_ai=ai)
-    record_alarm(ds, out, live=(now is None and ds.name not in CLOCK))
-    return out
+    eff, mode = effective_now(ds, now)
+    out = risk_mod.assess(ds, eff, use_ai=ai)
+    record_alarm(ds, out, live=(mode == "live"))
+    return {**out, "mode": mode}
 
 
 class ClockIn(BaseModel):
@@ -949,15 +1013,29 @@ class ClockIn(BaseModel):
     now: Optional[int] = None  # null = back to the latest data
 
 
+def clock_state(ds) -> dict:
+    now, mode = effective_now(ds, None)
+    return {"dataset": ds.name, "now": now, "now_ts": as_of_iso(ds, now), "mode": mode, "live": mode == "live"}
+
+
+@app.get("/clock")
+def get_clock(dataset: Optional[str] = None):
+    """Which dataset and moment everyone sees. The phone reads the dataset from here (no local default)."""
+    return clock_state(ds_for(dataset))
+
+
 @app.post("/clock")
 def set_clock(body: ClockIn):
-    """Time travel for everyone: the phone and glasses see this moment until it is cleared."""
+    """Time travel for everyone: the phone and glasses see this dataset and moment until it is cleared (now: null)."""
     ds = ds_for(body.dataset)
+    if body.dataset:
+        ACTIVE["dataset"] = ds.name
     if body.now is None:
         CLOCK.pop(ds.name, None)
     else:
         CLOCK[ds.name] = int(min(max(body.now, ds.t_first), ds.t_last))
-    return {"dataset": ds.name, "now": CLOCK.get(ds.name), "live": ds.name not in CLOCK}
+    _save_clock()
+    return clock_state(ds)
 
 
 @app.get("/alarm")
@@ -967,18 +1045,19 @@ def get_alarm(dataset: Optional[str] = None, now: Optional[int] = None):
     `spoken_text`. `alarm_id` changes when a new red situation starts, so the phone can alarm once per situation.
     """
     ds = ds_for(dataset)
-    eff = now if now is not None else CLOCK.get(ds.name)
+    eff, mode = effective_now(ds, now)
     out = risk_mod.assess(ds, eff, use_ai=False, peek_ai=True)  # rules only: no model call on this path, ever
-    record_alarm(ds, out, live=(eff is None), cleanup=False)
+    record_alarm(ds, out, live=(mode == "live"), cleanup=False)
     return {k: out[k] for k in ("dataset", "as_of", "level", "alarm", "alarm_id", "headline", "spoken_text", "note")} | {
-        "live": ds.name not in CLOCK, "reasons": [r["text"] for r in out["reasons"]],
+        "mode": mode, "live": mode == "live", "reasons": [r["text"] for r in out["reasons"]],
         "facility_ids": [f["facility_id"] for f in out["flaggable"] if f["level"] == "red"]}
 
 
 @app.get("/evidence")
 def get_evidence(dataset: Optional[str] = None, now: Optional[int] = None, ai: bool = True):
     """Charts of what dropped (or rose) at each facility with a problem, picked and captioned by Nemotron."""
-    return evidence_mod.build(ds_for(dataset), now, use_ai=ai)
+    ds = ds_for(dataset)
+    return evidence_mod.build(ds, effective_now(ds, now)[0], use_ai=ai)
 
 
 @app.get("/issue")
@@ -988,9 +1067,9 @@ def get_issue(dataset: Optional[str] = None, facility: Optional[str] = None, now
     returns the flag the operator can then dismiss or prioritize (POST /flag/{id}/dismiss or /prioritize).
     """
     ds = ds_for(dataset)
-    eff = now if now is not None else CLOCK.get(ds.name)
+    eff, mode = effective_now(ds, now)
     out = risk_mod.assess(ds, eff, use_ai=False)
-    record_alarm(ds, out, live=(eff is None), cleanup=False)  # make sure there is a flag to act on
+    record_alarm(ds, out, live=(mode == "live"), cleanup=False)  # make sure there is a flag to act on
     tri = run_triage(ds, eff)
     fid = resolve_facility(ds, facility) if facility else None
     if fid not in ds.facilities:
