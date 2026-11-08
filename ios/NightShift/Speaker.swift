@@ -9,6 +9,9 @@ import os
 final class Speaker: NSObject {
     static let shared = Speaker()
 
+    /// Default speech rate (AVSpeechUtterance.rate).
+    nonisolated static let defaultRate: Float = 0.46
+
     /// System sound played before alerts (iOS "Tri-tone").
     static let chimeSoundID: SystemSoundID = 1007
 
@@ -92,7 +95,9 @@ final class Speaker: NSObject {
         recentlySpoken = Array((recentlySpoken + [text]).suffix(3))
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice
-        utterance.rate = 0.46
+        // Voice speed from Settings (defaults to the original rate).
+        let saved = UserDefaults.standard.object(forKey: "NightShift.voiceRate") as? Double
+        utterance.rate = saved.map { Float($0) } ?? Self.defaultRate
         utterance.pitchMultiplier = 1.0
         utterance.volume = 1.0
         utterance.preUtteranceDelay = 0.15

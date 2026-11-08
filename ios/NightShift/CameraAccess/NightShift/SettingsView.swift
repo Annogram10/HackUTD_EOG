@@ -35,52 +35,53 @@ struct SettingsView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HeaderStrip(alarmActive: alarmActive) {
-        Text("Settings")
-          .font(.ns(.title2, .bold))
-          .foregroundStyle(NS.textPrimary)
-          .frame(minHeight: 40)
-          .accessibilityAddTraits(.isHeader)
-      }
-      List {
-        Section {
-          Label("Keep this app open. A locked or backgrounded phone can miss alarms.", systemImage: "iphone.gen3")
-            .font(.ns(.subheadline, .medium))
-            .foregroundStyle(NS.amberText)
-        }
-        .listRowBackground(NS.surface)
-        glassesSection.listRowBackground(NS.surface)
-        voiceSection.listRowBackground(NS.surface)
-        mapSection.listRowBackground(NS.surface)
-        statusSection.listRowBackground(NS.surface)
-        supervisorSection
-        picoSection
+      ScrollView {
+        VStack(alignment: .leading, spacing: 18) {
+          Text("SETTINGS")
+            .font(.nsDisplay(.title2))
+            .foregroundStyle(NS.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+          SysCard(label: "SYS//SETTINGS", key: true) {
+            Label("Keep this app open. A locked or backgrounded phone can miss alarms.", systemImage: "iphone.gen3")
+              .font(.ns(.body, .semibold))
+              .foregroundStyle(NS.amberText)
+          }
+          aboutCard
+          operatorCard
+          glassesSection
+          voiceSection
+          voiceOutputCard
+          mapSection
+          statusSection
+          supervisorSection
+          picoSection
 
-        Section {
           Button {
             Haptics.tap()
             showDeveloper.toggle()
           } label: {
             HStack {
               Label("Developer", systemImage: "hammer")
+                .font(.ns(.headline, .bold))
+                .textCase(.uppercase)
               Spacer()
               Image(systemName: showDeveloper ? "chevron.up" : "chevron.down")
             }
+            .foregroundStyle(NS.accent)
+            .frame(minHeight: NS.tap)
             .contentShape(Rectangle())
           }
+          .buttonStyle(.plain)
           .accessibilityLabel(showDeveloper ? "Hide developer tools" : "Show developer tools")
-        }
-        .listRowBackground(NS.surface)
 
-        if showDeveloper {
-          developerSection
-          facilitySection.listRowBackground(NS.surface)
-          flagsSection
+          if showDeveloper {
+            developerSection
+            facilitySection
+            flagsSection
+          }
         }
+        .padding(16)
       }
-      .listStyle(.grouped)
-      .scrollContentBackground(.hidden)
-      .environment(\.defaultMinListRowHeight, NS.tap)
     }
     .background(NS.background)
     .tint(NS.accent)
@@ -109,10 +110,84 @@ struct SettingsView: View {
     .onChange(of: controller.backendURL) { addressText = controller.backendURL.absoluteString }
   }
 
+  // MARK: - Redesign cards
+
+  @AppStorage(Config.Keys.operatorName) private var operatorName = ""
+  @AppStorage(Config.Keys.voiceRate) private var voiceRate = Double(Speaker.defaultRate)
+
+  private var appVersion: String {
+    let info = Bundle.main.infoDictionary
+    let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+    let build = info?["CFBundleVersion"] as? String ?? "?"
+    return "\(version) (\(build))"
+  }
+
+  /// Backend URL (read-only), mock mode status, app version.
+  private var aboutCard: some View {
+    SysCard(label: "SYS//CONSOLE") {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("BACKEND").font(.nsMono(.caption, .semibold)).foregroundStyle(NS.textSecondary)
+        Text(Config.baseURL.absoluteString)
+          .font(.nsMono(.subheadline))
+          .foregroundStyle(NS.textPrimary)
+          .textSelection(.enabled)
+      }
+      .accessibilityElement(children: .combine)
+      HStack {
+        Text("MOCK MODE").font(.nsMono(.caption, .semibold)).foregroundStyle(NS.textSecondary)
+        Spacer()
+        Badge(text: Config.useMock ? "On" : "Off", tone: Config.useMock ? .amber : .grey)
+      }
+      .accessibilityElement(children: .combine)
+      HStack {
+        Text("APP VERSION").font(.nsMono(.caption, .semibold)).foregroundStyle(NS.textSecondary)
+        Spacer()
+        Text(appVersion).font(.nsMono(.subheadline)).foregroundStyle(NS.textPrimary)
+      }
+      .accessibilityElement(children: .combine)
+    }
+  }
+
+  private var operatorCard: some View {
+    SysCard(label: "SYS//OPERATOR") {
+      TextField("Operator name", text: $operatorName)
+        .font(.ns(.body, .semibold))
+        .foregroundStyle(NS.textPrimary)
+        .textContentType(.name)
+        .padding(.horizontal, 12)
+        .frame(minHeight: NS.tap)
+        .flatCard(fill: NS.raised, stroke: NS.border)
+        .accessibilityLabel("Operator name")
+      Text("Shown on the SHIFT tab. Stays on this phone.")
+        .font(.ns(.subheadline))
+        .foregroundStyle(NS.textMuted)
+    }
+  }
+
+  /// Voice speed and a test line.
+  private var voiceOutputCard: some View {
+    SysCard(label: "SYS//VOICE OUT") {
+      HStack {
+        Text("VOICE SPEED").font(.nsMono(.caption, .semibold)).foregroundStyle(NS.textSecondary)
+        Spacer()
+        Text("\(Int((voiceRate / Double(Speaker.defaultRate)) * 100))%")
+          .font(.nsMono(.subheadline, .semibold))
+          .foregroundStyle(NS.textPrimary)
+      }
+      Slider(value: $voiceRate, in: 0.35...0.6, step: 0.01)
+        .tint(NS.primary)
+        .accessibilityLabel("Voice speed")
+        .accessibilityValue("\(Int((voiceRate / Double(Speaker.defaultRate)) * 100)) percent")
+      FlatButton(title: "Test voice", icon: "speaker.wave.2.fill", kind: .secondary) {
+        Speaker.shared.say("NightShift voice check. Possible leak at S five Facility C.")
+      }
+    }
+  }
+
   // MARK: - New sections
 
   private var supervisorSection: some View {
-    Section("Supervisor") {
+    SysCard(label: "SYS//SUPERVISOR") {
       TextField("Supervisor phone number", text: $supervisorPhone)
         .keyboardType(.phonePad)
         .textContentType(.telephoneNumber)
@@ -122,11 +197,10 @@ struct SettingsView: View {
         .font(.ns(.subheadline))
         .foregroundStyle(NS.textSecondary)
     }
-    .listRowBackground(NS.surface)
   }
 
   private var picoSection: some View {
-    Section("Pico buzzer") {
+    SysCard(label: "SYS//PICO BUZZER") {
       TextField("Pico address, e.g. 192.168.1.50", text: $picoText)
         .keyboardType(.numbersAndPunctuation)
         .textInputAutocapitalization(.never)
@@ -175,7 +249,6 @@ struct SettingsView: View {
         .font(.ns(.subheadline))
         .foregroundStyle(NS.textSecondary)
     }
-    .listRowBackground(NS.surface)
   }
 
   private func savePico() {
@@ -224,7 +297,7 @@ struct SettingsView: View {
   }
 
   private var developerSection: some View {
-    Section("Developer") {
+    SysCard(label: "SYS//DEVELOPER") {
       if wearablesVM.registrationState == .registered {
         Button("Open glasses camera", systemImage: "video") { showCamera = true }
       } else {
@@ -240,11 +313,10 @@ struct SettingsView: View {
       }
       .disabled(controller.isRefreshing)
     }
-    .listRowBackground(NS.surface)
   }
 
   private var flagsSection: some View {
-    Section("All flags this shift") {
+    SysCard(label: "SYS//ALL FLAGS THIS SHIFT") {
       if let shift = controller.store.current, !shift.flags.isEmpty || !shift.notes.isEmpty {
         ForEach(shift.flags.reversed()) { flag in
           FlagRow(
@@ -269,12 +341,11 @@ struct SettingsView: View {
           .foregroundStyle(NS.textSecondary)
       }
     }
-    .listRowBackground(NS.surface)
   }
 
   /// Glasses link (Meta AI registration) and the camera screen.
   private var glassesSection: some View {
-    Section("Glasses") {
+    SysCard(label: "SYS//GLASSES") {
       Label(
         cameraVM.hasActiveDevice ? "Glasses connected" : "Glasses not connected",
         systemImage: cameraVM.hasActiveDevice ? "eyeglasses" : "eyeglasses.slash"
@@ -301,7 +372,7 @@ struct SettingsView: View {
 
   /// Which system the home map shows, and a manual map refresh.
   private var mapSection: some View {
-    Section("Map") {
+    SysCard(label: "SYS//MAP") {
       // Saved on the phone; the Map tab starts on this system.
       Picker("Default system", selection: Binding(
         get: { defaultSystem.isEmpty ? nil : defaultSystem },
@@ -333,7 +404,7 @@ struct SettingsView: View {
   }
 
   private var statusSection: some View {
-    Section("Backend and uploads") {
+    SysCard(label: "SYS//BACKEND AND UPLOADS") {
       Label(
         "\(network.isConnected ? "Online" : "Offline") · \(controller.uploads.pendingCount) pending upload\(controller.uploads.pendingCount == 1 ? "" : "s")",
         systemImage: network.isConnected ? "wifi" : "wifi.slash"
@@ -385,7 +456,7 @@ struct SettingsView: View {
   }
 
   private var facilitySection: some View {
-    Section("Facility and camera checks") {
+    SysCard(label: "SYS//FACILITY AND CAMERA CHECKS") {
       Picker("I'm at", selection: Binding(
         get: { controller.currentFacilityID },
         set: { controller.setCurrentFacility($0) }
@@ -458,7 +529,7 @@ struct SettingsView: View {
   }
 
   private var voiceSection: some View {
-    Section("Voice") {
+    SysCard(label: "SYS//VOICE") {
       // Reflects the recognizer's real state; works with or without a shift.
       Toggle("Voice commands", isOn: Binding(
         get: { controller.voice.isRunning },
