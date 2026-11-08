@@ -144,19 +144,35 @@ final class NightShiftController {
     }
   }
 
-  /// Speaks the flag counts, archives the shift, and queues its report for upload.
+  /// Archives the shift, queues its report for upload, turns voice off, and speaks a
+  /// short summary built from this shift's flags only (no handoff text, plans or costs).
   func endShift() async {
     isAwaitingResume = false
     guard let ended = store.endShift() else { return }
     uploads.enqueue(store.makeReport(for: ended))
     voice.stop()
-    let flags = ended.flags
-    let confirmed = flags.count(where: { $0.status == .confirmed })
+    await Speaker.shared.speak(Self.endOfShiftSummary(for: ended.flags))
+  }
+
+  /// Notes the app adds itself; not read out in the summary.
+  private static let markerNotes: Set<String> = ["no photo", "(test)"]
+
+  /// "Shift ended. 2 confirmed, 1 dismissed, 0 unreviewed." plus up to three operator
+  /// notes from confirmed flags, or "No flags this shift."
+  static func endOfShiftSummary(for flags: [Flag]) -> String {
+    guard !flags.isEmpty else { return "No flags this shift." }
+    let confirmed = flags.filter { $0.status == .confirmed }
     let dismissed = flags.count(where: { $0.status == .dismissed })
-    let waiting = flags.count(where: { $0.status == .pending })
-    await Speaker.shared.speak(
-      "Shift ended. \(flags.count) flags: \(confirmed) confirmed, \(dismissed) dismissed, \(waiting) waiting. Report queued for upload."
-    )
+    let unreviewed = flags.count(where: { $0.status == .pending })
+    var summary = "Shift ended. \(confirmed.count) confirmed, \(dismissed) dismissed, \(unreviewed) unreviewed."
+    let notes = confirmed
+      .flatMap { flag in flag.notes.map { (type: flag.type, text: $0.text) } }
+      .filter { !markerNotes.contains($0.text) }
+      .prefix(3)
+    for note in notes {
+      summary += " \(note.type.prefix(1).uppercased() + note.type.dropFirst()) note: \(note.text)."
+    }
+    return summary
   }
 
   // MARK: - Refresh
