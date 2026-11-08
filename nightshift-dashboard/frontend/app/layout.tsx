@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Nav />
           </Suspense>
           <TopBar />
-          <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8 pb-56">{children}</main>
+          <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8 pb-16">{children}</main>
           <Suspense fallback={null}>
             <OwlBuddy />
           </Suspense>

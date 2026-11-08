@@ -63,8 +63,12 @@ export default function TopBar() {
             </p>
           )}
           {dataset && shifts.length === 0 && !offline && <p className="text-sm text-zinc-500">No phone report for this data yet</p>}
-          {loading && <span className="ml-auto text-sm text-zinc-500">Loading…</span>}
+          {loading && <span className="text-sm text-zinc-500">Loading…</span>}
+          {/* the owl's home: a reserved spot, so the owl never sits on top of page content */}
+          <div id="owl-home" aria-hidden className="ml-auto h-16 w-40 shrink-0" />
         </div>
+        {/* the owl's bubble at home appears here, in the layout (it pushes content down, never covers it) */}
+        <div id="owl-home-bubble" className="mx-auto flex max-w-7xl justify-end px-6 empty:hidden" />
       </div>
     </div>
   );

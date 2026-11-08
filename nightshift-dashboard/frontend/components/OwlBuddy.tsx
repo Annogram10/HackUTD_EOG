@@ -23,7 +23,7 @@ import Owl from "./Owl";
 const HIDE_KEY = "nightshift.owl.hidden";
 const HOP_MS = 1900; // the shades hop before it flies
 const FLY_MS = 900;
-const HOME = 128; // owl size at home
+const HOME = 60; // owl size at home (in the top bar)
 const PERCH = 72; // owl size on the danger card
 const WORKFLOW = ["load_dataset", "detect_events", "forecast_shutdown", "optimize_plan", "get_fleet_status", "get_weather", "save_alerts", "export_events"];
 
@@ -52,7 +52,7 @@ export default function OwlBuddy() {
   const [flyFor, setFlyFor] = useState<string | null>(null); // the alarm the owl has flown out for
   const [nod, setNod] = useState(false);
   const [look, setLook] = useState(0);
-  const [geo, setGeo] = useState<{ w: number; h: number; card: DOMRect | null; slot: HTMLElement | null }>({ w: 0, h: 0, card: null, slot: null });
+  const [geo, setGeo] = useState<{ home: DOMRect | null; card: DOMRect | null; slot: HTMLElement | null; homeSlot: HTMLElement | null; bar: number }>({ home: null, card: null, slot: null, homeSlot: null, bar: 0 });
   const [flying, setFlying] = useState(false);
   const [agent, setAgent] = useState<{ dataset: string; run: AgentRun } | null>(null);
   const [agentSeen, setAgentSeen] = useState<string | null>(null); // run already acknowledged ("done" bubble dismissed)
@@ -89,11 +89,14 @@ export default function OwlBuddy() {
       raf = requestAnimationFrame(() => {
         const card = document.getElementById("danger-card");
         const slot = document.getElementById("owl-slot");
+        const homeSlot = document.getElementById("owl-home-bubble");
+        const near = (a: DOMRect | null, b: DOMRect | null) => (a && b ? Math.abs(a.top - b.top) < 0.5 && Math.abs(a.left - b.left) < 0.5 && Math.abs(a.right - b.right) < 0.5 : a === b);
         setGeo((g) => {
           const r = card?.getBoundingClientRect() ?? null;
-          const same = g.w === window.innerWidth && g.h === window.innerHeight && g.slot === slot &&
-            (r && g.card ? Math.abs(r.top - g.card.top) < 0.5 && Math.abs(r.right - g.card.right) < 0.5 : r === g.card);
-          return same ? g : { w: window.innerWidth, h: window.innerHeight, card: r, slot };
+          const homeEl = document.getElementById("owl-home");
+          const h = homeEl?.getBoundingClientRect() ?? null;
+          const bar = Math.round(homeEl?.closest(".sticky")?.getBoundingClientRect().bottom ?? 0);
+          return near(r, g.card) && near(h, g.home) && g.slot === slot && g.homeSlot === homeSlot && g.bar === bar ? g : { home: h, card: r, slot, homeSlot, bar };
         });
         // gaze: the countdown when perched, else the most urgent map facility, else the system tab with a problem
         const me = box.current?.getBoundingClientRect();
@@ -119,7 +122,8 @@ export default function OwlBuddy() {
     return () => { window.removeEventListener("scroll", measure); window.removeEventListener("resize", measure); clearInterval(id); cancelAnimationFrame(raf); };
   }, [path]);
 
-  const perched = dangerActive && flyFor === alarmId && !!geo.card && path === "/";
+  // perch only while the card's top edge is in view below the sticky bar; otherwise wait at home
+  const perched = dangerActive && flyFor === alarmId && !!geo.card && path === "/" && geo.card.top > geo.bar + 24;
 
   // ---------- speak the summary ----------
   const alerts = useMemo(() => (overview && overview.dataset === dataset ? overview.alerts : []), [overview, dataset]);
@@ -211,20 +215,20 @@ export default function OwlBuddy() {
   };
 
   if (hidden)
-    return (
-      <button type="button" onClick={() => hiddenStore.set(false)}
-        className="no-print fixed bottom-4 right-4 z-40 border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-300 hover:text-zinc-100">
+    return geo.home ? (
+      <button type="button" onClick={() => hiddenStore.set(false)} style={{ left: geo.home.right - 96, top: geo.home.top + 16 }}
+        className="no-print fixed z-40 border border-zinc-700 bg-zinc-900 px-3 py-1 text-sm text-zinc-300 hover:text-zinc-100">
         Show owl
       </button>
-    );
+    ) : null;
 
   // ---------- position: home corner, or perched on the danger card ----------
   const size = perched ? PERCH : HOME;
   const pos = perched && geo.card
     ? { left: geo.card.right - size - 14, top: geo.card.top - size * 0.62 }
-    : { left: geo.w - HOME - 40, top: geo.h - HOME - 64 };
+    : geo.home ? { left: geo.home.left, top: geo.home.top + 2 } : { left: 0, top: 0 };
   const bubbleEl = bubble && (
-    <div role="status" className={`owl-bubble ${perched ? "" : "owl-bubble-home"}`} data-kind={bubble.kind}>
+    <div role="status" className={`owl-bubble ${bubble.kind === "danger" && geo.slot ? "" : "owl-bubble-home"}`} data-kind={bubble.kind}>
       <span aria-hidden className="owl-quote owl-quote-open">&ldquo;</span>
       <p className="pr-6 text-base text-zinc-100">{bubble.text}</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -240,8 +244,8 @@ export default function OwlBuddy() {
   return (
     <>
       <div ref={box} data-owl-perched={perched ? "" : undefined}
-        className={`no-print fixed z-40 ${flying ? "owl-flying" : ""} ${geo.w === 0 ? "invisible" : ""}`}
-        style={{ left: pos.left, top: pos.top, width: size }}>
+        className={`no-print fixed z-40 flex items-center gap-2 ${flying ? "owl-flying" : ""} ${geo.home ? "" : "invisible"}`}
+        style={{ left: pos.left, top: pos.top }}>
         {/* the agent's clipboard, or a thumbs up when it is done */}
         {run?.status === "running" && (
           <svg aria-hidden viewBox="0 0 24 30" className="owl-prop">
@@ -258,11 +262,11 @@ export default function OwlBuddy() {
         )}
         <button type="button" onClick={toggleSpeak}
           aria-label={speaking ? "Stop reading the summary" : "Read the summary aloud (shortcut: O)"}
-          className={`block w-full ${speaking ? "owl-speaking" : ""}`}>
+          className={`relative block shrink-0 ${speaking ? "owl-speaking" : ""}`} style={{ width: size }}>
           <Owl level={level} size={size} look={look} speaking={speaking} nod={nod} />
         </button>
         {!perched && (
-          <div className="mt-1 flex items-center justify-between gap-2 border border-zinc-700 bg-zinc-900 px-2 py-0.5">
+          <div className="flex flex-col items-start leading-tight">
             <span className={`text-sm font-semibold ${level === "red" ? "text-red-300" : level === "amber" ? "text-amber-300" : "text-zinc-200"}`}>
               {{ green: "All normal", amber: "Check soon", red: "Danger" }[level]}
             </span>
@@ -270,9 +274,12 @@ export default function OwlBuddy() {
               className="text-sm text-zinc-400 underline-offset-2 hover:text-zinc-100 hover:underline">Hide owl</button>
           </div>
         )}
-        {!perched && bubbleEl}
       </div>
-      {perched && bubbleEl && geo.slot && createPortal(bubbleEl, geo.slot)}
+      {/* the danger bubble always lives inside the danger card when it is on screen; other bubbles at home */}
+      {(() => {
+        const target = bubble?.kind === "danger" && geo.slot ? geo.slot : geo.homeSlot;
+        return bubbleEl && target ? createPortal(bubbleEl, target) : null;
+      })()}
     </>
   );
 }

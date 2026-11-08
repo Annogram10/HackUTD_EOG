@@ -258,12 +258,12 @@ html[data-acked] .danger-pulse { animation: none !important; }
   content: ""; position: absolute; right: 34px; top: -14px; width: 18px; height: 14px; background: #19e6ff;
   clip-path: polygon(0 100%, 100% 0, 60% 100%);
 }
-.owl-bubble-home { position: absolute; right: 0; bottom: 100%; margin: 0 0 14px; width: min(340px, calc(100vw - 32px)); }
-.owl-bubble-home::after { top: auto; bottom: -14px; right: 40px; clip-path: polygon(0 0, 100% 0, 70% 100%); }
+.owl-bubble-home { margin: 14px 0 12px; width: min(420px, 100%); }
+.owl-bubble-home::after { right: 110px; }
 .owl-quote { position: absolute; font-family: var(--font-mono); font-size: 18px; line-height: 1; color: #19e6ff; }
 .owl-quote-open { left: 6px; top: 6px; }
 .owl-quote-close { right: 8px; bottom: 2px; }
-.owl-prop { position: absolute; left: -10px; bottom: 34px; width: 28px; height: 32px; z-index: 1; }
+.owl-prop { position: absolute; left: -14px; bottom: 0; width: 20px; height: 24px; z-index: 1; }
 .owl-flying { transition: left 0.9s cubic-bezier(0.4, 0, 0.2, 1), top 0.9s cubic-bezier(0.4, 0, 0.2, 1), width 0.9s; }
 .owl-speaking svg { animation: owl-speak 0.9s ease-in-out infinite; }
 @keyframes owl-speak { 50% { filter: drop-shadow(0 0 6px rgba(142, 149, 181, 0.9)); } }
