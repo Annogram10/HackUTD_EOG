@@ -3,6 +3,7 @@ The triage pipeline: detect problems -> countdown -> cheapest plan (shared truck
 Everything numeric comes from code in this module and its neighbours. Nothing here uses AI.
 """
 
+from datetime import datetime
 from typing import Optional
 
 from . import optimize as opt
@@ -11,6 +12,57 @@ from .detect import detect_events
 from .forecast import current_state, forecast_shutdown
 
 _cache: dict = {}
+
+# ---------- one severity scale for everything (map, next shift, risk colour, alarm, handoff, dashboard) ----------
+# high   -> red, the alarm fires:  the tank already tripped, or a pump failure whose tank reaches shutdown before
+#                                  the repair ends
+# medium -> amber, check soon:     a pump failure the tank can wait out, or a sizeable pipeline leak
+# low    -> green, keep an eye on: a worn pump, or a small leak (or one that cannot be measured while the pump is off)
+FORECAST_QUANTILE = "p50"  # which hours-to-shutdown forecast decides "before the repair ends"
+LEAK_MISSING_MEDIUM = 0.06  # a leak is "check soon" when 6% or more of the water the pump sends never arrives
+SEVERITY_RANK = {"high": 3, "medium": 2, "low": 1}
+SEVERITY_COLOR = {"high": "red", "medium": "amber", "low": "green"}
+
+
+def _unix(ts: str) -> int:
+    return int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
+
+
+def drop(ds: Dataset, a: dict, now: int):
+    """(share of water missing, share of rated flow lost) over the last 3 h of running readings, or None."""
+    fac = ds.facilities[a["facility_id"]]
+    pump, pipe = fac.pump["id"], fac.pipeline["id"]
+    lo = now - 3 * 3600
+    run = ds.wide[(pump, "status")].loc[lo:now] == 1
+    fl = ds.wide[(pump, "flow_bpd")].loc[lo:now][run]
+    rv = ds.wide[(pipe, "receive_flow_bpd")].loc[lo:now][run]
+    if len(fl) < 4:
+        return None
+    flow = float(fl.mean())
+    return 1 - float(rv.mean()) / max(flow, 1.0), 1 - flow / fac.pump["max_flow_bpd"]
+
+
+def repair_hours_left(a: dict, now: int):
+    return (_unix(a["repair_end_ts"]) - now) / 3600 if a.get("repair_end_ts") else None
+
+
+def severity(a: dict, now: int, ds: Dataset) -> str:
+    """"high" | "medium" | "low" for one alert. The single rule every screen and the alarm derive from."""
+    if a["category"] == "pump_failure":
+        if a.get("tripped"):
+            return "high"
+        h, left = a.get("hours_to_limit"), repair_hours_left(a, now)
+        if h and left is not None and h[FORECAST_QUANTILE] < left:
+            return "high"
+        return "medium"
+    if a["category"] == "pipeline_leak":
+        d = drop(ds, a, now)
+        return "medium" if d is not None and d[0] >= LEAK_MISSING_MEDIUM else "low"
+    return "low"  # pump_degradation
+
+
+def worst_severity(alerts: list):
+    return max((a["severity"] for a in alerts), key=SEVERITY_RANK.get, default=None)
 
 
 def fac_name(fac_id: str) -> str:
@@ -167,6 +219,7 @@ def run_triage(ds: Dataset, now: Optional[int] = None) -> dict:
     alerts.sort(key=order)
     for i, a in enumerate(alerts, 1):
         a["order"] = i
+        a["severity"] = severity(a, now, ds)
 
     out = {
         "dataset": ds.name, "now": now, "now_ts": iso(now), "t_first": ds.t_first, "t_first_ts": iso(ds.t_first),

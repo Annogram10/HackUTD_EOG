@@ -54,7 +54,8 @@ from app import risk as risk_mod
 from app import speech, vision
 from app.forecast import current_state
 from app.handoff import build_handoff, spoken
-from app.triage import events_json, fac_name, facility_status, money, run_triage
+from app.triage import (SEVERITY_COLOR, SEVERITY_RANK, events_json, fac_name, facility_status, money, run_triage,
+                        worst_severity)
 
 BASE = Path(__file__).parent
 DB_PATH = Path(os.environ.get("NIGHTSHIFT_DB", BASE / "nightshift.db"))
@@ -62,7 +63,7 @@ PHOTOS = BASE / "photos"
 PHOTOS.mkdir(exist_ok=True)
 
 TYPE_WEIGHT = {"smoke": 30, "alarm": 25, "leak": 20, "damage": 10}
-SENSOR_SCORE = {"pump_failure": 60, "pipeline_leak": 40, "pump_degradation": 20}
+SENSOR_SCORE = {"high": 60, "medium": 40, "low": 20}  # by triage.severity(), the one scale everything uses
 
 app = FastAPI(title="NightShift API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -436,12 +437,13 @@ def overview(dataset: Optional[str] = None, now: Optional[int] = None):
             "shared": tri["shared_trucks"].get(sid),
         })
     rules = risk_mod.rules_risk(tri)
-    alerts = [{**a, "level": risk_mod._alert_level(a, tri["now"], ds)[0],
+    alerts = [{**a, "level": SEVERITY_COLOR[a["severity"]],
                **({"truck_cost": risk_mod.truck_cost(ds, a)} if a["category"] == "pump_failure" and a.get("plan") else {})}
               for a in tri["alerts"]]
     for s in systems:
         for f in s["facilities"]:
             f["risk_level"] = rules["facilities"].get(f["id"], "green")
+            f["severity"] = worst_severity([a for a in tri["alerts"] if a["facility_id"] == f["id"]]) or "none"
     return {
         "dataset": ds.name, "now_ts": tri["now_ts"], "first_ts": tri["t_first_ts"], "mode": mode, "as_of": tri["now_ts"],
         "systems": systems,
@@ -454,17 +456,17 @@ def overview(dataset: Optional[str] = None, now: Optional[int] = None):
     }
 
 
-SEVERITY = {"pump_failure": (3, "high"), "pipeline_leak": (2, "medium"), "pump_degradation": (1, "low")}
 TYPE_NAME = {"pump_failure": "pump_failure", "pipeline_leak": "pipeline_leak", "pump_degradation": "pump_wear"}
 
 
 def app_alert(a: dict) -> dict:
-    sev, word = SEVERITY[a["category"]]
+    word = a["severity"]
+    sev = SEVERITY_RANK[word]  # 3 / 2 / 1, kept for older app builds
     h = a.get("hours_to_limit")
     plan = a.get("plan")
     return {
         "id": a["event_id"], "facility": a["facility_id"], "facility_name": a["facility_name"], "system": a["system_id"],
-        "type": TYPE_NAME[a["category"]], "severity": sev, "severity_word": word,
+        "type": TYPE_NAME[a["category"]], "severity": sev, "severity_word": word, "level": SEVERITY_COLOR[word],
         "hours_to_shutdown": h["p50"] if h else None, "tripped": bool(a.get("tripped")),
         "best_plan": a.get("action_text") or ("Send an inspector to check" if a["category"] != "pump_failure" else None),
         "cost": plan["cost"] if plan else None, "spoken_text": spoken(a),
@@ -781,8 +783,13 @@ def get_report(shift_id: Optional[str] = None, dataset: Optional[str] = None, no
     }
 
 
-def level_for(score: int) -> str:
-    return "high" if score >= 60 else "medium" if score >= 30 else "low"
+def flag_level(flags: list, missed: bool):
+    """What the operator's own flags say: prioritized -> high, confirmed -> medium, unreviewed or missed stop -> low."""
+    if any(f.get("priority") for f in flags):
+        return "high"
+    if any(f["status"] == "confirmed" for f in flags):
+        return "medium"
+    return "low" if flags or missed else None
 
 
 def _flag_counts(flags: list) -> str:
@@ -804,7 +811,9 @@ def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None
       +30/+20/+10 worst flag type (smoke/leak/damage)
       Only the selected (previous) shift counts, earlier nights are not used.
       +15 stop planned but missed
-      +60 / +40 / +20 sensor problem still in progress (pump failure / leak / worn pump), latest shift only
+      +60 / +40 / +20 sensor problem still in progress, by severity (high / medium / low), latest shift only
+      +100 marked as priority by the operator
+    level = the worse of the sensor severity and the flags (prioritized high, confirmed medium, else low).
     """
     ds0 = ds_for(dataset)
     dataset = ds0.name
@@ -840,8 +849,8 @@ def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None
     for eid in {f["equipment_id"] for f in now_flags} | missed | set(sensor):
         now = [f for f in now_flags if f["equipment_id"] == eid]
         score, reasons = 0, []
-        for a in sorted(sensor.get(eid, []), key=lambda a: -SENSOR_SCORE[a["category"]]):
-            score += SENSOR_SCORE[a["category"]]
+        for a in sorted(sensor.get(eid, []), key=lambda a: -SENSOR_SCORE[a["severity"]]):
+            score += SENSOR_SCORE[a["severity"]]
             what = {"pump_failure": "Pump failure in progress", "pipeline_leak": "Possible pipeline leak",
                     "pump_degradation": "Pump wearing out"}[a["category"]]
             extra = ""
@@ -875,8 +884,11 @@ def get_next_shift(shift_id: Optional[str] = None, dataset: Optional[str] = None
         if score == 0:
             continue
         latest = max(everything, key=lambda f: f["timestamp"]) if everything else None
+        sev = worst_severity(sensor.get(eid, []))
+        # level = the worse of the sensor severity and what the operator's flags say (never the score alone)
+        level = max([x for x in (sev, flag_level(now, eid in missed)) if x], key=SEVERITY_RANK.get)
         out.append({"equipment_id": eid, "location": fac_name(eid) if eid in ds.facilities else eid, "score": score,
-                    "level": level_for(score), "reasons": reasons, "latest_flag": latest})
+                    "level": level, "severity": sev or "none", "reasons": reasons, "latest_flag": latest})
     return sorted(out, key=lambda p: p["score"], reverse=True)
 
 
@@ -904,6 +916,7 @@ def map_points(dataset: Optional[str] = None, shift_id: Optional[str] = None, no
         points.append({
             "rank": i, "id": fid, "name": fac_name(fid), "system": f.system_id, "lat": f.lat, "lon": f.lon,
             "importance": p["score"] if p else 0, "level": p["level"] if p else "none",
+            "severity": worst_severity(alerts) or "none",
             "status": facility_status(tri, fid), "hours_to_shutdown": h,
             "reasons": p["reasons"] if p else [],
             "spoken_text": " ".join(spoken(a) for a in alerts) if alerts else "",
@@ -1048,7 +1061,7 @@ def get_alarm(dataset: Optional[str] = None, now: Optional[int] = None):
     eff, mode = effective_now(ds, now)
     out = risk_mod.assess(ds, eff, use_ai=False, peek_ai=True)  # rules only: no model call on this path, ever
     record_alarm(ds, out, live=(mode == "live"), cleanup=False)
-    return {k: out[k] for k in ("dataset", "as_of", "level", "alarm", "alarm_id", "headline", "spoken_text", "note")} | {
+    return {k: out[k] for k in ("dataset", "as_of", "level", "severity", "alarm", "alarm_id", "headline", "spoken_text", "note")} | {
         "mode": mode, "live": mode == "live", "reasons": [r["text"] for r in out["reasons"]],
         "facility_ids": [f["facility_id"] for f in out["flaggable"] if f["level"] == "red"]}
 

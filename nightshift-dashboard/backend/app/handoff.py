@@ -34,23 +34,21 @@ def _plan_words(plan: dict, words: bool = True) -> str:
 
 def build_handoff(triage: dict) -> dict:
     alerts = triage["alerts"]
-    fails = [a for a in alerts if a["category"] == "pump_failure"]
-    leaks = [a for a in alerts if a["category"] == "pipeline_leak"]
-    worn = [a for a in alerts if a["category"] == "pump_degradation"]
+    by_sev = {s: [a for a in alerts if a.get("severity") == s] for s in ("high", "medium", "low")}
     lines = []
     if not alerts:
         lines.append("No problems in progress. Normal round.")
-    if fails:
-        lines.append(f"{len(fails)} pump failure{'s' if len(fails) > 1 else ''} in progress, soonest shutdown first:")
-        for a in fails:
+    heads = {"high": "Danger (high)", "medium": "Check soon (medium)", "low": "Keep an eye on (low)"}
+    for sev in ("high", "medium", "low"):
+        group = by_sev[sev]
+        if not group:
+            continue
+        lines.append(f"{heads[sev]}: {len(group)} problem{'s' if len(group) > 1 else ''}")
+        for a in group:
             lines.append("• " + spoken(a, words=False))
     for sid, s in triage["shared_trucks"].items():
         if len(s["events"]) > 1:
             lines.append(f"{sid}: {len(s['events'])} failures share {s['fleet']} trucks. Planned together, {s['trucks_used']} used, total {money(s['total_cost'])}.")
-    if leaks:
-        lines.append("Possible leaks (send an inspector): " + ", ".join(fac_name(a["facility_id"]) for a in leaks) + ".")
-    if worn:
-        lines.append("Pumps wearing out (send an inspector): " + ", ".join(fac_name(a["facility_id"]) for a in worn) + ".")
     lines.append("These are flags for a person to check. Nothing here operates equipment.")
     spoken_text = " ".join(spoken(a) for a in alerts) if alerts else "No problems in progress. Normal round."
     return {

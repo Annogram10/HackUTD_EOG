@@ -20,16 +20,12 @@ from datetime import datetime, timezone
 
 from . import dataset as D
 from .handoff import _plan_words, spoken
-from .triage import fac_name, run_triage
+from .triage import (FORECAST_QUANTILE, SEVERITY_COLOR, drop, fac_name, repair_hours_left, run_triage, severity,
+                     worst_severity)
 
 URL = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1") + "/chat/completions"
 MODEL = os.environ.get("NEMOTRON_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
 ORDER = {"green": 0, "amber": 1, "red": 2}
-# A leak or a worn pump is only "check soon" when it is a real, sizeable drop. A small decrease is fine.
-# These are measured from the last 3 hours of running readings, so a slow problem is quiet at first and
-# turns amber once it is big enough to matter.
-LEAK_MISSING_AMBER = 0.06   # 6% or more of the water the pump sends never arrives
-WEAR_LOSS_AMBER = 0.12      # the pump moves 12% or more below its rated flow
 BY_RANK = {v: k for k, v in ORDER.items()}
 
 
@@ -37,43 +33,32 @@ def _unix(ts: str) -> int:
     return int(datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp())
 
 
-def _drop(ds, a: dict, now: int):
-    """(share of water missing, share of rated flow lost) over the last 3 h of running readings, or None."""
-    fac = ds.facilities[a["facility_id"]]
-    pump, pipe = fac.pump["id"], fac.pipeline["id"]
-    lo = now - 3 * 3600
-    run = ds.wide[(pump, "status")].loc[lo:now] == 1
-    fl = ds.wide[(pump, "flow_bpd")].loc[lo:now][run]
-    rv = ds.wide[(pipe, "receive_flow_bpd")].loc[lo:now][run]
-    if len(fl) < 4:
-        return None
-    flow = float(fl.mean())
-    return 1 - float(rv.mean()) / max(flow, 1.0), 1 - flow / fac.pump["max_flow_bpd"]
+_drop = drop  # older name, used by main.py
 
 
 def _alert_level(a: dict, now: int, ds) -> tuple:
-    """(level, short reason) for one alert."""
+    """(colour, short reason) for one alert. The colour comes from triage.severity(), nowhere else."""
     who = fac_name(a["facility_id"])
+    sev = a.get("severity") or severity(a, now, ds)
+    level = SEVERITY_COLOR[sev]
     if a["category"] != "pump_failure":
         leak = a["category"] == "pipeline_leak"
         what = "possible pipeline leak" if leak else "pump wearing out"
-        d = _drop(ds, a, now)
+        d = drop(ds, a, now)
         if d is None:  # the pump is stopped, so the drop cannot be measured right now
-            return "green", f"{who}: {what}, cannot be re-checked while the pump is stopped"
-        missing, lost = d
-        size = max(missing, 0) if leak else max(lost, 0)
-        big = size >= (LEAK_MISSING_AMBER if leak else WEAR_LOSS_AMBER)
+            return level, f"{who}: {what}, cannot be re-checked while the pump is stopped"
+        size = max(d[0], 0) if leak else max(d[1], 0)
         detail = f"{size * 100:.0f}% of the water is missing" if leak else f"{size * 100:.0f}% below rated flow"
-        if big:
-            return "amber", f"{who}: {what}, {detail}, needs an inspector"
-        return "green", f"{who}: {what}, minor so far ({detail}), keep an eye on it"
+        if sev == "medium":
+            return level, f"{who}: {what}, {detail}, an inspector should check it"
+        return level, f"{who}: {what}, {detail}, keep an eye on it"
     if a.get("tripped"):
-        return "red", f"{who}: pump failed and the tank has already reached shutdown"
-    h = a.get("hours_to_limit")
-    left = (_unix(a["repair_end_ts"]) - now) / 3600 if a.get("repair_end_ts") else None
-    if h and left is not None and h["p50"] < left:
-        return "red", f"{who}: pump failed, tank reaches shutdown in {h['p50']:.1f} h but the repair needs {left:.1f} more"
-    return "amber", f"{who}: pump failed, but the tank can wait out the repair"
+        return level, f"{who}: pump failed and the tank has already reached shutdown"
+    h, left = a.get("hours_to_limit"), repair_hours_left(a, now)
+    if sev == "high":
+        q = h[FORECAST_QUANTILE]
+        return level, f"{who}: pump failed, tank may reach shutdown in {q:.1f} h but the repair needs {left:.1f} more"
+    return level, f"{who}: pump failed, but the tank can wait out the repair"
 
 
 def rules_risk(tri: dict) -> dict:
@@ -223,7 +208,7 @@ def ai_check(tri: dict, rules: dict) -> dict:
 def worst_red(red_alerts: list):
     """The most urgent red event: a tank that already tripped, else the soonest early-warning shutdown."""
     def urgency(a):
-        h = (a.get("hours_to_limit") or {}).get("p10")
+        h = (a.get("hours_to_limit") or {}).get(FORECAST_QUANTILE)
         return (0 if a.get("tripped") else 1, h if h is not None else 1e9, a["facility_id"])
     return min(red_alerts, key=urgency) if red_alerts else None
 
@@ -284,7 +269,7 @@ def assess(ds, now=None, use_ai: bool = True, peek_ai: bool = False) -> dict:
         speak = "Check soon. " + " ".join(spoken(a) for a in active[:2])
     return {
         "dataset": ds.name, "as_of": tri["now_ts"], "now": tri["now"], "level": level, "rules_level": rules["level"],
-        "alarm": level == "red",
+        "severity": worst_severity(tri["alerts"]), "alarm": level == "red",
         "alarm_id": alarm_id(ds.name, red_alerts) if level == "red" else None,
         "headline": headline, "reasons": rules["reasons"], "facilities": rules["facilities"],
         "ai": ai, "note": note, "money": money, "flaggable": flaggable, "spoken_text": speak,
