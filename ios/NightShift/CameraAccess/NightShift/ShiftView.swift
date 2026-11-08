@@ -193,6 +193,18 @@ struct ShiftView: View {
       } else if let report = controller.vision.lastManualCheck {
         checkReportBox(report)
       }
+      // Test tool only: turn Config.showTestTools off before a real demo.
+      if Config.showTestTools {
+        Button("Simulate camera flag (leak) · test", systemImage: "testtube.2") {
+          Task { await controller.simulateCameraFlag() }
+        }
+        .foregroundStyle(.purple)
+        if let result = controller.simulateResult {
+          Text(result.text)
+            .font(.caption)
+            .foregroundStyle(result.ok ? .green : .red)
+        }
+      }
     }
   }
 

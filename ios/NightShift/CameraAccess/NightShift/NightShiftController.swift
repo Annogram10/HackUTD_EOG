@@ -309,10 +309,37 @@ final class NightShiftController {
 
   /// Backend flagged a frame: save it with the facility the check was sent for, chime,
   /// and ask for a decision.
-  private func handleCameraFlag(type: String, description: String?, facility: String, photo: Data) async {
+  @discardableResult
+  private func handleCameraFlag(type: String, description: String?, facility: String, photo: Data?, note: String? = nil) async -> Bool {
     // The shift may have ended while the check was in flight.
-    guard store.addFlag(type: type, source: "camera", status: .pending, photo: photo, facility: facility, description: description) != nil else { return }
+    guard let flag = store.addFlag(type: type, source: "camera", status: .pending, photo: photo, facility: facility, description: description) else { return false }
+    if let note {
+      store.addNote(note, to: flag.id)
+    }
     await Speaker.shared.announce("possible \(type), confirm or dismiss")
+    return true
+  }
+
+  /// Result line of the last "Simulate camera flag".
+  private(set) var simulateResult: (text: String, ok: Bool)?
+
+  /// Test tool (Config.showTestTools): creates a pending camera leak flag with the
+  /// current frame, exactly as a real vision flag would, marked "(test)".
+  func simulateCameraFlag() async {
+    guard isOnShift else {
+      simulateResult = ("Start a shift first", false)
+      return
+    }
+    guard let facility = currentFacilityID else {
+      simulateResult = ("Pick a facility first", false)
+      return
+    }
+    var photo: Data?
+    if let frame = vision.latestFrame {
+      photo = await Task.detached(priority: .userInitiated) { FrameGrabber.scaledJPEG(frame) }.value
+    }
+    simulateResult = ("Simulated leak flag created\(photo == nil ? " (no camera frame)" : "")", true)
+    await handleCameraFlag(type: "leak", description: "Simulated flag for testing", facility: facility, photo: photo, note: "(test)")
   }
 
   /// Confirms or dismisses a pending flag (on-screen buttons and voice). Flags that

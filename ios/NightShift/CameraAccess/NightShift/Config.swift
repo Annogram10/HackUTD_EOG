@@ -66,6 +66,10 @@ enum Config {
   /// Request timeout, kept short so offline fallbacks to the cache kick in quickly.
   static let requestTimeout: TimeInterval = 10
 
+  /// Shows the "Simulate camera flag" test button on the Shift screen.
+  /// Turn off before a real demo.
+  static let showTestTools = true
+
   /// How often a streaming frame is sent to /vision/check.
   static let visionCheckInterval: Duration = .seconds(6)
 
