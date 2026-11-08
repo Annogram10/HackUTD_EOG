@@ -4,9 +4,11 @@
 // A loud, looping two-tone siren generated in code (no audio file). Plays on the
 // current output route: the glasses when they are the Bluetooth output, or the phone
 // speaker (Settings > Audio out). Requires Speaker.isAlarmMode to be on first.
-// Generated at the output's own sample rate (no resampling on the 16 kHz Bluetooth
-// headset route), faded in over 0.3 s, and restarted if the audio route changes while
-// it plays (a route change stops an AVAudioEngine).
+// Plays at a constant level at whatever volume the phone is set to: the app never
+// changes the volume, ducks other audio, or fades. It pauses while the alarm text is
+// spoken. Generated at the output's own sample rate (no resampling on the 16 kHz
+// Bluetooth headset route) and restarted if the audio route changes while it plays
+// (a route change stops an AVAudioEngine).
 //
 
 import AVFoundation
@@ -17,9 +19,8 @@ final class AlarmSiren {
   private var player: AVAudioPlayerNode?
   private var buffer: AVAudioPCMBuffer?
   private var configChangeTask: Task<Void, Never>?
-  private var fadeTask: Task<Void, Never>?
-  /// Target volume: 1, or 0.2 while the alarm text is spoken.
-  private var targetVolume: Float = 1
+  /// True while the alarm text is spoken.
+  private var isPaused = false
 
   /// Needs the engine running too: an interruption stops the engine but can leave the
   /// player node marked as playing.
@@ -33,7 +34,7 @@ final class AlarmSiren {
     engine.attach(player)
     self.engine = engine
     self.player = player
-    targetVolume = 1
+    isPaused = false
     guard play(on: engine, player: player) else {
       self.engine = nil
       self.player = nil
@@ -50,18 +51,20 @@ final class AlarmSiren {
     }
   }
 
-  /// Lowers the siren while the alarm text is spoken, so the words are audible.
-  func setDucked(_ ducked: Bool) {
-    targetVolume = ducked ? 0.2 : 1.0
-    fadeTask?.cancel()
-    player?.volume = targetVolume
+  /// Pauses the siren while the alarm text is spoken, then resumes it.
+  func setPaused(_ paused: Bool) {
+    isPaused = paused
+    guard let player, engine?.isRunning == true else { return }
+    if paused {
+      player.pause()
+    } else {
+      player.play()
+    }
   }
 
   func stop() {
     configChangeTask?.cancel()
     configChangeTask = nil
-    fadeTask?.cancel()
-    fadeTask = nil
     player?.stop()
     engine?.stop()
     player = nil
@@ -70,7 +73,7 @@ final class AlarmSiren {
   }
 
   /// Connects the player at the output's current sample rate, starts the engine, loops
-  /// the siren and fades it in. Returns false if the engine couldn't start.
+  /// the siren. Returns false if the engine couldn't start.
   private func play(on engine: AVAudioEngine, player: AVAudioPlayerNode) -> Bool {
     let outputRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
     let sampleRate = outputRate > 0 ? outputRate : 44_100
@@ -81,7 +84,6 @@ final class AlarmSiren {
     guard let buffer else { return false }
     engine.disconnectNodeOutput(player)
     engine.connect(player, to: engine.mainMixerNode, format: format)
-    engine.mainMixerNode.outputVolume = 1.0
     engine.prepare()
     do {
       try engine.start()
@@ -89,24 +91,11 @@ final class AlarmSiren {
       NSLog("[NightShift] Siren failed to start: \(error)")
       return false
     }
-    player.volume = 0
     player.scheduleBuffer(buffer, at: nil, options: .loops)
-    player.play()
-    fadeIn()
-    return true
-  }
-
-  /// Ramps up to the target volume over ~0.3 s, so the first moments (while a
-  /// Bluetooth route settles) aren't a harsh burst.
-  private func fadeIn() {
-    fadeTask?.cancel()
-    fadeTask = Task { @MainActor [weak self] in
-      for step in 1...15 {
-        try? await Task.sleep(for: .milliseconds(20))
-        guard !Task.isCancelled, let self, let player = self.player else { return }
-        player.volume = self.targetVolume * Float(step) / 15
-      }
+    if !isPaused {
+      player.play()
     }
+    return true
   }
 
   /// One second of a rising-then-falling wail (700 to 1500 Hz), lightly soft-clipped

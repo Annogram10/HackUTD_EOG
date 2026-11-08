@@ -59,7 +59,7 @@ final class RecordingEffects: AlarmEffects {
   func startAlarm(monitor: AlarmMonitor) { starts += 1 }
   func stopAlarm() { stops += 1 }
   func silenceSiren() {}
-  func setSirenDucked(_ ducked: Bool) {}
+  func setSirenPaused(_ paused: Bool) {}
   func speak(_ text: String) async { spoken.append(text) }
   func stopSpeech() {}
   func nudge(level: Int) { nudges.append(level) }

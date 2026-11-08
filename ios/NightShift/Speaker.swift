@@ -179,8 +179,9 @@ final class Speaker: NSObject {
     /// One fixed session configuration for speech and the alarm alike. Changing the mode
     /// or options when an alarm starts makes iOS rebuild the Bluetooth route, which
     /// garbled the first seconds of the siren; with nothing to change this is a no-op.
+    /// No `.duckOthers`: the app never turns other audio (or anything else) down.
     private static let sessionOptions: AVAudioSession.CategoryOptions = [
-        .allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker, .duckOthers,
+        .allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker,
     ]
 
     static func activateAudioSession() {

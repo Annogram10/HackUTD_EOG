@@ -42,7 +42,8 @@ protocol AlarmEffects: AnyObject {
   func stopAlarm()
   /// Stops the siren only (the red overlay stays).
   func silenceSiren()
-  func setSirenDucked(_ ducked: Bool)
+  /// Pauses the siren while the alarm text is spoken, then resumes it.
+  func setSirenPaused(_ paused: Bool)
   /// Speaks and returns when done (or when speech fails or times out).
   func speak(_ text: String) async
   func stopSpeech()
@@ -299,14 +300,14 @@ final class AlarmMonitor {
     }
 
     speechTask = Task { @MainActor [weak self] in
-      // Let the siren sound first, then speak (siren ducked), and repeat until
+      // Let the siren sound first, then pause it and speak, and repeat until
       // acknowledged.
       try? await Task.sleep(for: .seconds(2))
       while !Task.isCancelled {
         guard let self, let text = self.active?.spokenText else { return }
-        self.effects.setSirenDucked(true)
+        self.effects.setSirenPaused(true)
         await self.effects.speak(text)
-        self.effects.setSirenDucked(false)
+        self.effects.setSirenPaused(false)
         try? await Task.sleep(for: Config.alarmRepeatInterval)
       }
     }
@@ -467,7 +468,7 @@ final class LiveAlarmEffects: AlarmEffects {
     hapticTask = nil
     siren.stop()
     Speaker.shared.stopAll()
-    // Back to the normal session (no ducking).
+    // Back to the normal session.
     Speaker.isAlarmMode = false
     hideWindow()
   }
@@ -507,8 +508,8 @@ final class LiveAlarmEffects: AlarmEffects {
     siren.start()
   }
 
-  func setSirenDucked(_ ducked: Bool) {
-    siren.setDucked(ducked)
+  func setSirenPaused(_ paused: Bool) {
+    siren.setPaused(paused)
   }
 
   /// Speaks, but never waits longer than `speechTimeout`: if the synthesizer stalls,
