@@ -33,7 +33,7 @@ struct FacilityDetailSheet: View {
             .accessibilityAddTraits(.isHeader)
         }
         HStack(spacing: 8) {
-          LevelBadge(level: facility.level)
+          LevelBadge(level: facility.severityKey)
           StatusBadge(status: facility.status)
           if controller.todo.done[facility.id] != nil {
             Badge(text: "Done", tone: .green, icon: "checkmark")

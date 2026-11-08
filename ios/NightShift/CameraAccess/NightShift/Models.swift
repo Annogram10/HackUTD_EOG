@@ -269,8 +269,13 @@ struct MapFacility: Codable, Hashable, Sendable, Identifiable {
   let lon: Double?
   /// Higher is more urgent; 0 means nothing wrong. Display only.
   let importance: Double?
-  /// "high", "medium", "low" or "none": used for the pin color.
+  /// Older field: "high", "medium", "low" or "none". Use `severityKey`.
   let level: String?
+  /// Newer servers: "high", "medium" or "low". Use `severityKey`.
+  let severity: String?
+
+  /// The one severity the app shows: the server's `severity`, else its `level`.
+  var severityKey: String? { severity ?? level }
   /// Live sensor state: "failure", "tripped", "leak", "worn" or "ok".
   let status: String?
   /// Only for pump failures still running; otherwise nil.
@@ -283,7 +288,7 @@ struct MapFacility: Codable, Hashable, Sendable, Identifiable {
   var displayName: String { name ?? id }
 
   private enum CodingKeys: String, CodingKey {
-    case id, rank, name, system, lat, lon, importance, level, status, hoursToShutdown, reasons, spokenText
+    case id, rank, name, system, lat, lon, importance, level, severity, status, hoursToShutdown, reasons, spokenText
   }
 
   init(from decoder: Decoder) throws {
@@ -299,7 +304,8 @@ struct MapFacility: Codable, Hashable, Sendable, Identifiable {
     lat = c.lenientDouble(.lat)
     lon = c.lenientDouble(.lon)
     importance = c.lenientDouble(.importance)
-    level = c.lenientString(.level)
+    level = c.lenientString(.level)?.lowercased()
+    severity = c.lenientString(.severity)?.lowercased()
     status = c.lenientString(.status)
     hoursToShutdown = c.lenientDouble(.hoursToShutdown)
     reasons = (try? c.decodeIfPresent([String].self, forKey: .reasons)) ?? []
@@ -321,6 +327,9 @@ extension KeyedDecodingContainer {
 /// GET /alarm: whether something needs a person's attention right now. Each distinct
 /// situation has its own `alarmId`, so an acknowledged one never flashes again.
 struct AlarmStatus: Codable, Hashable, Sendable {
+  /// The one severity the app shows: the server's `severity`, else its `level`.
+  var severityKey: String? { severity ?? level }
+
   let alarm: Bool
   let alarmId: String?
   /// Backend data time (ISO 8601), shown as the alarm's timestamp.
@@ -330,7 +339,12 @@ struct AlarmStatus: Codable, Hashable, Sendable {
   /// Newer servers: "live" or "replay".
   let mode: String?
   let dataset: String?
+  /// Older field: "red", "yellow" or "green". Use `severityKey`.
   let level: String?
+  /// Newer servers: "high", "medium" or "low". Use `severityKey`.
+  let severity: String?
+  /// Optional extra line from the server, shown as received.
+  let note: String?
   let headline: String?
   /// Written for speech (numbers spelled out); spoken as received.
   let spokenText: String?
@@ -338,7 +352,7 @@ struct AlarmStatus: Codable, Hashable, Sendable {
   let facilityIds: [String]
 
   private enum CodingKeys: String, CodingKey {
-    case alarm, alarmId, asOf, live, mode, dataset, level, headline, spokenText, reasons, facilityIds
+    case alarm, alarmId, asOf, live, mode, dataset, level, severity, note, headline, spokenText, reasons, facilityIds
   }
 
   init(from decoder: Decoder) throws {
@@ -349,7 +363,9 @@ struct AlarmStatus: Codable, Hashable, Sendable {
     live = try? c.decodeIfPresent(Bool.self, forKey: .live)
     mode = c.lenientString(.mode)?.lowercased()
     dataset = c.lenientString(.dataset)
-    level = c.lenientString(.level)
+    level = c.lenientString(.level)?.lowercased()
+    severity = c.lenientString(.severity)?.lowercased()
+    note = c.lenientString(.note).flatMap { $0.isEmpty ? nil : $0 }
     headline = c.lenientString(.headline)
     spokenText = c.lenientString(.spokenText).flatMap { $0.isEmpty ? nil : $0 }
     reasons = (try? c.decodeIfPresent([String].self, forKey: .reasons)) ?? []

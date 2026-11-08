@@ -33,12 +33,12 @@ struct TodoView: View {
   }
 
   private var doNowFacilities: [MapFacility] {
-    openFacilities.filter { $0.rank == 1 || $0.level?.lowercased() == "high" }
+    openFacilities.filter { $0.rank == 1 || levelTone($0.severityKey) == .red }
   }
 
   private var checkSoonFacilities: [MapFacility] {
     let doNow = Set(doNowFacilities.map(\.id))
-    return openFacilities.filter { !doNow.contains($0.id) && $0.level?.lowercased() == "medium" }
+    return openFacilities.filter { !doNow.contains($0.id) && levelTone($0.severityKey) == .amber }
   }
 
   private var routineFacilities: [MapFacility] {
@@ -205,7 +205,7 @@ struct TodoView: View {
               .font(.title3.weight(.semibold))
               .foregroundStyle(NS.textPrimary)
             HStack(spacing: 6) {
-              LevelBadge(level: facility.level)
+              LevelBadge(level: facility.severityKey)
               StatusBadge(status: facility.status)
               if controller.todo.here[facility.id] != nil {
                 Badge(text: "Visited", tone: .blue)
@@ -291,7 +291,7 @@ struct TodoView: View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(spacing: 6) {
         Badge(text: "ALARM", tone: .red, icon: "exclamationmark.triangle.fill")
-        LevelBadge(level: alarm.level)
+        LevelBadge(level: alarm.severityKey)
       }
       Text(alarm.headline ?? "Alarm")
         .font(.title3.weight(.semibold))

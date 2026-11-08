@@ -88,9 +88,14 @@ enum Tone {
   var fillOpacity: Double { self == .redStrong ? 0.32 : 0.15 }
 }
 
-/// Backend level ("high"/"medium"/"low"/"none", or alarm "red"/"yellow") as a tone.
-func levelTone(_ level: String?) -> Tone {
-  switch level?.lowercased() {
+/// The server's severity (`severity`, else `level`) as a tone. This is the only place
+/// severity is turned into color; every screen and the map use it.
+///   high (or old "red")          -> red
+///   medium (or old "yellow")     -> amber
+///   low                          -> grey
+///   none (or old "green")        -> green
+func levelTone(_ severity: String?) -> Tone {
+  switch severity?.lowercased() {
   case "high", "red": return .red
   case "medium", "yellow", "amber": return .amber
   case "none", "green": return .green
@@ -98,14 +103,14 @@ func levelTone(_ level: String?) -> Tone {
   }
 }
 
-/// Uppercase level label: HIGH, MEDIUM, LOW, NORMAL.
-func levelLabel(_ level: String?) -> String {
-  switch level?.lowercased() {
+/// Dashboard labels: HIGH, MEDIUM, LOW, NORMAL.
+func levelLabel(_ severity: String?) -> String {
+  switch severity?.lowercased() {
   case "high", "red": return "HIGH"
   case "medium", "yellow", "amber": return "MEDIUM"
   case "low": return "LOW"
   case "none", "green": return "NORMAL"
-  default: return (level ?? "UNKNOWN").uppercased()
+  default: return (severity ?? "UNKNOWN").uppercased()
   }
 }
 

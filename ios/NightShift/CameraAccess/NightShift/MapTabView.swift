@@ -140,9 +140,9 @@ struct MapTabView: View {
           .frame(minWidth: 26, minHeight: 26)
           .background(NS.surface)
           .overlay(Rectangle().strokeBorder(border, lineWidth: 2))
-        Text(levelLabel(facility.level))
+        Text(levelLabel(facility.severityKey))
           .font(.caption2.weight(.semibold))
-          .foregroundStyle(levelTone(facility.level).text)
+          .foregroundStyle(levelTone(facility.severityKey).text)
           .padding(.horizontal, 4)
           .padding(.vertical, 2)
           .background(NS.background.opacity(0.85))
@@ -158,24 +158,13 @@ struct MapTabView: View {
     .contentShape(Rectangle())
   }
 
-  /// Green normal; amber worn, possible leak or a flag waiting for review; red failure,
-  /// tripped, or a confirmed flag at this facility.
+  /// The marker border is the server's severity (same colors as every other screen).
   private func markerColor(for facility: MapFacility) -> Color {
-    let flags = controller.store.current?.flags.filter { $0.facility == facility.id } ?? []
-    switch facility.status?.lowercased() {
-    case "failure", "tripped": return NS.red
-    default: break
-    }
-    if flags.contains(where: { $0.status == .confirmed }) { return NS.red }
-    if flags.contains(where: { $0.status == .pending }) { return NS.amber }
-    switch facility.status?.lowercased() {
-    case "worn", "leak": return NS.amber
-    default: return NS.green
-    }
+    levelTone(facility.severityKey).color
   }
 
   private func markerAccessibilityLabel(_ facility: MapFacility) -> String {
-    var parts = [facility.displayName, "level \(levelLabel(facility.level).lowercased())", statusLabel(facility.status)]
+    var parts = [facility.displayName, "level \(levelLabel(facility.severityKey).lowercased())", statusLabel(facility.status)]
     if facility.needsCheck, let rank = facility.rank { parts.insert("Stop \(rank)", at: 0) }
     if let hours = facility.hoursToShutdown { parts.append(hoursLeftText(hours)) }
     return parts.joined(separator: ", ")

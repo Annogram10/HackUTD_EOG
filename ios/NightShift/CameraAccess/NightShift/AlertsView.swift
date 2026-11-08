@@ -88,7 +88,7 @@ struct AlertsView: View {
   private func alarmCard(_ alarm: AlarmStatus) -> some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(spacing: 6) {
-        LevelBadge(level: alarm.level)
+        LevelBadge(level: alarm.severityKey)
         if controller.alarm.isBackendAlarmAcknowledged {
           Badge(text: "Acknowledged", tone: .grey)
         }
@@ -102,6 +102,11 @@ struct AlertsView: View {
       Text(alarm.headline ?? "Alarm")
         .font(.title3.weight(.semibold))
         .foregroundStyle(NS.textPrimary)
+      if let note = alarm.note {
+        Text(note)
+          .font(.body)
+          .foregroundStyle(NS.textBody)
+      }
       ForEach(Array(alarm.reasons.enumerated()), id: \.offset) { _, reason in
         Text(reason)
           .font(.body)
