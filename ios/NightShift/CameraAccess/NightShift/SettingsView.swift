@@ -37,6 +37,12 @@ struct SettingsView: View {
           .accessibilityAddTraits(.isHeader)
       }
       List {
+        Section {
+          Label("Keep this app open. A locked or backgrounded phone can miss alarms.", systemImage: "iphone.gen3")
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(NS.amberText)
+        }
+        .listRowBackground(NS.surface)
         glassesSection.listRowBackground(NS.surface)
         voiceSection.listRowBackground(NS.surface)
         mapSection.listRowBackground(NS.surface)

@@ -306,6 +306,26 @@ struct OfflineBanner: View {
   }
 }
 
+/// Persistent red banner while GET /alarm keeps failing; stays until a poll succeeds.
+struct MonitoringLostBanner: View {
+  let lastSuccess: Date?
+
+  private var text: String {
+    let last = lastSuccess.map { $0.formatted(date: .omitted, time: .standard) } ?? "never"
+    return "Monitoring lost — last contact \(last)"
+  }
+
+  var body: some View {
+    Label(text, systemImage: "exclamationmark.triangle.fill")
+      .font(.headline.monospacedDigit())
+      .foregroundStyle(NS.textPrimary)
+      .padding(.vertical, 8)
+      .frame(maxWidth: .infinity, minHeight: 44)
+      .background(NS.red)
+      .accessibilityLabel(text)
+  }
+}
+
 /// Text tabs with a 2 pt blue underline on the selected one (used for segments).
 struct UnderlineSegments<Value: Hashable>: View {
   let options: [(value: Value, title: String)]

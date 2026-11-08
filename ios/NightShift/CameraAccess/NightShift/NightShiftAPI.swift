@@ -117,11 +117,50 @@ final class BackendStatus {
   }
 }
 
+// MARK: - Transport
+
+/// The one network seam: URLSession in the app, a mock in tests.
+protocol HTTPTransport: Sendable {
+  func perform(_ request: URLRequest) async throws -> (Data, URLResponse)
+}
+
+extension URLSession: HTTPTransport {
+  func perform(_ request: URLRequest) async throws -> (Data, URLResponse) {
+    try await data(for: request)
+  }
+}
+
 // MARK: - Real
 
 struct RealAPI: NightShiftAPI {
   /// Read on every request so a newly saved address applies immediately.
   private var baseURL: URL { Config.baseURL }
+
+  /// GETs (polls, reads): 5 s per request, 8 s total, so a dead tunnel fails fast.
+  static let pollSession: URLSession = {
+    let config = URLSessionConfiguration.default
+    config.timeoutIntervalForRequest = Config.pollRequestTimeout
+    config.timeoutIntervalForResource = Config.pollResourceTimeout
+    config.waitsForConnectivity = false
+    config.requestCachePolicy = .reloadIgnoringLocalCacheData
+    return URLSession(configuration: config)
+  }()
+
+  /// Writes (reports, decisions, vision): longer limits for photo uploads.
+  static let writeSession: URLSession = {
+    let config = URLSessionConfiguration.default
+    config.timeoutIntervalForRequest = Config.uploadTimeout
+    config.timeoutIntervalForResource = Config.uploadTimeout * 2
+    config.waitsForConnectivity = false
+    return URLSession(configuration: config)
+  }()
+
+  /// nil = the real sessions above; tests inject a mock.
+  private let transport: (any HTTPTransport)?
+
+  init(transport: (any HTTPTransport)? = nil) {
+    self.transport = transport
+  }
 
   func fetchAlerts() async throws -> [ShiftAlert] {
     let request = makeRequest("alerts")
@@ -182,7 +221,7 @@ struct RealAPI: NightShiftAPI {
     var request = makeRequest("report")
     request.httpMethod = "POST"
     // Reports carry photos, so allow longer than the default timeout.
-    request.timeoutInterval = Config.requestTimeout * 6
+    request.timeoutInterval = Config.uploadTimeout
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try JSONCoding.encoder.encode(report)
     _ = try await send(request, path: "report")
@@ -190,7 +229,7 @@ struct RealAPI: NightShiftAPI {
 
   private func makeRequest(_ path: String) -> URLRequest {
     var request = URLRequest(url: baseURL.appending(path: path))
-    request.timeoutInterval = Config.requestTimeout
+    request.timeoutInterval = Config.pollRequestTimeout
     request.setValue("application/json", forHTTPHeaderField: "Accept")
     return request
   }
@@ -205,8 +244,10 @@ struct RealAPI: NightShiftAPI {
     var request = request
     // Stops ngrok's browser-warning HTML page from replacing the JSON response.
     request.setValue("true", forHTTPHeaderField: "ngrok-skip-browser-warning")
+    let isWrite = (request.httpMethod ?? "GET") != "GET"
+    let session: any HTTPTransport = transport ?? (isWrite ? Self.writeSession : Self.pollSession)
     do {
-      let (data, response) = try await URLSession.shared.data(for: request)
+      let (data, response) = try await session.perform(request)
       if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
         // Cloudflare's tunnel errors carry their code in the body, e.g. "error code: 1033".
         let body = String(decoding: data.prefix(2048), as: UTF8.self)

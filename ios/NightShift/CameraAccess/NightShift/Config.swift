@@ -65,6 +65,11 @@ enum Config {
 
   /// Request timeout, kept short so offline fallbacks to the cache kick in quickly.
   static let requestTimeout: TimeInterval = 10
+  /// GET /alarm and other reads: per-request and whole-resource limits.
+  static let pollRequestTimeout: TimeInterval = 5
+  static let pollResourceTimeout: TimeInterval = 8
+  /// Writes (reports with photos): give up after this long and offer a retry.
+  static let uploadTimeout: TimeInterval = 20
 
   /// Shows the "Simulate camera flag" test button on the Shift screen.
   /// Turn off before a real demo.

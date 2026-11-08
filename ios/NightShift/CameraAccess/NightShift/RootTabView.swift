@@ -11,6 +11,7 @@
 
 import MWDATCore
 import SwiftUI
+import UIKit
 
 struct RootTabView: View {
   enum AppTab: Hashable { case todo, map, alerts, settings }
@@ -36,7 +37,9 @@ struct RootTabView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      if isOffline {
+      if controller.alarm.monitoringLost {
+        MonitoringLostBanner(lastSuccess: controller.alarm.lastSuccess)
+      } else if isOffline {
         OfflineBanner()
       }
       TabView(selection: $tab) {
@@ -76,6 +79,10 @@ struct RootTabView: View {
     }
     .preferredColorScheme(.dark)
     .tint(NS.accent)
+    // Keep the screen awake on To-do and Alerts: a sleeping phone can miss alarms.
+    .onChange(of: tab, initial: true) {
+      UIApplication.shared.isIdleTimerDisabled = tab == .todo || tab == .alerts
+    }
     .onAppear {
       // Vision checks and voice-flag photos read frames from the glasses stream.
       controller.attachCamera(

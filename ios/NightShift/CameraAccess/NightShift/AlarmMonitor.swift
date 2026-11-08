@@ -18,6 +18,36 @@ import Observation
 import SwiftUI
 import UIKit
 
+/// Time source for AlarmMonitor, injectable so tests don't sleep for real.
+@MainActor
+protocol AlarmClock: AnyObject {
+  var now: Date { get }
+  func sleep(for duration: Duration) async
+}
+
+@MainActor
+final class SystemAlarmClock: AlarmClock {
+  var now: Date { Date() }
+  func sleep(for duration: Duration) async { try? await Task.sleep(for: duration) }
+}
+
+/// Everything the alarm does to the outside world. Each channel is best effort and
+/// independent: a missing Pico, absent glasses or failed speech never blocks the rest.
+@MainActor
+protocol AlarmEffects: AnyObject {
+  /// Siren, full-screen red overlay, haptics, alarm audio mode.
+  func startAlarm(monitor: AlarmMonitor)
+  /// Stops siren, overlay, haptics and speech; restores the normal audio mode.
+  func stopAlarm()
+  /// Stops the siren only (the red overlay stays).
+  func silenceSiren()
+  func setSirenDucked(_ ducked: Bool)
+  /// Speaks and returns when done (or when speech fails or times out).
+  func speak(_ text: String) async
+  func stopSpeech()
+  func nudge(level: Int)
+}
+
 @Observable
 @MainActor
 final class AlarmMonitor {
@@ -56,12 +86,32 @@ final class AlarmMonitor {
     }
   }
 
+  // MARK: - Monitoring health
+
+  /// When GET /alarm last succeeded.
+  private(set) var lastSuccess: Date?
+  /// True after `failuresBeforeLost` failed polls in a row, until one succeeds.
+  private(set) var monitoringLost = false
+  @ObservationIgnored private(set) var consecutiveFailures = 0
+  /// Number of GET /alarm requests started (for tests and diagnostics).
+  @ObservationIgnored private(set) var pollsStarted = 0
+  @ObservationIgnored private var isPolling = false
+
+  static let failuresBeforeLost = 3
+
+  /// Delay before the next poll: every 4 s normally, then 8 s and 15 s (cap) while
+  /// monitoring is lost.
+  var nextPollDelay: Duration {
+    guard monitoringLost else { return Config.alarmPollInterval }
+    let extra = consecutiveFailures - Self.failuresBeforeLost
+    return extra <= 0 ? .seconds(8) : .seconds(15)
+  }
+
   @ObservationIgnored private let api: any NightShiftAPI
-  @ObservationIgnored private let siren = AlarmSiren()
+  @ObservationIgnored let effects: any AlarmEffects
+  @ObservationIgnored let clock: any AlarmClock
   @ObservationIgnored private var pollTask: Task<Void, Never>?
-  @ObservationIgnored private var hapticTask: Task<Void, Never>?
   @ObservationIgnored private var speechTask: Task<Void, Never>?
-  @ObservationIgnored private var window: UIWindow?
   @ObservationIgnored private var listenTimeoutTask: Task<Void, Never>?
   @ObservationIgnored private var issueExpiryTask: Task<Void, Never>?
   /// True if the alarm turned the listener on (so it turns it back off after).
@@ -78,26 +128,53 @@ final class AlarmMonitor {
     set { UserDefaults.standard.set(newValue, forKey: Self.acknowledgedKey) }
   }
 
-  init(api: any NightShiftAPI, voice: VoiceCommandListener) {
+  init(
+    api: any NightShiftAPI,
+    voice: VoiceCommandListener,
+    effects: (any AlarmEffects)? = nil,
+    clock: any AlarmClock = SystemAlarmClock()
+  ) {
     self.api = api
     self.voice = voice
+    self.effects = effects ?? LiveAlarmEffects()
+    self.clock = clock
   }
 
   // MARK: - Polling
 
+  /// One cancellable loop: poll, wait, repeat. Never more than one request in flight.
   func startPolling() {
     guard pollTask == nil else { return }
     pollTask = Task { @MainActor [weak self] in
       while !Task.isCancelled {
-        await self?.poll()
-        try? await Task.sleep(for: Config.alarmPollInterval)
+        guard let self else { return }
+        await self.pollOnce()
+        await self.clock.sleep(for: self.nextPollDelay)
       }
     }
   }
 
-  private func poll() async {
-    // A failed poll changes nothing: keep flashing (or stay quiet) until we know more.
-    guard let status = try? await api.fetchAlarm() else { return }
+  func stopPolling() {
+    pollTask?.cancel()
+    pollTask = nil
+  }
+
+  /// Fetches GET /alarm once. Skipped if the previous request is still in flight.
+  func pollOnce() async {
+    guard !isPolling else { return }
+    isPolling = true
+    defer { isPolling = false }
+    pollsStarted += 1
+
+    let status: AlarmStatus
+    do {
+      status = try await api.fetchAlarm()
+    } catch {
+      recordFailure()
+      // A failed poll changes nothing else: keep flashing (or stay quiet).
+      return
+    }
+    recordSuccess()
     backendStatus = status
     guard status.alarm else {
       stop()
@@ -112,6 +189,21 @@ final class AlarmMonitor {
       // Same alarm still on: keep the newest wording on screen.
       active = status
     }
+  }
+
+  private func recordFailure() {
+    consecutiveFailures += 1
+    guard consecutiveFailures >= Self.failuresBeforeLost, !monitoringLost else { return }
+    monitoringLost = true
+    Task { await effects.speak("Monitoring lost") }
+  }
+
+  private func recordSuccess() {
+    lastSuccess = clock.now
+    consecutiveFailures = 0
+    guard monitoringLost else { return }
+    monitoringLost = false
+    Task { await effects.speak("Monitoring restored") }
   }
 
   /// alarm_id, or the headline if the backend didn't send one.
@@ -136,21 +228,11 @@ final class AlarmMonitor {
   private func begin(_ status: AlarmStatus) {
     stop()
     active = status
-    Speaker.shared.stopAll()
-    Speaker.isAlarmMode = true
-    siren.start()
-    showWindow()
+    effects.startAlarm(monitor: self)
     // Pico buzzer: level 2 at the start, then level 3 with each repeat below.
-    PicoNudge.wake(level: 2)
+    effects.nudge(level: 2)
     Task { await startListening() }
 
-    hapticTask = Task { @MainActor in
-      let haptics = UINotificationFeedbackGenerator()
-      while !Task.isCancelled {
-        haptics.notificationOccurred(.error)
-        try? await Task.sleep(for: .seconds(2))
-      }
-    }
     speechTask = Task { @MainActor [weak self] in
       // Let the siren sound first, then speak, then repeat until acknowledged.
       try? await Task.sleep(for: .seconds(2))
@@ -158,12 +240,12 @@ final class AlarmMonitor {
       while !Task.isCancelled {
         guard let self, let text = self.active?.spokenText else { return }
         if isRepeat {
-          PicoNudge.wake(level: 3)
+          self.effects.nudge(level: 3)
         }
         isRepeat = true
-        self.siren.setDucked(true)
-        await Speaker.shared.speak(text)
-        self.siren.setDucked(false)
+        self.effects.setSirenDucked(true)
+        await self.effects.speak(text)
+        self.effects.setSirenDucked(false)
         try? await Task.sleep(for: Config.alarmRepeatInterval)
       }
     }
@@ -174,24 +256,18 @@ final class AlarmMonitor {
     active = nil
     statusLine = nil
     clearIssue()
-    hapticTask?.cancel()
     speechTask?.cancel()
-    hapticTask = nil
     speechTask = nil
-    siren.stop()
-    Speaker.shared.stopAll()
-    // Back to the normal session (no ducking).
-    Speaker.isAlarmMode = false
+    effects.stopAlarm()
     stopListeningIfStarted()
-    hideWindow()
   }
 
   /// Silences the siren and the repeating alarm speech; the red flash stays.
   private func silence() {
     speechTask?.cancel()
     speechTask = nil
-    siren.stop()
-    Speaker.shared.stopAll()
+    effects.silenceSiren()
+    effects.stopSpeech()
   }
 
   // MARK: - Listening
@@ -237,10 +313,10 @@ final class AlarmMonitor {
         guard !Task.isCancelled else { return }
         self?.issue = nil
       }
-      await Speaker.shared.speak(report.spokenText ?? "There is nothing to act on.")
+      await effects.speak(report.spokenText ?? "There is nothing to act on.")
     } catch {
       statusLine = ("Couldn't get the issue: \(NightShiftAPIError.describe(error))", false)
-      await Speaker.shared.speak("Couldn't get the issue. Try again.")
+      await effects.speak("Couldn't get the issue. Try again.")
     }
   }
 
@@ -251,7 +327,7 @@ final class AlarmMonitor {
     guard let issue else { return false }
     guard let flag = issue.flag else {
       statusLine = ("There is nothing to act on.", false)
-      await Speaker.shared.speak("There is nothing to act on.")
+      await effects.speak("There is nothing to act on.")
       return true
     }
     guard !isDeciding else { return true }
@@ -265,11 +341,11 @@ final class AlarmMonitor {
       // Either decision acknowledges the alarm; stop everything before confirming aloud.
       acknowledge()
       clearIssue()
-      await Speaker.shared.speak(reply)
+      await effects.speak(reply)
       await onDecided?()
     } catch {
       statusLine = ("Couldn't send \(action.rawValue): \(NightShiftAPIError.describe(error))", false)
-      await Speaker.shared.speak("Couldn't reach the backend. Try again.")
+      await effects.speak("Couldn't reach the backend. Try again.")
     }
     return true
   }
@@ -282,12 +358,76 @@ final class AlarmMonitor {
     issueExpiryTask = nil
     issue = nil
   }
+}
 
-  // MARK: - Window
+/// The real alarm outputs: siren, full-screen overlay window, haptics, speech, Pico.
+@MainActor
+final class LiveAlarmEffects: AlarmEffects {
+  private let siren = AlarmSiren()
+  private var window: UIWindow?
+  private var hapticTask: Task<Void, Never>?
 
-  /// A window above everything (including the Shift sheet) so the flash covers the
-  /// whole screen wherever the person is in the app.
-  private func showWindow() {
+  /// Longest a single phrase may take before speech is treated as failed.
+  private static let speechTimeout: Duration = .seconds(45)
+
+  func startAlarm(monitor: AlarmMonitor) {
+    Speaker.shared.stopAll()
+    Speaker.isAlarmMode = true
+    siren.start()
+    showWindow(monitor: monitor)
+    hapticTask?.cancel()
+    hapticTask = Task { @MainActor in
+      let haptics = UINotificationFeedbackGenerator()
+      while !Task.isCancelled {
+        haptics.notificationOccurred(.error)
+        try? await Task.sleep(for: .seconds(2))
+      }
+    }
+  }
+
+  func stopAlarm() {
+    hapticTask?.cancel()
+    hapticTask = nil
+    siren.stop()
+    Speaker.shared.stopAll()
+    // Back to the normal session (no ducking).
+    Speaker.isAlarmMode = false
+    hideWindow()
+  }
+
+  func silenceSiren() {
+    siren.stop()
+  }
+
+  func setSirenDucked(_ ducked: Bool) {
+    siren.setDucked(ducked)
+  }
+
+  /// Speaks, but never waits longer than `speechTimeout`: if the synthesizer stalls,
+  /// it's stopped so the alarm loop keeps going.
+  func speak(_ text: String) async {
+    // Stopping the synthesizer ends the stuck phrase, which returns speak().
+    let watchdog = Task { @MainActor in
+      try? await Task.sleep(for: Self.speechTimeout)
+      if !Task.isCancelled {
+        Speaker.shared.stopAll()
+      }
+    }
+    await Speaker.shared.speak(text)
+    watchdog.cancel()
+  }
+
+  func stopSpeech() {
+    Speaker.shared.stopAll()
+  }
+
+  func nudge(level: Int) {
+    PicoNudge.wake(level: level)
+  }
+
+  /// A window above everything (including sheets) so the flash covers the whole
+  /// screen wherever the person is in the app.
+  private func showWindow(monitor: AlarmMonitor) {
     guard window == nil else { return }
     let scene = UIApplication.shared.connectedScenes
       .compactMap { $0 as? UIWindowScene }
@@ -296,7 +436,7 @@ final class AlarmMonitor {
     guard let scene else { return }
     let window = UIWindow(windowScene: scene)
     window.windowLevel = .alert + 1
-    let host = UIHostingController(rootView: AlarmOverlayView(monitor: self))
+    let host = UIHostingController(rootView: AlarmOverlayView(monitor: monitor))
     host.view.backgroundColor = .clear
     window.rootViewController = host
     window.isHidden = false
