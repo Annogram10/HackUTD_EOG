@@ -43,7 +43,7 @@ struct AlertsView: View {
       HeaderStrip(alarmActive: alarmActive) {
         HStack {
           Text("Alerts")
-            .font(.title2.bold())
+            .font(.ns(.title2, .bold))
             .foregroundStyle(NS.textPrimary)
             .accessibilityAddTraits(.isHeader)
           Spacer()
@@ -101,30 +101,30 @@ struct AlertsView: View {
         Spacer()
         if let asOf = alarm.asOf {
           Text(asOf)
-            .font(.footnote.monospacedDigit())
+            .font(.nsMono(.footnote))
             .foregroundStyle(NS.textSecondary)
         }
       }
       Text(alarm.headline ?? "Alarm")
-        .font(.title3.weight(.semibold))
+        .font(.ns(.title3, .semibold))
         .foregroundStyle(NS.textPrimary)
       if let note = alarm.note {
         Text(note)
-          .font(.body)
+          .font(.ns(.body))
           .foregroundStyle(NS.textBody)
       }
       ForEach(Array(alarm.reasons.enumerated()), id: \.offset) { _, reason in
         Text(reason)
-          .font(.body)
+          .font(.ns(.body))
           .foregroundStyle(NS.textBody)
       }
       if let hours = alarmHoursLeft {
         Text(hoursLeftText(hours))
-          .font(.headline.monospacedDigit())
+          .font(.nsMono(.headline))
           .foregroundStyle(NS.redText)
       }
       if let alarmError {
-        Text(alarmError).font(.subheadline).foregroundStyle(NS.redText)
+        Text(alarmError).font(.ns(.subheadline)).foregroundStyle(NS.redText)
       }
       AdaptiveStack(spacing: 10) {
         FlatButton(title: "Dismiss", icon: "xmark", accessibilityLabel: "Dismiss the alarm") {
@@ -143,7 +143,7 @@ struct AlertsView: View {
       .disabled(controller.alarm.isLoadingIssue)
       if let spoken = controller.alarm.issue?.spokenText {
         Text(spoken)
-          .font(.body)
+          .font(.ns(.body))
           .foregroundStyle(NS.textBody)
           .padding(12)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -176,14 +176,14 @@ struct AlertsView: View {
         Badge(text: flag.source == "voice" ? "Voice" : "Camera", tone: .grey)
         Spacer()
         Text(flag.createdAt.formatted(date: .omitted, time: .shortened))
-          .font(.footnote.monospacedDigit())
+          .font(.nsMono(.footnote))
           .foregroundStyle(NS.textSecondary)
       }
       Text("Possible \(flag.type) at \(place)")
-        .font(.title3.weight(.semibold))
+        .font(.ns(.title3, .semibold))
         .foregroundStyle(NS.textPrimary)
       if let description = flag.description {
-        Text(description).font(.body).foregroundStyle(NS.textBody)
+        Text(description).font(.ns(.body)).foregroundStyle(NS.textBody)
       }
       AdaptiveStack(spacing: 10) {
         FlatButton(title: "Dismiss", icon: "xmark", accessibilityLabel: "Dismiss possible \(flag.type) at \(place)") {
@@ -205,7 +205,7 @@ struct AlertsView: View {
   private var historyList: some View {
     if controller.history.isEmpty {
       Text("Nothing here yet. Decisions you make show up here.")
-        .font(.body)
+        .font(.ns(.body))
         .foregroundStyle(NS.textBody)
         .frame(maxWidth: .infinity, minHeight: 100)
         .flatCard()
@@ -218,10 +218,10 @@ struct AlertsView: View {
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 6) {
           Text(entry.title)
-            .font(.body.weight(.semibold))
+            .font(.ns(.body, .semibold))
             .foregroundStyle(NS.textPrimary)
           Text(entry.at.formatted(date: .abbreviated, time: .shortened))
-            .font(.subheadline.monospacedDigit())
+            .font(.nsMono(.subheadline))
             .foregroundStyle(NS.textSecondary)
         }
         Spacer()
@@ -256,7 +256,7 @@ struct AlertsView: View {
       .disabled(digits.isEmpty)
       if digits.isEmpty {
         Text("Add the supervisor's number in Settings.")
-          .font(.subheadline)
+          .font(.ns(.subheadline))
           .foregroundStyle(NS.textSecondary)
       }
     }

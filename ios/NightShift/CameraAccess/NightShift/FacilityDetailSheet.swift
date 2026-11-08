@@ -24,11 +24,11 @@ struct FacilityDetailSheet: View {
       VStack(alignment: .leading, spacing: 16) {
         HStack(alignment: .firstTextBaseline) {
           Text(facility.rank.map(String.init) ?? "–")
-            .font(.largeTitle.bold().monospacedDigit())
+            .font(.nsMono(.largeTitle, .bold))
             .foregroundStyle(NS.textMuted)
             .accessibilityLabel("Visit order \(facility.rank.map(String.init) ?? "unknown")")
           Text(facility.displayName)
-            .font(.title2.weight(.semibold))
+            .font(.ns(.title2, .semibold))
             .foregroundStyle(NS.textPrimary)
             .accessibilityAddTraits(.isHeader)
         }
@@ -43,7 +43,7 @@ struct FacilityDetailSheet: View {
         }
         if let hours = facility.hoursToShutdown {
           Text(hoursLeftText(hours))
-            .font(.title3.weight(.semibold).monospacedDigit())
+            .font(.nsMono(.title3, .semibold))
             .foregroundStyle(NS.redText)
             .accessibilityLabel("\(hoursLeftText(hours)) before shutdown")
         }
@@ -54,16 +54,16 @@ struct FacilityDetailSheet: View {
 
         VStack(alignment: .leading, spacing: 8) {
           Text("Why")
-            .font(.headline)
+            .font(.ns(.headline))
             .foregroundStyle(NS.textSecondary)
           if facility.reasons.isEmpty {
             Text("Nothing wrong.")
-              .font(.body)
+              .font(.ns(.body))
               .foregroundStyle(NS.textBody)
           }
           ForEach(Array(facility.reasons.enumerated()), id: \.offset) { _, reason in
             Text(reason)
-              .font(.body)
+              .font(.ns(.body))
               .foregroundStyle(NS.textBody)
               .frame(maxWidth: .infinity, alignment: .leading)
               .padding(12)
@@ -137,11 +137,11 @@ struct TankBar: View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
         Text("Tank level")
-          .font(.subheadline)
+          .font(.ns(.subheadline))
           .foregroundStyle(NS.textSecondary)
         Spacer()
         Text("\(value.formatted(.number.precision(.fractionLength(0))))\(unit) of \(limit.formatted(.number.precision(.fractionLength(0))))\(unit) shutdown")
-          .font(.subheadline.monospacedDigit())
+          .font(.nsMono(.subheadline))
           .foregroundStyle(NS.textBody)
       }
       GeometryReader { geo in

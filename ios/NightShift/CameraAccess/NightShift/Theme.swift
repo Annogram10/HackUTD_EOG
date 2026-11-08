@@ -1,10 +1,11 @@
 //
 // Theme.swift
 //
-// NightShift design system, copied from the web dashboard: flat dark theme, grey
-// surfaces with 1 pt borders, no shadows, gradients or blur, square corners
-// everywhere. Color means status only; blue is the one accent for tappable things.
-// Every status color is paired with a text label.
+// NightShift design system: deep-wine dark theme, solid cards with a 1 pt border and a
+// small chamfered top-right corner (4 pt radius elsewhere), no shadows, gradients or
+// blur. Rajdhani for UI text, Big Shoulders Stencil Display for titles and the danger
+// banner, SF Mono (system monospaced) for every number. All fonts scale with Dynamic
+// Type. Color means status and is always paired with a text label.
 //
 
 import SwiftUI
@@ -13,29 +14,164 @@ import UIKit
 enum NS {
   // MARK: Colors
 
-  static let background = Color(hex: 0x0E0F11)
-  static let surface = Color(hex: 0x17191C)
-  static let raised = Color(hex: 0x22252A)
-  static let border = Color(hex: 0x32363D)
-  static let borderStrong = Color(hex: 0x4D535C)
-  static let textMuted = Color(hex: 0x8B929C)
-  static let textSecondary = Color(hex: 0xA9AFB8)
-  static let textBody = Color(hex: 0xC8CCD2)
-  static let textPrimary = Color(hex: 0xECEEF1)
+  static let background = Color(hex: 0x1A0710)      // deep wine
+  static let surface = Color(hex: 0x342B30)         // cards
+  static let raised = Color(hex: 0x3F3238)          // raised / pressed
+  static let border = Color(hex: 0x5A3A42)
+  /// Key card borders and the camera frame.
+  static let borderStrong = Color(hex: 0xA83C47)
+  static let textPrimary = Color(hex: 0xF8EED7)     // cream
+  static let textBody = Color(hex: 0xF8EED7)
+  static let textMuted = Color(hex: 0xC9B8B0)
+  static let textSecondary = Color(hex: 0xC59FB0)
 
-  static let accent = Color(hex: 0x5A9BF0)
-  static let accentPressed = Color(hex: 0x2F6FD6)
+  /// Primary buttons and "Shift" in the title (dark text on it).
+  static let primary = Color(hex: 0xBC7579)         // salmon
+  static let primaryPressed = Color(hex: 0xA4615F)
+  /// Links, selected tab, "Night" in the title.
+  static let accent = Color(hex: 0x8E95B5)          // periwinkle
+  static let accentPressed = Color(hex: 0x737A9C)
+  /// HUD decoration: dividers, card corner marks.
+  static let hud = Color(hex: 0xAD6564)
+  /// HUD label text: a touch lighter than `hud` so 12 pt labels meet AA contrast.
+  static let hudText = Color(hex: 0xB56B6A)
+  /// Tiny highlights only (recording dot, listening cursor).
+  static let highlight = Color(hex: 0xF3F654)
 
-  static let green = Color(hex: 0x3FB97F)
-  static let greenStrong = Color(hex: 0x2C9C67)
-  static let amber = Color(hex: 0xF2B33D)
-  static let amberText = Color(hex: 0xF6C76A)
-  static let red = Color(hex: 0xE5484D)
-  static let redText = Color(hex: 0xF5A3A5)
-  static let alarmRed = Color(hex: 0xE5484D)
+  // Status (always with a text label).
+  static let green = Color(hex: 0x5DD39E)           // normal
+  static let greenStrong = Color(hex: 0x5DD39E)
+  static let amber = Color(hex: 0xFF9F1C)           // check soon
+  static let amberText = Color(hex: 0xFF9F1C)
+  static let red = Color(hex: 0xFF2D2D)             // danger (filled badges)
+  /// Red for text on cards (pure #FF2D2D on a card is below AA).
+  static let redText = Color(hex: 0xFF7A7A)
+  static let alarmRed = Color(hex: 0xFF2D2D)
+  /// Text on filled danger / salmon fills.
+  static let onFill = Color(hex: 0x1A0710)
 
   /// Minimum tap target.
   static let tap: CGFloat = 56
+}
+
+// MARK: - Fonts
+
+/// Rajdhani (UI), Big Shoulders Stencil Display (titles), SF Mono (numbers). Sizes are
+/// tied to text styles so everything follows Dynamic Type. Rajdhani runs small, so its
+/// sizes sit a little above the system ones; body text is never under 17 pt.
+extension Font {
+  private static func rajdhaniSize(_ style: TextStyle) -> CGFloat {
+    switch style {
+    case .largeTitle: return 36
+    case .title: return 30
+    case .title2: return 25
+    case .title3: return 22
+    case .headline: return 19
+    case .body: return 18
+    case .callout: return 17
+    case .subheadline: return 17
+    case .footnote: return 15
+    case .caption: return 14
+    case .caption2: return 13
+    @unknown default: return 18
+    }
+  }
+
+  /// Rajdhani at a text style; Medium or heavier.
+  static func ns(_ style: TextStyle, _ weight: Weight = .medium) -> Font {
+    let name: String
+    switch weight {
+    case .bold, .heavy, .black: name = "Rajdhani-Bold"
+    case .semibold: name = "Rajdhani-SemiBold"
+    default: name = style == .headline ? "Rajdhani-SemiBold" : "Rajdhani-Medium"
+    }
+    return .custom(name, size: rajdhaniSize(style), relativeTo: style)
+  }
+
+  /// Big Shoulders Stencil Display Bold for the app title, screen titles, danger banner.
+  static func nsDisplay(_ style: TextStyle) -> Font {
+    .custom("BigShouldersStencilDisplay-Bold", size: rajdhaniSize(style) + 2, relativeTo: style)
+  }
+
+  /// SF Mono with tabular digits, for every number (tank %, countdowns, costs, times).
+  static func nsMono(_ style: TextStyle, _ weight: Weight = .regular) -> Font {
+    .system(style, design: .monospaced, weight: weight).monospacedDigit()
+  }
+}
+
+// MARK: - Shapes
+
+/// Card shape: 4 pt corners with a small chamfer cut at the top right.
+struct ChamferedRect: InsettableShape {
+  var chamfer: CGFloat = 10
+  var radius: CGFloat = 4
+  var insetAmount: CGFloat = 0
+
+  func path(in rect: CGRect) -> Path {
+    let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
+    let c = min(chamfer, r.width / 2, r.height / 2)
+    let rad = min(radius, r.width / 4, r.height / 4)
+    var p = Path()
+    p.move(to: CGPoint(x: r.minX + rad, y: r.minY))
+    p.addLine(to: CGPoint(x: r.maxX - c, y: r.minY))
+    p.addLine(to: CGPoint(x: r.maxX, y: r.minY + c))
+    p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - rad))
+    p.addQuadCurve(to: CGPoint(x: r.maxX - rad, y: r.maxY), control: CGPoint(x: r.maxX, y: r.maxY))
+    p.addLine(to: CGPoint(x: r.minX + rad, y: r.maxY))
+    p.addQuadCurve(to: CGPoint(x: r.minX, y: r.maxY - rad), control: CGPoint(x: r.minX, y: r.maxY))
+    p.addLine(to: CGPoint(x: r.minX, y: r.minY + rad))
+    p.addQuadCurve(to: CGPoint(x: r.minX + rad, y: r.minY), control: CGPoint(x: r.minX, y: r.minY))
+    p.closeSubpath()
+    return p
+  }
+
+  func inset(by amount: CGFloat) -> ChamferedRect {
+    var copy = self
+    copy.insetAmount += amount
+    return copy
+  }
+}
+
+/// Small uppercase HUD label above a card: SF Mono 12, HUD color, 0.08em tracking.
+struct HudLabel: View {
+  let text: String
+
+  var body: some View {
+    Text(text.uppercased())
+      .font(.nsMono(.caption, .medium))
+      .tracking(12 * 0.08)
+      .foregroundStyle(NS.hudText)
+      .accessibilityHidden(true)
+  }
+}
+
+/// A HUD label plus a chamfered card. `key` cards get the crimson border.
+struct SysCard<Content: View>: View {
+  let label: String
+  var key: Bool = false
+  @ViewBuilder let content: Content
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HudLabel(text: label)
+      VStack(alignment: .leading, spacing: 12) {
+        content
+      }
+      .padding(14)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .flatCard(stroke: key ? NS.borderStrong : NS.border)
+      .overlay(alignment: .topTrailing) {
+        // HUD corner mark on the chamfer.
+        Path { p in
+          p.move(to: CGPoint(x: 0, y: 0))
+          p.addLine(to: CGPoint(x: 10, y: 10))
+        }
+        .stroke(NS.hud, lineWidth: 1)
+        .frame(width: 10, height: 10)
+        .accessibilityHidden(true)
+      }
+    }
+  }
 }
 
 extension Color {
@@ -158,11 +294,14 @@ func statusTone(_ status: String?) -> Tone {
 
 // MARK: - Badges
 
-/// 1 pt ring at ~40% of the status color, ~15% tinted fill, lighter text, square.
+/// Status badge, always with text. Danger is a FILLED red badge with dark text;
+/// the others are a 1 pt ring with a light tint and colored text.
 struct Badge: View {
   let text: String
   let tone: Tone
   var icon: String? = nil
+
+  private var filled: Bool { tone == .red || tone == .redStrong }
 
   var body: some View {
     HStack(spacing: 4) {
@@ -171,14 +310,15 @@ struct Badge: View {
           .imageScale(.small)
           .accessibilityHidden(true)
       }
-      Text(text)
+      Text(text.uppercased())
     }
-    .font(.footnote.weight(.medium))
-    .foregroundStyle(tone.text)
+    .font(.ns(.footnote, .bold))
+    .tracking(0.5)
+    .foregroundStyle(filled ? NS.onFill : tone.text)
     .padding(.horizontal, 7)
     .padding(.vertical, 3)
-    .background(tone.color.opacity(tone.fillOpacity))
-    .overlay(Rectangle().strokeBorder(tone.color.opacity(0.4), lineWidth: 1))
+    .background(filled ? tone.color : tone.color.opacity(0.15), in: RoundedRectangle(cornerRadius: 2))
+    .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(filled ? tone.color : tone.color.opacity(0.5), lineWidth: 1))
   }
 }
 
@@ -213,13 +353,14 @@ struct FlatCard: ViewModifier {
 
   func body(content: Content) -> some View {
     content
-      .background(fill)
-      .overlay(Rectangle().strokeBorder(stroke, lineWidth: 1))
+      .background(fill, in: ChamferedRect())
+      .overlay(ChamferedRect().strokeBorder(stroke, lineWidth: 1))
+      .contentShape(ChamferedRect())
   }
 }
 
 extension View {
-  /// Flat square card: surface fill and a 1 pt border.
+  /// Solid card: fill, 1 pt border, chamfered top-right corner.
   func flatCard(fill: Color = NS.surface, stroke: Color = NS.border) -> some View {
     modifier(FlatCard(fill: fill, stroke: stroke))
   }
@@ -227,7 +368,8 @@ extension View {
 
 // MARK: - Buttons
 
-/// Square, flat, at least 56 pt tall. Haptic on tap (see `FlatButton`).
+/// Full width, 56 pt tall, chamfered, Rajdhani Bold uppercase. Primary is salmon with
+/// dark text; secondary is outlined. Haptic on tap (see `FlatButton`).
 struct FlatButtonStyle: ButtonStyle {
   enum Kind { case primary, secondary, danger, warning }
   var kind: Kind = .secondary
@@ -235,19 +377,22 @@ struct FlatButtonStyle: ButtonStyle {
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(.headline)
+      .font(.ns(.headline, .bold))
+      .textCase(.uppercase)
+      .tracking(0.6)
+      .multilineTextAlignment(.center)
       .frame(maxWidth: .infinity, minHeight: NS.tap)
       .padding(.horizontal, 12)
       .foregroundStyle(foreground)
-      .background(background(pressed: configuration.isPressed))
-      .overlay(Rectangle().strokeBorder(stroke, lineWidth: 1))
+      .background(background(pressed: configuration.isPressed), in: ChamferedRect())
+      .overlay(ChamferedRect().strokeBorder(stroke, lineWidth: 1))
       .opacity(isEnabled ? 1 : 0.45)
-      .contentShape(Rectangle())
+      .contentShape(ChamferedRect())
   }
 
   private var foreground: Color {
     switch kind {
-    case .primary: return NS.background
+    case .primary: return NS.onFill
     case .secondary: return NS.textPrimary
     case .danger: return NS.redText
     case .warning: return NS.amberText
@@ -256,19 +401,19 @@ struct FlatButtonStyle: ButtonStyle {
 
   private func background(pressed: Bool) -> Color {
     switch kind {
-    case .primary: return pressed ? NS.accentPressed : NS.accent
-    case .secondary: return pressed ? NS.border : NS.raised
-    case .danger: return NS.red.opacity(pressed ? 0.3 : 0.15)
-    case .warning: return NS.amber.opacity(pressed ? 0.3 : 0.15)
+    case .primary: return pressed ? NS.primaryPressed : NS.primary
+    case .secondary: return pressed ? NS.raised : Color.clear
+    case .danger: return pressed ? NS.red.opacity(0.25) : Color.clear
+    case .warning: return pressed ? NS.amber.opacity(0.25) : Color.clear
     }
   }
 
   private var stroke: Color {
     switch kind {
-    case .primary: return NS.accent
-    case .secondary: return NS.borderStrong
-    case .danger: return NS.red.opacity(0.4)
-    case .warning: return NS.amber.opacity(0.4)
+    case .primary: return NS.primary
+    case .secondary: return NS.border
+    case .danger: return NS.redText.opacity(0.7)
+    case .warning: return NS.amber.opacity(0.7)
     }
   }
 }
@@ -311,7 +456,7 @@ struct HeaderStrip<Content: View>: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
       Rectangle()
-        .fill(alarmActive ? NS.alarmRed : NS.border)
+        .fill(alarmActive ? NS.alarmRed : NS.hud.opacity(0.6))
         .frame(height: alarmActive ? 2 : 1)
     }
     .background(NS.background)
@@ -321,13 +466,15 @@ struct HeaderStrip<Content: View>: View {
 /// Thin red banner when the backend can't be reached; cached data stays visible.
 struct OfflineBanner: View {
   var body: some View {
-    Label("Offline. Showing saved data.", systemImage: "wifi.slash")
-      .font(.subheadline.weight(.medium))
-      .foregroundStyle(NS.redText)
-      .frame(maxWidth: .infinity, minHeight: 28)
-      .background(NS.red.opacity(0.15))
-      .overlay(alignment: .bottom) { Rectangle().fill(NS.red.opacity(0.4)).frame(height: 1) }
-      .accessibilityLabel("Offline. Showing saved data.")
+    Label("Can't reach the console. Everything is saved on the phone and will upload later.", systemImage: "wifi.slash")
+      .font(.ns(.subheadline, .semibold))
+      .foregroundStyle(NS.amber)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 6)
+      .frame(maxWidth: .infinity, minHeight: 32)
+      .background(NS.amber.opacity(0.12))
+      .overlay(alignment: .bottom) { Rectangle().fill(NS.amber.opacity(0.5)).frame(height: 1) }
+      .accessibilityLabel("Can't reach the console. Everything is saved on the phone and will upload later.")
   }
 }
 
@@ -368,11 +515,11 @@ struct StateCard: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       Label(title, systemImage: icon)
-        .font(.title3.weight(.semibold))
+        .font(.ns(.title3, .semibold))
         .foregroundStyle(tone == .grey ? NS.textBody : tone.text)
       if let detail {
         Text(detail)
-          .font(.body)
+          .font(.ns(.body))
           .foregroundStyle(NS.textBody)
       }
       if let actionTitle {
@@ -403,10 +550,10 @@ struct ReportStateRow: View {
         Image(systemName: icon).foregroundStyle(tone.text).accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 2) {
           Text("Shift report, \(entry.startedAt.formatted(date: .abbreviated, time: .shortened))")
-            .font(.body)
+            .font(.ns(.body))
             .foregroundStyle(NS.textBody)
           Text(text)
-            .font(.subheadline.weight(.semibold).monospacedDigit())
+            .font(.nsMono(.subheadline, .semibold))
             .foregroundStyle(tone.text)
         }
         Spacer(minLength: 0)
@@ -451,7 +598,7 @@ struct MonitoringLostBanner: View {
 
   var body: some View {
     Label(text, systemImage: "exclamationmark.triangle.fill")
-      .font(.headline.monospacedDigit())
+      .font(.nsMono(.headline))
       .foregroundStyle(NS.textPrimary)
       .padding(.vertical, 8)
       .frame(maxWidth: .infinity, minHeight: 44)
@@ -475,8 +622,8 @@ struct UnderlineSegments<Value: Hashable>: View {
         } label: {
           VStack(spacing: 0) {
             Text(option.title)
-              .font(.headline)
-              .foregroundStyle(selected ? NS.textPrimary : NS.textSecondary)
+              .font(.ns(.headline))
+              .foregroundStyle(selected ? NS.accent : NS.textMuted)
               .frame(maxWidth: .infinity, minHeight: NS.tap - 2)
             Rectangle()
               .fill(selected ? NS.accent : Color.clear)
@@ -501,7 +648,7 @@ struct UpdatedAgo: View {
     TimelineView(.periodic(from: .now, by: 1)) { context in
       let seconds = date.map { max(0, Int(context.date.timeIntervalSince($0))) }
       Text(seconds.map { "Updated \($0)s ago" } ?? "Not updated yet")
-        .font(.subheadline.monospacedDigit())
+        .font(.nsMono(.subheadline))
         .foregroundStyle((seconds ?? 999) > 30 ? NS.amberText : NS.textSecondary)
     }
   }

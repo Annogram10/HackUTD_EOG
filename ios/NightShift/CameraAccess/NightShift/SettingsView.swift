@@ -37,7 +37,7 @@ struct SettingsView: View {
     VStack(spacing: 0) {
       HeaderStrip(alarmActive: alarmActive) {
         Text("Settings")
-          .font(.title2.bold())
+          .font(.ns(.title2, .bold))
           .foregroundStyle(NS.textPrimary)
           .frame(minHeight: 40)
           .accessibilityAddTraits(.isHeader)
@@ -45,7 +45,7 @@ struct SettingsView: View {
       List {
         Section {
           Label("Keep this app open. A locked or backgrounded phone can miss alarms.", systemImage: "iphone.gen3")
-            .font(.subheadline.weight(.medium))
+            .font(.ns(.subheadline, .medium))
             .foregroundStyle(NS.amberText)
         }
         .listRowBackground(NS.surface)
@@ -116,10 +116,10 @@ struct SettingsView: View {
       TextField("Supervisor phone number", text: $supervisorPhone)
         .keyboardType(.phonePad)
         .textContentType(.telephoneNumber)
-        .font(.body.monospacedDigit())
+        .font(.nsMono(.body))
         .accessibilityLabel("Supervisor phone number")
       Text("Used by Call supervisor on the Alerts tab.")
-        .font(.subheadline)
+        .font(.ns(.subheadline))
         .foregroundStyle(NS.textSecondary)
     }
     .listRowBackground(NS.surface)
@@ -131,13 +131,13 @@ struct SettingsView: View {
         .keyboardType(.numbersAndPunctuation)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
-        .font(.body.monospaced())
+        .font(.nsMono(.body))
         .submitLabel(.done)
         .onSubmit { savePico() }
         .onChange(of: picoText) { picoError = nil }
         .accessibilityLabel("Pico address")
       if let picoError {
-        Text(picoError).font(.subheadline).foregroundStyle(NS.redText)
+        Text(picoError).font(.ns(.subheadline)).foregroundStyle(NS.redText)
       }
       FlatButton(title: "Save Pico address", icon: "checkmark") { savePico() }
         .buttonStyle(.borderless)
@@ -159,20 +159,20 @@ struct SettingsView: View {
           "Test level \(testResult.level): \(testResult.ok ? "ok" : "failed") (\(testResult.detail))",
           systemImage: testResult.ok ? "checkmark.circle.fill" : "xmark.octagon.fill"
         )
-        .font(.subheadline.weight(.semibold))
+        .font(.ns(.subheadline, .semibold))
         .foregroundStyle(testResult.ok ? NS.green : NS.redText)
       }
       if let last = PicoStatus.shared.last {
         Text("Last nudge: \(last.ok ? "ok" : "failed") \(last.at.formatted(date: .omitted, time: .shortened)) · level \(last.level) · \(last.detail)")
-          .font(.subheadline.monospacedDigit())
+          .font(.nsMono(.subheadline))
           .foregroundStyle(last.ok ? NS.textBody : NS.redText)
       } else {
         Text("Last nudge: none yet")
-          .font(.subheadline)
+          .font(.ns(.subheadline))
           .foregroundStyle(NS.textSecondary)
       }
       Text("Alarms nudge level 1 at the start, 2 after 60 s and 3 after 120 s until acknowledged. A failed nudge never delays the alarm.")
-        .font(.subheadline)
+        .font(.ns(.subheadline))
         .foregroundStyle(NS.textSecondary)
     }
     .listRowBackground(NS.surface)
@@ -200,7 +200,7 @@ struct SettingsView: View {
       SecureField(Config.apiKey == nil ? "API key (optional)" : "API key saved (enter a new one to replace)", text: $apiKeyText)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
-        .font(.body.monospaced())
+        .font(.nsMono(.body))
         .accessibilityLabel("Backend API key")
       AdaptiveStack(spacing: 10) {
         FlatButton(title: "Save key", icon: "key.fill") {
@@ -218,7 +218,7 @@ struct SettingsView: View {
       }
       .buttonStyle(.borderless)
       Text(apiKeySaved ?? "Sent as X-API-Key on every write when the server requires it.")
-        .font(.subheadline)
+        .font(.ns(.subheadline))
         .foregroundStyle(NS.textSecondary)
     }
   }
@@ -262,7 +262,7 @@ struct SettingsView: View {
         }
         ForEach(shift.notes) { note in
           Label(note.text, systemImage: "quote.bubble")
-            .font(.subheadline)
+            .font(.ns(.subheadline))
         }
       } else {
         Text("No flags yet.")
@@ -293,7 +293,7 @@ struct SettingsView: View {
         }
         .disabled(wearablesVM.registrationState == .registering)
         Text("You'll go to the Meta AI app to approve, then come back here.")
-          .font(.caption)
+          .font(.ns(.caption))
           .foregroundStyle(.secondary)
       }
     }
@@ -321,12 +321,12 @@ struct SettingsView: View {
       .disabled(controller.isLoadingMap)
       if let asOf = controller.map?.asOf {
         Text("Data as of \(asOf)\(controller.map?.dataset.map { " · \($0)" } ?? "")")
-          .font(.caption)
+          .font(.ns(.caption))
           .foregroundStyle(.secondary)
       }
       if let error = controller.mapError {
         Text("Map update failed: \(error)")
-          .font(.caption)
+          .font(.ns(.caption))
           .foregroundStyle(.red)
       }
     }
@@ -347,7 +347,7 @@ struct SettingsView: View {
       }
       if backend.isUnreachable && !Config.useMock {
         Label("Backend unreachable. Ask for the new tunnel address and paste it here.", systemImage: "exclamationmark.triangle")
-          .font(.subheadline)
+          .font(.ns(.subheadline))
           .foregroundStyle(.red)
       }
       VStack(alignment: .leading, spacing: 4) {
@@ -358,20 +358,20 @@ struct SettingsView: View {
             .fill(reachable == true ? NS.green : (reachable == false ? NS.red : NS.textMuted))
             .frame(width: 10, height: 10)
           Text(reachable == true ? "Reachable" : (reachable == false ? "Not reachable" : "Checking…"))
-            .font(.caption.weight(.semibold))
+            .font(.ns(.caption, .semibold))
             .foregroundStyle(reachable == true ? NS.green : (reachable == false ? NS.redText : NS.textMuted))
           Text(Config.useMock ? "Mock data (offline demo)" : backendHostText)
-            .font(.caption.monospaced())
+            .font(.nsMono(.caption))
             .textSelection(.enabled)
         }
         .accessibilityElement(children: .combine)
         if controller.isTestingConnection {
           Text("Testing…")
-            .font(.caption)
+            .font(.ns(.caption))
             .foregroundStyle(.secondary)
         } else if let result = controller.connectionTestResult {
           Text(result.text)
-            .font(.caption)
+            .font(.ns(.caption))
             .foregroundStyle(result.ok ? .green : .red)
         }
       }
@@ -404,11 +404,11 @@ struct SettingsView: View {
             : "Pick a facility. Camera and voice flags are paused until you choose one.",
           systemImage: "mappin.slash"
         )
-        .font(.subheadline)
+        .font(.ns(.subheadline))
         .foregroundStyle(.red)
       }
       Label(visionStatusText, systemImage: "eye")
-        .font(.caption)
+        .font(.ns(.caption))
         .foregroundStyle(.secondary)
       Button("Check now", systemImage: "camera.viewfinder") {
         Task { await controller.vision.checkNow() }
@@ -416,7 +416,7 @@ struct SettingsView: View {
       .disabled(controller.vision.isCheckingNow)
       if controller.vision.isCheckingNow {
         Text("Checking…")
-          .font(.caption)
+          .font(.ns(.caption))
           .foregroundStyle(.secondary)
       } else if let report = controller.vision.lastManualCheck {
         checkReportBox(report)
@@ -429,7 +429,7 @@ struct SettingsView: View {
         .foregroundStyle(.purple)
         if let result = controller.simulateResult {
           Text(result.text)
-            .font(.caption)
+            .font(.ns(.caption))
             .foregroundStyle(result.ok ? .green : .red)
         }
       }
@@ -451,7 +451,7 @@ struct SettingsView: View {
       Text(report.createdFlag ? "Created a pending camera flag." : "No flag created.")
         .foregroundStyle(report.createdFlag ? .orange : .secondary)
     }
-    .font(.caption.monospaced())
+    .font(.nsMono(.caption))
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(8)
     .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
@@ -472,7 +472,7 @@ struct SettingsView: View {
       // Permission off: say so plainly, with a way to fix it.
       if case .unavailable(let reason) = controller.voice.status {
         Label(reason, systemImage: "mic.slash.fill")
-          .font(.subheadline.weight(.semibold))
+          .font(.ns(.subheadline, .semibold))
           .foregroundStyle(NS.redText)
         FlatButton(title: "Open iOS Settings", icon: "gear", accessibilityLabel: "Open iOS Settings to allow the microphone and speech recognition") {
           if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -483,17 +483,17 @@ struct SettingsView: View {
       }
       // Live transcript, for checking what the recognizer hears.
       Text("Hearing: \(controller.voice.heardText.isEmpty ? "…" : controller.voice.heardText)")
-        .font(.subheadline.monospaced())
+        .font(.nsMono(.subheadline))
         .foregroundStyle(NS.textBody)
       Text("Last phrase: \(controller.voice.lastHeard ?? "nothing yet")")
-        .font(.caption)
+        .font(.ns(.caption))
         .foregroundStyle(.secondary)
       Text("Commands: what's the issue, dismiss, prioritize, acknowledge, stop, repeat, status, next alert.")
-        .font(.caption)
+        .font(.ns(.caption))
         .foregroundStyle(NS.textSecondary)
       if let feedback = controller.voiceFeedback {
         Text(feedback.text)
-          .font(.subheadline)
+          .font(.ns(.subheadline))
           .foregroundStyle(feedback.ok ? .green : .red)
       }
     }
@@ -514,7 +514,7 @@ struct SettingsView: View {
   private var addressEditor: some View {
     VStack(alignment: .leading, spacing: 8) {
       TextField("New tunnel address", text: $addressText)
-        .font(.callout.monospaced())
+        .font(.nsMono(.callout))
         .keyboardType(.URL)
         .textContentType(.URL)
         .textInputAutocapitalization(.never)
@@ -524,7 +524,7 @@ struct SettingsView: View {
         .onChange(of: addressText) { addressError = nil }
       if let addressError {
         Text(addressError)
-          .font(.caption)
+          .font(.ns(.caption))
           .foregroundStyle(.red)
       }
       // Borderless styles keep each button separately tappable inside a List row.
@@ -543,7 +543,7 @@ struct SettingsView: View {
         .buttonStyle(.borderless)
         .disabled(controller.isUsingDefaultBackend)
       }
-      .font(.callout)
+      .font(.ns(.callout))
     }
   }
 

@@ -29,31 +29,31 @@ struct FlagRow: View {
       VStack(alignment: .leading, spacing: 3) {
         HStack {
           Text(flag.type)
-            .font(.subheadline.bold())
+            .font(.ns(.subheadline, .bold))
             .strikethrough(flag.status == .dismissed)
           if flag.source == "voice" {
             Text("voice")
-              .font(.caption2)
+              .font(.ns(.caption2))
               .padding(.horizontal, 5)
               .padding(.vertical, 1)
               .background(.secondary.opacity(0.2), in: Capsule())
           }
           Spacer()
           Label(flag.status.rawValue, systemImage: statusIcon)
-            .font(.caption.bold())
+            .font(.ns(.caption, .bold))
             .foregroundStyle(statusColor)
         }
         if let description = flag.description, !description.isEmpty {
           Text(description)
-            .font(.caption)
+            .font(.ns(.caption))
             .lineLimit(1)
         }
         Text("\(facilityName ?? "Unknown facility") · \(flag.createdAt.formatted(date: .omitted, time: .shortened))")
-          .font(.caption)
+          .font(.ns(.caption))
           .foregroundStyle(.secondary)
         ForEach(flag.notes) { note in
           Label(note.text, systemImage: "quote.bubble")
-            .font(.caption)
+            .font(.ns(.caption))
         }
         // Bordered styles keep each button separately tappable inside a List row.
         HStack(spacing: 8) {
@@ -67,7 +67,7 @@ struct FlagRow: View {
           Button("Note", systemImage: "square.and.pencil", action: onAddNote)
             .buttonStyle(.bordered)
         }
-        .font(.caption)
+        .font(.ns(.caption))
         .controlSize(.small)
         .padding(.top, 2)
       }

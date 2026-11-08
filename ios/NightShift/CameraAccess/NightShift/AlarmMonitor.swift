@@ -589,7 +589,7 @@ private struct AlarmOverlayView: View {
     VStack(spacing: 10) {
       if monitor.voice.isRunning {
         Label("Listening: say \"What's the issue\"", systemImage: "mic.fill")
-          .font(.headline)
+          .font(.ns(.headline))
           .padding(.horizontal, 12)
           .padding(.vertical, 6)
           .background(.black.opacity(0.35), in: Capsule())
@@ -598,7 +598,7 @@ private struct AlarmOverlayView: View {
           Task { await monitor.startListening() }
         } label: {
           Label("Listen", systemImage: "mic")
-            .font(.headline)
+            .font(.ns(.headline))
             .frame(maxWidth: .infinity, minHeight: NS.tap)
         }
         .buttonStyle(.bordered)
@@ -609,7 +609,7 @@ private struct AlarmOverlayView: View {
           Task { await monitor.askIssue() }
         } label: {
           Label(monitor.isLoadingIssue ? "Asking…" : "What's the issue?", systemImage: "questionmark.bubble")
-            .font(.headline)
+            .font(.ns(.headline))
             .frame(maxWidth: .infinity, minHeight: NS.tap)
         }
         .buttonStyle(.bordered)
@@ -623,7 +623,7 @@ private struct AlarmOverlayView: View {
   private func issueSection(_ issue: IssueReport) -> some View {
     VStack(spacing: 14) {
       Text(issue.spokenText ?? "There is nothing to act on.")
-        .font(.title3.weight(.semibold))
+        .font(.ns(.title3, .semibold))
         .multilineTextAlignment(.center)
         .padding(12)
         .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
@@ -633,7 +633,7 @@ private struct AlarmOverlayView: View {
             Task { await monitor.decide(.dismiss) }
           } label: {
             Text("Dismiss")
-              .font(.title2.bold())
+              .font(.ns(.title2, .bold))
               .frame(maxWidth: .infinity, minHeight: 64)
           }
           .buttonStyle(.borderedProminent)
@@ -642,7 +642,7 @@ private struct AlarmOverlayView: View {
             Task { await monitor.decide(.prioritize) }
           } label: {
             Text("Prioritize")
-              .font(.title2.bold())
+              .font(.ns(.title2, .bold))
               .frame(maxWidth: .infinity, minHeight: 64)
           }
           .buttonStyle(.borderedProminent)
@@ -651,7 +651,7 @@ private struct AlarmOverlayView: View {
         .disabled(monitor.isDeciding)
       } else {
         Text("There is nothing to act on.")
-          .font(.headline)
+          .font(.ns(.headline))
       }
     }
   }
@@ -662,9 +662,9 @@ private struct AlarmOverlayView: View {
       Image(systemName: "exclamationmark.triangle.fill")
         .font(.system(size: 72))
       Text("ALARM")
-        .font(.largeTitle.weight(.black))
+        .font(.ns(.largeTitle, .black))
       Text(monitor.active?.headline ?? "Something needs checking now")
-        .font(.title.bold())
+        .font(.ns(.title, .bold))
         .multilineTextAlignment(.center)
         .minimumScaleFactor(0.6)
       if let issue = monitor.issue {
@@ -672,13 +672,13 @@ private struct AlarmOverlayView: View {
       } else {
         ForEach(Array((monitor.active?.reasons ?? []).prefix(3).enumerated()), id: \.offset) { _, reason in
           Text(reason)
-            .font(.body)
+            .font(.ns(.body))
             .multilineTextAlignment(.center)
         }
       }
       if let line = monitor.statusLine {
         Text(line.text)
-          .font(.callout.bold())
+          .font(.ns(.callout, .bold))
           .padding(8)
           .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
       }
@@ -688,14 +688,14 @@ private struct AlarmOverlayView: View {
         monitor.acknowledge()
       } label: {
         Text("I saw this")
-          .font(.title.bold())
+          .font(.ns(.title, .bold))
           .frame(maxWidth: .infinity, minHeight: 72)
       }
       .buttonStyle(.borderedProminent)
       .tint(.white)
       .foregroundStyle(.red)
       Label("Keep the volume up", systemImage: "speaker.wave.3.fill")
-        .font(.footnote.bold())
+        .font(.ns(.footnote, .bold))
     }
     .foregroundStyle(.white)
     .padding(28)

@@ -155,13 +155,13 @@ struct MapTabView: View {
     return HStack(spacing: 4) {
       if facility.needsCheck {
         Text(facility.rank.map(String.init) ?? "·")
-          .font(.subheadline.bold().monospacedDigit())
+          .font(.nsMono(.subheadline, .bold))
           .foregroundStyle(NS.textPrimary)
           .frame(minWidth: 26, minHeight: 26)
           .background(NS.surface)
           .overlay(Rectangle().strokeBorder(border, lineWidth: 2))
         Text(levelLabel(facility.severityKey))
-          .font(.caption2.weight(.semibold))
+          .font(.ns(.caption2, .semibold))
           .foregroundStyle(levelTone(facility.severityKey).text)
           .padding(.horizontal, 4)
           .padding(.vertical, 2)
@@ -259,7 +259,7 @@ struct MapTabView: View {
     } label: {
       HStack(spacing: 6) {
         Text(title)
-          .font(.headline)
+          .font(.ns(.headline))
           .foregroundStyle(selected ? NS.textPrimary : NS.textSecondary)
         if hasProblem {
           Rectangle().fill(NS.red).frame(width: 7, height: 7)
@@ -284,11 +284,11 @@ struct MapTabView: View {
       legendRow(NS.red, "Pump failure")
       HStack(spacing: 8) {
         Rectangle().fill(NS.textSecondary.opacity(0.7)).frame(width: 18, height: 2)
-        Text("Route to visit").font(.subheadline).foregroundStyle(NS.textBody)
+        Text("Route to visit").font(.ns(.subheadline)).foregroundStyle(NS.textBody)
       }
       if showDemoLayers {
         Text("Wells and pipelines: demo data")
-          .font(.footnote)
+          .font(.ns(.footnote))
           .foregroundStyle(NS.amberText)
       }
     }
@@ -301,7 +301,7 @@ struct MapTabView: View {
     HStack(spacing: 8) {
       Rectangle().fill(NS.surface).frame(width: 16, height: 16)
         .overlay(Rectangle().strokeBorder(color, lineWidth: 2))
-      Text(text).font(.subheadline).foregroundStyle(NS.textBody)
+      Text(text).font(.ns(.subheadline)).foregroundStyle(NS.textBody)
     }
   }
 
@@ -311,7 +311,7 @@ struct MapTabView: View {
       action()
     } label: {
       Image(systemName: systemName)
-        .font(.title3)
+        .font(.ns(.title3))
         .foregroundStyle(NS.accent)
         .frame(width: NS.tap, height: NS.tap)
         .flatCard(fill: NS.background.opacity(0.92))
@@ -322,7 +322,7 @@ struct MapTabView: View {
 
   private func siteIcon(_ systemName: String) -> some View {
     Image(systemName: systemName)
-      .font(.caption2)
+      .font(.ns(.caption2))
       .foregroundStyle(NS.textSecondary)
       .padding(4)
       .background(NS.raised)

@@ -41,7 +41,7 @@ struct RootTabView: View {
         ModePill(clock: controller.serverClock, reachable: controller.isBackendReachable)
         if let dataset = controller.serverClock?.dataset {
           Text(dataset)
-            .font(.caption.monospaced())
+            .font(.nsMono(.caption))
             .foregroundStyle(NS.textMuted)
             .lineLimit(1)
             .truncationMode(.middle)
@@ -63,7 +63,7 @@ struct RootTabView: View {
         VStack(spacing: 0) {
           HeaderStrip(alarmActive: alarmActive) {
             Text("Map")
-              .font(.title2.bold())
+              .font(.ns(.title2, .bold))
               .foregroundStyle(NS.textPrimary)
               .frame(minHeight: 40)
               .accessibilityAddTraits(.isHeader)
@@ -92,6 +92,8 @@ struct RootTabView: View {
       }
     }
     .preferredColorScheme(.dark)
+    // Rajdhani for any text without its own font.
+    .font(.ns(.body))
     .tint(NS.accent)
     // Keep the screen awake on To-do and Alerts: a sleeping phone can miss alarms.
     .onChange(of: tab, initial: true) {
@@ -133,11 +135,11 @@ struct RootTabView: View {
           .frame(height: 2)
         ZStack(alignment: .topTrailing) {
           Image(systemName: selected ? "\(icon).fill" : icon)
-            .font(.title3)
+            .font(.ns(.title3))
             .frame(width: 32, height: 26)
           if badge > 0 {
             Text("\(badge)")
-              .font(.caption2.bold().monospacedDigit())
+              .font(.nsMono(.caption2, .bold))
               .foregroundStyle(NS.textPrimary)
               .padding(.horizontal, 4)
               .frame(minWidth: 18, minHeight: 16)
@@ -146,7 +148,7 @@ struct RootTabView: View {
           }
         }
         Text(title)
-          .font(.caption.weight(.medium))
+          .font(.ns(.caption, .medium))
           .lineLimit(1)
           .minimumScaleFactor(0.6)
       }

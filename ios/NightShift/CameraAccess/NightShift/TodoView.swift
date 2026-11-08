@@ -142,7 +142,7 @@ struct TodoView: View {
       VStack(alignment: .leading, spacing: 10) {
         AdaptiveStack(spacing: 10, stackedAlignment: .leading) {
           Text("NightShift")
-            .font(.title2.bold())
+            .font(.ns(.title2, .bold))
             .foregroundStyle(NS.textPrimary)
             .accessibilityAddTraits(.isHeader)
           HStack(spacing: 6) {
@@ -150,7 +150,7 @@ struct TodoView: View {
               .fill(glassesConnected ? NS.green : NS.textMuted)
               .frame(width: 10, height: 10)
             Text(glassesConnected ? "Glasses" : "No glasses")
-              .font(.subheadline)
+              .font(.ns(.subheadline))
               .foregroundStyle(NS.textSecondary)
           }
           .accessibilityElement(children: .ignore)
@@ -198,7 +198,7 @@ struct TodoView: View {
     HStack(spacing: 8) {
       Rectangle().fill(tone.color).frame(width: 3, height: 18)
       Text(title.uppercased())
-        .font(.subheadline.weight(.semibold))
+        .font(.ns(.subheadline, .semibold))
         .foregroundStyle(NS.textSecondary)
     }
     .padding(.top, 8)
@@ -213,12 +213,12 @@ struct TodoView: View {
       } label: {
         HStack(alignment: .top, spacing: 12) {
           Text(facility.rank.map(String.init) ?? "–")
-            .font(.title.bold().monospacedDigit())
+            .font(.nsMono(.title, .bold))
             .foregroundStyle(NS.textMuted)
             .frame(minWidth: 36, alignment: .leading)
           VStack(alignment: .leading, spacing: 6) {
             Text(facility.displayName)
-              .font(.title3.weight(.semibold))
+              .font(.ns(.title3, .semibold))
               .foregroundStyle(NS.textPrimary)
             HStack(spacing: 6) {
               LevelBadge(level: facility.severityKey)
@@ -229,14 +229,14 @@ struct TodoView: View {
             }
             if let reason = facility.reasons.first {
               Text(reason)
-                .font(.subheadline)
+                .font(.ns(.subheadline))
                 .foregroundStyle(NS.textBody)
                 .lineLimit(3)
                 .multilineTextAlignment(.leading)
             }
             if let hours = facility.hoursToShutdown {
               Text(hoursLeftText(hours))
-                .font(.headline.monospacedDigit())
+                .font(.nsMono(.headline))
                 .foregroundStyle(NS.redText)
             }
           }
@@ -268,23 +268,23 @@ struct TodoView: View {
     return VStack(alignment: .leading, spacing: 10) {
       HStack(alignment: .top, spacing: 12) {
         Image(systemName: flag.source == "voice" ? "mic.fill" : "camera.fill")
-          .font(.title3)
+          .font(.ns(.title3))
           .foregroundStyle(NS.amberText)
           .frame(minWidth: 36, alignment: .leading)
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 6) {
           Text("Possible \(flag.type) at \(place)")
-            .font(.title3.weight(.semibold))
+            .font(.ns(.title3, .semibold))
             .foregroundStyle(NS.textPrimary)
           HStack(spacing: 6) {
             Badge(text: "NEEDS REVIEW", tone: .amber, icon: "exclamationmark.triangle.fill")
             Badge(text: flag.source == "voice" ? "Voice" : "Camera", tone: .grey)
           }
           if let description = flag.description {
-            Text(description).font(.subheadline).foregroundStyle(NS.textBody)
+            Text(description).font(.ns(.subheadline)).foregroundStyle(NS.textBody)
           }
           Text(flag.createdAt.formatted(date: .omitted, time: .shortened))
-            .font(.subheadline.monospacedDigit())
+            .font(.nsMono(.subheadline))
             .foregroundStyle(NS.textSecondary)
         }
       }
@@ -310,13 +310,13 @@ struct TodoView: View {
         LevelBadge(level: alarm.severityKey)
       }
       Text(alarm.headline ?? "Alarm")
-        .font(.title3.weight(.semibold))
+        .font(.ns(.title3, .semibold))
         .foregroundStyle(NS.textPrimary)
       if let reason = alarm.reasons.first {
-        Text(reason).font(.subheadline).foregroundStyle(NS.textBody)
+        Text(reason).font(.ns(.subheadline)).foregroundStyle(NS.textBody)
       }
       if let error = alarmError {
-        Text(error).font(.subheadline).foregroundStyle(NS.redText)
+        Text(error).font(.ns(.subheadline)).foregroundStyle(NS.redText)
       }
       AdaptiveStack(spacing: 10) {
         FlatButton(title: "Dismiss", icon: "xmark", accessibilityLabel: "Dismiss the alarm") {
@@ -360,7 +360,7 @@ struct TodoView: View {
       if showDone {
         ForEach(doneFacilities) { facility in
           HStack {
-            Text(facility.displayName).font(.body).foregroundStyle(NS.textBody)
+            Text(facility.displayName).font(.ns(.body)).foregroundStyle(NS.textBody)
             Spacer()
             FlatButton(title: "Undo", accessibilityLabel: "Mark \(facility.displayName) not done") {
               controller.undoDone(facility.id)
@@ -372,7 +372,7 @@ struct TodoView: View {
         }
         ForEach(decidedFlags) { flag in
           HStack {
-            Text("Possible \(flag.type)").font(.body).foregroundStyle(NS.textBody)
+            Text("Possible \(flag.type)").font(.ns(.body)).foregroundStyle(NS.textBody)
             Spacer()
             Badge(text: flag.priority == true ? "Prioritized" : flag.status.rawValue.capitalized,
                   tone: flag.status == .dismissed ? .grey : .green)
@@ -394,7 +394,7 @@ struct ShiftTimer: View {
     TimelineView(.periodic(from: .now, by: 1)) { context in
       let seconds = max(0, Int(context.date.timeIntervalSince(start)))
       Text(String(format: "%d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60))
-        .font(.headline.monospacedDigit())
+        .font(.nsMono(.headline))
         .foregroundStyle(NS.textBody)
         .accessibilityLabel("Shift time \(seconds / 3600) hours \(seconds / 60 % 60) minutes")
     }
@@ -410,21 +410,21 @@ struct EndShiftSheet: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       Text("End shift")
-        .font(.title2.bold())
+        .font(.ns(.title2, .bold))
         .foregroundStyle(NS.textPrimary)
         .accessibilityAddTraits(.isHeader)
       Text(NightShiftController.endOfShiftSummary(for: controller.store.current?.flags ?? []))
-        .font(.body)
+        .font(.ns(.body))
         .foregroundStyle(NS.textBody)
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .flatCard()
       Text("Handover note")
-        .font(.headline)
+        .font(.ns(.headline))
         .foregroundStyle(NS.textSecondary)
       TextField("Anything the next shift should know", text: $note, axis: .vertical)
         .lineLimit(3...6)
-        .font(.body)
+        .font(.ns(.body))
         .foregroundStyle(NS.textPrimary)
         .padding(12)
         .frame(minHeight: NS.tap)

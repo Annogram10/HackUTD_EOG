@@ -65,6 +65,13 @@
 	<string>NightShift listens through your glasses' microphone (or the phone's) for voice commands like "what's the issue" and "acknowledge".</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>NightShift recognizes spoken commands like "what's the issue", "acknowledge" and "repeat" on this iPhone. Audio is not sent to a server.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Rajdhani-Medium.ttf</string>
+		<string>Rajdhani-SemiBold.ttf</string>
+		<string>Rajdhani-Bold.ttf</string>
+		<string>BigShouldersStencilDisplay.ttf</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
