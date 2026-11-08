@@ -22,6 +22,7 @@ struct RootTabView: View {
   var backend = BackendStatus.shared
   @State private var cameraVM: CameraViewModel
   @State private var tab = AppTab.live
+  @State private var showConnection = false
 
   init(wearables: WearablesInterface, wearablesVM: WearablesViewModel) {
     self.wearablesVM = wearablesVM
@@ -38,7 +39,7 @@ struct RootTabView: View {
   var body: some View {
     VStack(spacing: 0) {
       AppHeader(alarmActive: alarmActive) {
-        EmptyView()
+        LinkStatusChip(cameraVM: cameraVM, wearablesVM: wearablesVM) { showConnection = true }
       }
       HStack(spacing: 8) {
         ModePill(clock: controller.serverClock, reachable: controller.isBackendReachable)
@@ -60,8 +61,7 @@ struct RootTabView: View {
         OfflineBanner()
       }
       TabView(selection: $tab) {
-        Text("LIVE")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        LiveView(controller: controller, cameraVM: cameraVM, wearablesVM: wearablesVM)
           .toolbar(.hidden, for: .tabBar)
           .tag(AppTab.live)
         TodoView(controller: controller, glassesConnected: cameraVM.hasActiveDevice, alarmActive: alarmActive)
@@ -90,6 +90,10 @@ struct RootTabView: View {
     // Keep the screen awake on LIVE and SHIFT: a sleeping phone can miss alarms.
     .onChange(of: tab, initial: true) {
       UIApplication.shared.isIdleTimerDisabled = tab == .live || tab == .shift
+    }
+    .sheet(isPresented: $showConnection) {
+      ConnectionSheet(controller: controller, cameraVM: cameraVM, wearablesVM: wearablesVM)
+        .presentationDetents([.medium, .large])
     }
     .onAppear {
       // Vision checks and voice-flag photos read frames from the glasses stream.
