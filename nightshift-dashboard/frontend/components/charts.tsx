@@ -63,12 +63,12 @@ export function SeriesChart({
         })}
         {ticks(lo, hi).map((v, i) => (
           <g key={i}>
-            <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="#3a2e3c" />
-            <text x={PAD.l - 6} y={y(v) + 4} textAnchor="end" fontSize="12" fontFamily="var(--font-mono)" fill="#968b9e">{fmtNum(v)}</text>
+            <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="#5a3a42" />
+            <text x={PAD.l - 6} y={y(v) + 4} textAnchor="end" fontSize="12" fontFamily="var(--font-mono)" fill="#c59fb0">{fmtNum(v)}</text>
           </g>
         ))}
         {ticks(t0, t1, 4).map((t, i) => (
-          <text key={i} x={x(t)} y={H - 8} textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"} fontSize="12" fontFamily="var(--font-mono)" fill="#968b9e">{hhmm(t)}</text>
+          <text key={i} x={x(t)} y={H - 8} textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"} fontSize="12" fontFamily="var(--font-mono)" fill="#c59fb0">{hhmm(t)}</text>
         ))}
         {lines.map((l) => (
           <g key={l.label}>
@@ -76,7 +76,7 @@ export function SeriesChart({
             <text x={W - PAD.r - 2} y={y(l.value) - 4} textAnchor="end" fontSize="12" fontFamily="var(--font-mono)" fill={l.color}>{l.label}</text>
           </g>
         ))}
-        <polyline points={path} fill="none" stroke="#eeede5" strokeWidth="2" strokeLinejoin="round" />
+        <polyline points={path} fill="none" stroke="#f8eed7" strokeWidth="2" strokeLinejoin="round" />
       </svg>
     </div>
   );
@@ -107,31 +107,31 @@ export function WhatIfChart({
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Tank level with and without the plan">
       {ticks(lo, hi).map((v, i) => (
         <g key={i}>
-          <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="#3a2e3c" />
-          <text x={PAD.l - 6} y={y(v) + 4} textAnchor="end" fontSize="12" fontFamily="var(--font-mono)" fill="#968b9e">{Math.round(v)}%</text>
+          <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="#5a3a42" />
+          <text x={PAD.l - 6} y={y(v) + 4} textAnchor="end" fontSize="12" fontFamily="var(--font-mono)" fill="#c59fb0">{Math.round(v)}%</text>
         </g>
       ))}
       {ticks(0, span, 4).map((m, i) => (
-        <text key={i} x={x(m)} y={H - 8} textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"} fontSize="12" fontFamily="var(--font-mono)" fill="#968b9e">
+        <text key={i} x={x(m)} y={H - 8} textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"} fontSize="12" fontFamily="var(--font-mono)" fill="#c59fb0">
           {i === 0 ? "now" : `+${(m / 60).toFixed(1)} h`}
         </text>
       ))}
-      <line x1={PAD.l} x2={W - PAD.r} y1={y(warning)} y2={y(warning)} stroke="#e8a33d" strokeDasharray="6 4" />
-      <text x={W - PAD.r - 2} y={y(warning) - 4} textAnchor="end" fontSize="12" fontFamily="var(--font-mono)" fill="#e8a33d">warning {warning}%</text>
-      <line x1={PAD.l} x2={W - PAD.r} y1={y(shutdown)} y2={y(shutdown)} stroke="#ff6363" strokeWidth="1.5" />
-      <text x={W - PAD.r - 2} y={y(shutdown) - 4} textAnchor="end" fontSize="12" fontFamily="var(--font-mono)" fill="#ff6363">shutdown {shutdown}%</text>
-      <polyline points={toPath(doNothing)} fill="none" stroke="#ff6363" strokeWidth="2.5" strokeDasharray="7 5" />
-      <polyline points={toPath(withPlan)} fill="none" stroke="#7fc8a9" strokeWidth="3" strokeLinejoin="round" />
+      <line x1={PAD.l} x2={W - PAD.r} y1={y(warning)} y2={y(warning)} stroke="#ff9f1c" strokeDasharray="6 4" />
+      <text x={W - PAD.r - 2} y={y(warning) - 4} textAnchor="end" fontSize="12" fontFamily="var(--font-mono)" fill="#ff9f1c">warning {warning}%</text>
+      <line x1={PAD.l} x2={W - PAD.r} y1={y(shutdown)} y2={y(shutdown)} stroke="#ff6b6b" strokeWidth="1.5" />
+      <text x={W - PAD.r - 2} y={y(shutdown) - 4} textAnchor="end" fontSize="12" fontFamily="var(--font-mono)" fill="#ff6b6b">shutdown {shutdown}%</text>
+      <polyline points={toPath(doNothing)} fill="none" stroke="#ff6b6b" strokeWidth="2.5" strokeDasharray="7 5" />
+      <polyline points={toPath(withPlan)} fill="none" stroke="#5dd39e" strokeWidth="3" strokeLinejoin="round" />
       {tripPt && (
         <g>
-          <circle cx={x((tripPt.ts - now) / 60)} cy={y(tripPt.level_pct)} r="6" fill="#ff3b3b" stroke="#221b26" strokeWidth="2" />
-          <text x={x((tripPt.ts - now) / 60) + 10} y={y(tripPt.level_pct) + 22} fontSize="12" fill="#ff8f8f">tank trips, wells shut in</text>
+          <circle cx={x((tripPt.ts - now) / 60)} cy={y(tripPt.level_pct)} r="6" fill="#ff2d2d" stroke="#342b30" strokeWidth="2" />
+          <text x={x((tripPt.ts - now) / 60) + 10} y={y(tripPt.level_pct) + 22} fontSize="12" fill="#ff9a9a">tank trips, wells shut in</text>
         </g>
       )}
       {marks.map((m, i) => (
         <g key={i}>
-          <line x1={x(m.min)} x2={x(m.min)} y1={PAD.t} y2={H - PAD.b} stroke="#7fc8a9" strokeDasharray="2 4" opacity="0.7" />
-          <text x={x(m.min) + 4} y={PAD.t + 12 + i * 13} fontSize="12" fontFamily="var(--font-mono)" fill="#a9dcc5">{m.label}</text>
+          <line x1={x(m.min)} x2={x(m.min)} y1={PAD.t} y2={H - PAD.b} stroke="#5dd39e" strokeDasharray="2 4" opacity="0.7" />
+          <text x={x(m.min) + 4} y={PAD.t + 12 + i * 13} fontSize="12" fontFamily="var(--font-mono)" fill="#9be6c2">{m.label}</text>
         </g>
       ))}
     </svg>

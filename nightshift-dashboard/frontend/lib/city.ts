@@ -143,9 +143,9 @@ export function keepOut(l: Layout): Rect[] {
 }
 
 const shade = (t: number) => {
-  // between #1A141F and #241B29
+  // between #2A1F25 and #342B30 (dark mauve)
   const c = (a: number, b: number) => Math.round(a + (b - a) * t).toString(16).padStart(2, "0");
-  return `#${c(0x1a, 0x24)}${c(0x14, 0x1b)}${c(0x1f, 0x29)}`;
+  return `#${c(0x2a, 0x34)}${c(0x1f, 0x2b)}${c(0x25, 0x30)}`;
 };
 
 export function buildCity(systemId: string, l: Layout): City {

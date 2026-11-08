@@ -73,7 +73,7 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
         {city.blocks.map((b, i) => {
           const hot = danger.some((p) => near(b, p, 13));
           return hot ? (
-            <rect key={i} x={b.x} y={b.y} width={b.w} height={b.h} fill="#34161d" stroke="#ff3b3b" strokeOpacity="0.55"
+            <rect key={i} x={b.x} y={b.y} width={b.w} height={b.h} fill="#34161d" stroke="#ff2d2d" strokeOpacity="0.55"
               strokeWidth="1" vectorEffect="non-scaling-stroke" className="city-danger" />
           ) : (
             <rect key={i} x={b.x} y={b.y} width={b.w} height={b.h} fill={b.fill} />
@@ -174,7 +174,7 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
       onClickCapture={(e) => {
         if (dragged.current) { e.preventDefault(); e.stopPropagation(); } // a drag is not a click
       }}
-      className="brackets relative aspect-[16/9] w-full cursor-grab touch-none select-none overflow-hidden border border-zinc-800 bg-[#120e16] active:cursor-grabbing"
+      className="brackets key-panel relative aspect-[16/9] w-full cursor-grab touch-none select-none overflow-hidden border bg-[#1A0710] active:cursor-grabbing"
       aria-label={`Map of ${system.id}. Drag to pan, scroll or pinch to zoom.`}
     >
       {/* the city, pipelines and route: one SVG that pans and zooms */}
@@ -195,9 +195,9 @@ function CityMap({ system, shift }: { system: System; shift: Shift | null }) {
             const leak = f.status === "leak";
             return (
               <g key={f.id}>
-                <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? "#e8a33d" : "#19E6FF"} strokeOpacity="0.22"
+                <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? "#ff9f1c" : "#19E6FF"} strokeOpacity="0.22"
                   strokeWidth="10" vectorEffect="non-scaling-stroke" strokeLinecap="round" />
-                <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? "#e8a33d" : "#19E6FF"} strokeWidth="3"
+                <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke={leak ? "#ff9f1c" : "#19E6FF"} strokeWidth="3"
                   strokeDasharray={leak ? "10 6" : undefined} vectorEffect="non-scaling-stroke" strokeLinecap="round" opacity="0.9" />
                 {!failed(f) && (
                   <line x1={p[0]} y1={p[1]} x2={disp[0]} y2={disp[1]} stroke="#E6FDFF" strokeWidth="2.5" strokeDasharray="2 22"

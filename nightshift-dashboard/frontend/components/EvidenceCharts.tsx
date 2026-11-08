@@ -80,8 +80,8 @@ export default function EvidenceCharts() {
             {s.charts.map((c) => (
               <div key={c.metric} className="space-y-1">
                 <SeriesChart bare title={c.label} unit={c.unit} points={c.points} height={170}
-                  bands={[{ from: s.onset_unix, to: ev.now, color: s.level === "red" ? "#ff3b3b" : "#e8a33d", label: s.level === "red" ? "Danger: problem in progress" : "Check soon: problem in progress" }]}
-                  lines={c.unit === "%" ? [] : [{ value: c.base, label: "normal", color: "#6e6475" }]} />
+                  bands={[{ from: s.onset_unix, to: ev.now, color: s.level === "red" ? "#ff2d2d" : "#ff9f1c", label: s.level === "red" ? "Danger: problem in progress" : "Check soon: problem in progress" }]}
+                  lines={c.unit === "%" ? [] : [{ value: c.base, label: "normal", color: "#8a7076" }]} />
                 <p className="px-1 text-base text-zinc-300">{c.caption}</p>
               </div>
             ))}

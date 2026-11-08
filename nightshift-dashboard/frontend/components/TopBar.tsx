@@ -27,7 +27,7 @@ export default function TopBar() {
           {mode && overview && (
             <p className="flex items-center gap-3 text-base" aria-live="polite">
               {replay ? (
-                <span className="flex items-center gap-1 border border-[#FF2BD6]/60 px-3 py-1 font-mono text-sm font-bold uppercase tracking-wider text-[#FF6BE0]">
+                <span className="flex items-center gap-1 bg-[#A83C47] px-3 py-1 font-mono text-sm font-bold uppercase tracking-wider text-zinc-100">
                   {"// "}{playing ? "Replaying" : "Replay mode"}
                   <span aria-hidden className="blink-cursor">▌</span>
                 </span>

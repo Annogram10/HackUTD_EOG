@@ -8,16 +8,16 @@
   --font-heading: var(--font-chakra-petch), "Chakra Petch", var(--font-plex-sans), sans-serif;
 
   /* Avon Grid: plum greys. 950 page, 900 panel, 800 raised, 700 border; 100-500 text tiers (AA on panels). */
-  --color-zinc-950: #15111a;
-  --color-zinc-900: #221b26;
-  --color-zinc-800: #2d2333;
-  --color-zinc-700: #3a2e3c;
-  --color-zinc-600: #6e6475;
-  --color-zinc-500: #968b9e;
-  --color-zinc-400: #a99bb4;
-  --color-zinc-300: #c9c2cc;
-  --color-zinc-200: #dddad2;
-  --color-zinc-100: #eeede5;
+  --color-zinc-950: #1a0710;
+  --color-zinc-900: #342b30;
+  --color-zinc-800: #3f3238;
+  --color-zinc-700: #5a3a42;
+  --color-zinc-600: #8a7076;
+  --color-zinc-500: #c59fb0;
+  --color-zinc-400: #c9b8b0;
+  --color-zinc-300: #e0d3c3;
+  --color-zinc-200: #eee3ce;
+  --color-zinc-100: #f8eed7;
 
   /* square-ish corners (pills only for status badges) */
   --radius-xs: 0;
@@ -30,52 +30,57 @@
   --radius-4xl: 4px;
 
   /* links and labels: lavender */
-  --color-sky-200: #d6cddd;
-  --color-sky-300: #c0b3ca;
-  --color-sky-400: #a99bb4;
-  --color-sky-500: #7d6e88;
+  --color-sky-200: #c8ccde;
+  --color-sky-300: #a9afca;
+  --color-sky-400: #8e95b5;
+  --color-sky-500: #6e7596;
 
   /* brand */
-  --color-salmon: #bd6b6b;
-  --color-rust: #8f4a3c;
-  --color-raised: #5a3e48;
+  --color-salmon: #bc7579;
+  --color-rust: #ad6564;
+  --color-raised: #3f3238;
   --color-magenta: #ff2bd6;
   --color-neon: #19e6ff;
-  --color-violet-300: #c9c2cc;
-  --color-violet-400: #a99bb4;
-  --color-violet-500: #6e6475;
+  --color-violet-300: #e0d3c3;
+  --color-violet-400: #c9b8b0;
+  --color-violet-500: #8a7076;
 
   /* status only: danger, check soon, normal (always with a text label) */
-  --color-red-100: #ffe1e1;
-  --color-red-200: #ffc2c2;
-  --color-red-300: #ff8f8f;
-  --color-red-400: #ff6363;
-  --color-red-500: #ff3b3b;
-  --color-amber-200: #f7dcae;
-  --color-amber-300: #f0c27a;
-  --color-amber-400: #e8a33d;
-  --color-amber-500: #c98a2a;
-  --color-emerald-300: #a9dcc5;
-  --color-emerald-400: #7fc8a9;
-  --color-emerald-500: #5faf8e;
+  --color-red-100: #ffe0e0;
+  --color-red-200: #ffc4c4;
+  --color-red-300: #ff9a9a;
+  --color-red-400: #ff6b6b;
+  --color-red-500: #ff2d2d;
+  --color-amber-200: #ffd9a3;
+  --color-amber-300: #ffc266;
+  --color-amber-400: #ff9f1c;
+  --color-amber-500: #e08a10;
+  --color-emerald-300: #9be6c2;
+  --color-emerald-400: #5dd39e;
+  --color-emerald-500: #3fb983;
 }
 
 :root {
   color-scheme: dark;
-  --alarm-red: #ff3b3b;
-  --bg: #15111a;
-  --panel: #221b26;
-  --raised: #5a3e48;
-  --border: #3a2e3c;
-  --text: #eeede5;
-  --label: #a99bb4;
-  --brand: #bd6b6b;
-  --rust: #8f4a3c;
+  --alarm-red: #ff2d2d;
+  --bg: #1a0710;
+  --panel: #342b30;
+  --raised: #3f3238;
+  --border: #5a3a42;
+  --text: #f8eed7;
+  --label: #8e95b5;
+  --brand: #bc7579;
+  --rust: #ad6564;
   --magenta: #ff2bd6;
+  --rose: #ad6564; /* HUD accents: brackets, ticks, thin dividers */
+  --rose-text: #b56d6c; /* the same rose, a touch lighter so SYS// labels pass AA on the page background */
+  --crimson: #a83c47; /* key panel borders, REPLAY badge fill */
+  --pinklav: #c59fb0; /* secondary labels, chart lines */
+  --spark: #f3f654; /* tiny highlights only: playhead, blinking cursor */
   --cyan: #19e6ff;
-  --danger: #ff3b3b;
-  --check: #e8a33d;
-  --normal: #7fc8a9;
+  --danger: #ff2d2d;
+  --check: #ff9f1c;
+  --normal: #5dd39e;
 }
 
 body {
@@ -89,7 +94,7 @@ code, kbd, .font-mono { font-family: var(--font-mono); }
 .tabular-nums, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 h1, h2, h3, .font-heading { font-family: var(--font-heading); letter-spacing: 0.01em; }
 /* small uppercase HUD labels above panels: SYS//STATUS */
-.hud { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--label); }
+.hud { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rose-text); }
 
 /* ALARM: three pulses on the screen border, then it stays on */
 body::after {
@@ -148,9 +153,9 @@ html[data-alarm="red"] body::after {
 @keyframes city-danger { 50% { stroke-opacity: 0.25; } }
 .city-sign { animation: city-sign 4s ease-in-out infinite; }
 @keyframes city-sign { 50% { opacity: 0.4; } }
-.fac-card { box-shadow: 0 0 0 4px rgba(21, 17, 26, 0.9); }
-.fac-danger { box-shadow: 0 0 0 4px rgba(21, 17, 26, 0.9), 0 0 0 5px rgba(255, 59, 59, 0.4); }
-.fac-sign { text-shadow: 0 0 8px #ff3b3b; animation: fac-sign 0.24s step-end 3; }
+.fac-card { box-shadow: 0 0 0 4px rgba(26, 7, 16, 0.9); }
+.fac-danger { box-shadow: 0 0 0 4px rgba(26, 7, 16, 0.9), 0 0 0 5px rgba(255, 45, 45, 0.4); }
+.fac-sign { text-shadow: 0 0 8px #ff2d2d; animation: fac-sign 0.24s step-end 3; }
 @keyframes fac-sign { 0% { opacity: 1; } 40% { opacity: 0.15; } 70% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .city-flow, .city-danger, .city-sign, .fac-sign { animation: none; }
@@ -167,7 +172,7 @@ html[data-alarm="red"] body::after {
   background-size: 12px 12px;
 }
 /* Corner brackets on key panels (danger card, countdown, map). Colour follows --bracket. */
-.brackets { position: relative; --bracket: var(--label); }
+.brackets { position: relative; --bracket: var(--rose); }
 .brackets::before, .brackets::after {
   content: ""; position: absolute; width: 14px; height: 14px; pointer-events: none; z-index: 5;
 }
@@ -177,40 +182,37 @@ html[data-alarm="red"] body::after {
 
 /* Buttons: primary salmon with dark text and a chamfer; secondary stays outlined. No hover animations. */
 .btn-primary {
-  background: var(--brand); color: #15111a; border: 0;
+  background: var(--brand); color: #1a0710; border: 0;
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
 }
-.btn-primary:hover { background: #c97b7b; }
+.btn-primary:hover { background: #c98589; }
 .btn-primary:disabled { opacity: 0.5; }
 
 /* ---------- header: neon sign, skyline, scanlines ---------- */
-.neon-night { color: #a99bb4; text-shadow: 0 0 6px rgba(169, 155, 180, 0.55), 0 0 14px rgba(169, 155, 180, 0.25); }
-.neon-shift { color: #bd6b6b; text-shadow: 0 0 6px rgba(189, 107, 107, 0.6), 0 0 14px rgba(189, 107, 107, 0.3); }
+.neon-night { color: #8e95b5; text-shadow: 0 0 6px rgba(142, 149, 181, 0.55), 0 0 14px rgba(142, 149, 181, 0.25); }
+.neon-shift { color: #bc7579; text-shadow: 0 0 6px rgba(188, 117, 121, 0.6), 0 0 14px rgba(188, 117, 121, 0.3); }
 .neon-flicker { animation: neon-flicker 10s steps(1, end) infinite; }
 @keyframes neon-flicker { 0%, 91%, 93.5%, 95%, 100% { opacity: 1; } 92%, 94% { opacity: 0.25; text-shadow: none; } }
-.scanlines { background: repeating-linear-gradient(to bottom, rgba(238, 237, 229, 0.03) 0 1px, transparent 1px 3px); }
-.sky-win { opacity: 0.55; animation: sky-win 23s steps(1, end) infinite; }
-@keyframes sky-win { 0%, 60% { opacity: 0.55; } 61%, 100% { opacity: 0.06; } }
+.scanlines { background: repeating-linear-gradient(to bottom, rgba(248, 238, 215, 0.03) 0 1px, transparent 1px 3px); }
 /* alarm burst (~2 s when danger starts): the sign and the windows tint red, then settle */
-html[data-burst] .neon-night, html[data-burst] .neon-shift { color: #ff3b3b; text-shadow: 0 0 8px rgba(255, 59, 59, 0.7); }
-html[data-burst] .sky-win { fill: #ff3b3b; opacity: 0.8; }
-.neon-night, .neon-shift, .sky-win { transition: color 0.6s, fill 0.6s, text-shadow 0.6s; }
+html[data-burst] .neon-night, html[data-burst] .neon-shift { color: #ff2d2d; text-shadow: 0 0 8px rgba(255, 45, 45, 0.7); }
+.neon-night, .neon-shift { transition: color 0.6s, text-shadow 0.6s; }
 @media (prefers-reduced-motion: reduce) {
-  .neon-flicker, .sky-win { animation: none; }
-  .neon-night, .neon-shift, .sky-win { transition: none; }
+  .neon-flicker { animation: none; }
+  .neon-night, .neon-shift { transition: none; }
 }
 
 /* ---------- status copy: replay cursor, timeline playhead, glitch while dragging ---------- */
-.blink-cursor { animation: blink-cursor 1.06s steps(1, end) infinite; }
+.blink-cursor { color: #f3f654; animation: blink-cursor 1.06s steps(1, end) infinite; }
 @keyframes blink-cursor { 50% { opacity: 0; } }
 .timeslider { -webkit-appearance: none; appearance: none; background: transparent; }
 .timeslider::-webkit-slider-runnable-track { background: transparent; height: 36px; }
 .timeslider::-moz-range-track { background: transparent; }
 .timeslider::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; width: 6px; height: 28px; margin-top: 4px;
-  background: #19e6ff; border: 0; box-shadow: 0 0 8px #19e6ff, 0 0 2px #fff;
+  background: #f3f654; border: 0; box-shadow: 0 0 8px rgba(243, 246, 84, 0.7);
 }
-.timeslider::-moz-range-thumb { width: 6px; height: 28px; background: #19e6ff; border: 0; border-radius: 0; box-shadow: 0 0 8px #19e6ff; }
+.timeslider::-moz-range-thumb { width: 6px; height: 28px; background: #f3f654; border: 0; border-radius: 0; box-shadow: 0 0 8px rgba(243, 246, 84, 0.7); }
 .glitch-text { animation: glitch-text 0.18s steps(2, end) infinite; }
 @keyframes glitch-text {
   0% { text-shadow: -2px 0 #ff2bd6, 2px 0 #19e6ff; transform: translateX(0); }
@@ -223,9 +225,9 @@ html[data-burst] .sky-win { fill: #ff3b3b; opacity: 0.8; }
 /* ---------- alarm moment ---------- */
 /* danger card border pulses 3 times, then stays solid red */
 .card-pulse { animation: card-pulse 0.65s ease-in-out 3; }
-@keyframes card-pulse { 50% { border-color: rgba(255, 59, 59, 0.25); } }
+@keyframes card-pulse { 50% { border-color: rgba(255, 45, 45, 0.25); } }
 /* after the burst: the #1 plan is highlighted (static, no motion) */
-html[data-focus] .first-plan { outline: 2px solid #ff3b3b; outline-offset: 3px; }
+html[data-focus] .first-plan { outline: 2px solid #ff2d2d; outline-offset: 3px; }
 /* acknowledged: everything alarm-related stops moving; the card stays red but still */
 html[data-acked] body::after,
 html[data-acked] .card-pulse,
@@ -234,7 +236,14 @@ html[data-acked] .owl-glasses.owl-hop,
 html[data-acked] .city-danger,
 html[data-acked] .fac-sign,
 html[data-acked] .neon-flicker,
-html[data-acked] .sky-win { animation: none !important; }
+html[data-acked] .danger-pulse { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .card-pulse, html[data-alarm="red"] body::after { animation: none; }
 }
+
+/* Danger is a FILLED bright badge with a pulse, so it never blends with the rose/crimson accents. */
+.danger-pulse { animation: danger-pulse 1.4s ease-in-out infinite; }
+@keyframes danger-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 45, 45, 0.7); } 50% { box-shadow: 0 0 0 5px rgba(255, 45, 45, 0); } }
+/* key panels (danger card, map, timeline) use the crimson border unless a status colour applies */
+.key-panel { border-color: #a83c47; }
+@media (prefers-reduced-motion: reduce) { .danger-pulse { animation: none; } }

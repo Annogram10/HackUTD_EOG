@@ -11,7 +11,7 @@ import { CardSkeleton } from "./Skeleton";
 const LOOK: Record<RiskLevel, { label: string; box: string; pill: string }> = {
   green: { label: "Grid stable", box: "border-emerald-400/50 bg-emerald-500/5", pill: "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-400/60" },
   amber: { label: "Check soon", box: "border-amber-400/60 bg-amber-400/5", pill: "bg-amber-400/20 text-amber-200 ring-1 ring-amber-400/60" },
-  red: { label: "// Alert", box: "border-red-500 bg-red-500/10", pill: "bg-red-500 text-zinc-950" },
+  red: { label: "// Alert", box: "border-red-500 bg-red-500/10", pill: "bg-red-500 text-zinc-950 danger-pulse" },
 };
 
 export default function RiskCard({ children, footer }: { children?: React.ReactNode; footer?: React.ReactNode }) {
@@ -20,7 +20,7 @@ export default function RiskCard({ children, footer }: { children?: React.ReactN
   // No danger check yet (first load, or the check failed): still show the time bar so playback never disappears.
   if (!risk)
     return (
-      <section className="brackets border-2 border-zinc-700 p-5">
+      <section className="brackets key-panel border-2 p-5">
         <CardSkeleton lines={2} />
         {footer && <p className="mt-2 text-base text-zinc-300">{footer}</p>}
         {children && <div className="mt-4 border-t border-zinc-700/70 pt-4">{children}</div>}

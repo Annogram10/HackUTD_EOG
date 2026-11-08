@@ -203,7 +203,7 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
       {[16.4, 31.6].map((cx) => (
         <g key={cx}>
           <circle cx={cx} cy="20.4" r="4.9" fill="#16181b" />
-          <circle cx={cx} cy="20.4" r="4.1" fill={red ? "#ff3b3b" : "#b9bdc3"} />
+          <circle cx={cx} cy="20.4" r="4.1" fill={red ? "#ff2d2d" : "#b9bdc3"} />
           <circle cx={cx} cy="20.4" r={red ? 0.8 : amber ? 2.6 : 2} fill="#0b0c0e" />
           <circle cx={cx - 1.3} cy="19" r="0.6" fill="#ffffff" opacity="0.8" />
           {level === "green" && <path d={`M${cx - 4.9} 20.2 A4.9 4.9 0 0 1 ${cx + 4.9} 20.2 Z`} fill="#6f757d" />}
@@ -230,8 +230,8 @@ export default function Owl({ level, size = 40 }: { level: RiskLevel; size?: num
         <path d="M27.7 19 L30.4 16.7" stroke="#ffffff" strokeWidth="0.65" strokeLinecap="round" opacity="0.85" />
         {/* red reflection streak: danger only, after the glasses settle; fades out when danger ends */}
         <g className={`owl-streak${red ? " on" : ""}`}>
-          <path d="M14 24.4 L20.6 18.6" stroke="#ff3b3b" strokeWidth="0.5" strokeLinecap="round" />
-          <path d="M29.6 24.4 L36.2 18.6" stroke="#ff3b3b" strokeWidth="0.5" strokeLinecap="round" />
+          <path d="M14 24.4 L20.6 18.6" stroke="#ff2d2d" strokeWidth="0.5" strokeLinecap="round" />
+          <path d="M29.6 24.4 L36.2 18.6" stroke="#ff2d2d" strokeWidth="0.5" strokeLinecap="round" />
         </g>
       </g>
 

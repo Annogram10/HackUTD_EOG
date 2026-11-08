@@ -35,7 +35,7 @@ const base = "inline-flex items-center px-2.5 py-0.5 text-sm font-medium ring-1"
 
 // Severity: colour + an icon + a word, so it never depends on colour alone.
 export const SEVERITY: Record<Severity | "none", { label: string; cls: string; tone: "red" | "amber" | "ok" }> = {
-  high: { label: "Danger", cls: "bg-red-500/15 text-red-300 ring-red-500/50", tone: "red" },
+  high: { label: "Danger", cls: "bg-red-500 text-zinc-950 ring-red-500 danger-pulse", tone: "red" },
   medium: { label: "Check soon", cls: "bg-amber-500/15 text-amber-300 ring-amber-500/40", tone: "amber" },
   low: { label: "Minor", cls: "bg-zinc-800 text-zinc-300 ring-zinc-600", tone: "ok" },
   none: { label: "Normal", cls: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40", tone: "ok" },

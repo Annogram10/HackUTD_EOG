@@ -162,7 +162,7 @@ export default function TimeTravel({ bare = false }: { bare?: boolean }) {
             const t = Math.ceil(tl.first / 21600) * 21600 + i * 21600;
             if (t > tl.last) return null;
             const day = t % 86400 === 0;
-            return <span key={t} className={`absolute top-0 w-px ${day ? "h-2 bg-zinc-400" : "h-1 bg-zinc-600"}`} style={{ left: pct(t) }} />;
+            return <span key={t} className={`absolute top-0 w-px ${day ? "h-2 bg-[#AD6564]" : "h-1 bg-[#AD6564]/60"}`} style={{ left: pct(t) }} />;
           })}
         </div>
         <input type="range" min={tl.first} max={tl.last} step={tl.step_s} value={value}
