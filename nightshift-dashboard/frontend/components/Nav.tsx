@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import OwlCorner from "./OwlCorner";
 
 // Demo path only. /flags and /facility/[id] still work (linked from the pages) but are not in the menu.
 const LINKS = [
@@ -16,12 +15,9 @@ export default function Nav() {
   return (
     <header className="border-b border-zinc-800 bg-zinc-950">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-6 py-4">
-        <div className="flex items-center gap-5">
-          <Link href="/" className="flex items-center gap-3 text-2xl font-bold tracking-tight text-zinc-100">
-            NightShift
-          </Link>
-          <OwlCorner />
-        </div>
+        <Link href="/" className="flex items-center gap-3 text-2xl font-bold tracking-tight text-zinc-100">
+          NightShift
+        </Link>
         <nav className="flex flex-wrap gap-1">
           {LINKS.map((l) => {
             const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
