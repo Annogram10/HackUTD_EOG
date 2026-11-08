@@ -466,7 +466,7 @@ struct ServerClock: Codable, Hashable, Sendable {
   var nowDate: Date? {
     if let nowTs { return Date(timeIntervalSince1970: nowTs) }
     guard let now else { return nil }
-    return ISO8601DateFormatter().date(from: now)
+    return ServerTime.parse(now)
   }
 
   private enum CodingKeys: String, CodingKey {

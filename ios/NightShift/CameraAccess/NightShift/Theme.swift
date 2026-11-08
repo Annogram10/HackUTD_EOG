@@ -493,7 +493,7 @@ struct ModePill: View {
     guard reachable != false else { return "OFFLINE" }
     guard let clock else { return "CHECKING…" }
     guard clock.isReplay else { return "LIVE" }
-    let time = clock.nowDate.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? clock.now ?? ""
+    let time = clock.nowDate.map { ServerTime.text($0) } ?? clock.now ?? ""
     return time.isEmpty ? "REPLAY" : "REPLAY · \(time)"
   }
 
@@ -661,6 +661,45 @@ struct UpdatedAgo: View {
         .font(.nsMono(.subheadline))
         .foregroundStyle((seconds ?? 999) > 30 ? NS.amberText : NS.textSecondary)
     }
+  }
+}
+
+/// Server / data times. EOG's data and the backend clock are UTC, and the dashboard
+/// shows them in UTC, so the phone does too (in the phone's own zone they read hours
+/// off, e.g. 5 h behind in CDT). Phone events (flags, shift start, uploads) stay local.
+enum ServerTime {
+  private static let utc = TimeZone(identifier: "UTC") ?? TimeZone(secondsFromGMT: 0)!
+
+  /// "Oct 10 at 3:30 PM UTC"
+  static func text(_ date: Date) -> String {
+    var style = Date.FormatStyle.dateTime.month(.abbreviated).day().hour().minute()
+    style.timeZone = utc
+    return "\(date.formatted(style)) UTC"
+  }
+
+  /// "Saturday, 3:30 PM UTC" for speech.
+  static func spoken(_ date: Date) -> String {
+    var style = Date.FormatStyle.dateTime.weekday(.wide).hour().minute()
+    style.timeZone = utc
+    return "\(date.formatted(style)) UTC"
+  }
+
+  /// ISO 8601 from the server ("...Z", an offset, or naive = UTC, like the backend's
+  /// parse_ts).
+  static func parse(_ iso: String) -> Date? {
+    let s = iso.trimmingCharacters(in: .whitespaces)
+    let plain = ISO8601DateFormatter()
+    let fractional = ISO8601DateFormatter()
+    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    for candidate in [s, s + "Z"] {
+      if let date = plain.date(from: candidate) ?? fractional.date(from: candidate) { return date }
+    }
+    return nil
+  }
+
+  /// A server ISO string as UTC text; the raw string if it can't be read.
+  static func text(_ iso: String) -> String {
+    parse(iso).map { text($0) } ?? iso
   }
 }
 

@@ -389,7 +389,7 @@ struct SettingsView: View {
       }
       .disabled(controller.isLoadingMap)
       if let asOf = controller.map?.asOf {
-        Text("Data as of \(asOf)\(controller.map?.dataset.map { " · \($0)" } ?? "")")
+        Text("Data as of \(ServerTime.text(asOf))\(controller.map?.dataset.map { " · \($0)" } ?? "")")
           .font(.ns(.caption))
           .foregroundStyle(.secondary)
       }

@@ -431,7 +431,7 @@ final class NightShiftController {
       parts.append("Can't reach the console. This is the last saved status.")
     }
     if let clock = serverClock, clock.isReplay, let date = clock.nowDate {
-      parts.append("Replay, \(date.formatted(.dateTime.weekday(.wide).hour().minute())).")
+      parts.append("Replay, \(ServerTime.spoken(date)).")
     }
     // Alerts as the server wrote them, in its order; /map's when /alerts is empty.
     let alertTexts = alerts.compactMap(\.spokenText)

@@ -100,7 +100,7 @@ struct AlertsView: View {
         }
         Spacer()
         if let asOf = alarm.asOf {
-          Text(asOf)
+          Text(ServerTime.text(asOf))
             .font(.nsMono(.footnote))
             .foregroundStyle(NS.textSecondary)
         }
